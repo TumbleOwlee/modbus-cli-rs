@@ -1,5 +1,6 @@
 use crate::register::Handler;
 use crate::util::str;
+use crate::{Command, Status};
 
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind},
@@ -11,6 +12,7 @@ use ratatui::{prelude::*, widgets::*};
 use std::io::stdout;
 use std::time::Duration;
 use style::palette::tailwind;
+use tokio::sync::mpsc::{Receiver, Sender};
 use unicode_width::UnicodeWidthStr;
 
 const PALETTES: [tailwind::Palette; 4] = [
@@ -21,7 +23,7 @@ const PALETTES: [tailwind::Palette; 4] = [
 ];
 
 const INFO_TEXT: &str =
-    "(Esc | q) quit | (↑ | k) move up | (↓ | j) move down | (→ | l) next color | (← | h) previous color | (Tab | d) switch display";
+    "(Esc | q) quit | (↑ | k) move up | (↓ | j) move down | (→ | l) next color | (← | h) previous color | (Tab | n) switch display | (d) disconnect | (c) connect";
 
 const ITEM_HEIGHT: usize = 3;
 
@@ -62,6 +64,13 @@ pub struct App<'a, const SLICE_SIZE: usize> {
 
 impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
     pub fn new(register_handler: Handler<'a, SLICE_SIZE>) -> Self {
+        let original_hook = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |panic| {
+            disable_raw_mode().unwrap();
+            crossterm::execute!(stdout(), LeaveAlternateScreen).unwrap();
+            original_hook(panic);
+        }));
+
         let len = register_handler.len();
         Self {
             register_handler,
@@ -119,14 +128,26 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
         self.show_as_hex = !self.show_as_hex;
     }
 
-    pub fn run(self) -> anyhow::Result<()> {
+    pub fn run(
+        self,
+        mut status_recv: Receiver<Status>,
+        command_send: Sender<Command>,
+    ) -> anyhow::Result<()> {
         enable_raw_mode()?;
         let mut terminal = App::<SLICE_SIZE>::create_terminal()?;
 
+        let mut status = str!("");
         let mut app = self;
         loop {
+            if let Ok(v) = status_recv.try_recv() {
+                match v {
+                    Status::String(v) => {
+                        status = v;
+                    }
+                }
+            }
             app.register_handler.update()?;
-            terminal.draw(|f| ui(f, &mut app))?;
+            terminal.draw(|f| ui(f, &mut app, status.clone()))?;
 
             if event::poll(Duration::from_millis(50))? {
                 if let Event::Key(key) = event::read()? {
@@ -138,7 +159,9 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
                             Char('k') | Up => app.previous(),
                             Char('l') | Right => app.next_color(),
                             Char('h') | Left => app.previous_color(),
-                            Char('d') | Tab => app.switch(),
+                            Char('n') | Tab => app.switch(),
+                            Char('d') => command_send.blocking_send(Command::Disconnect)?,
+                            Char('c') => command_send.blocking_send(Command::Connect)?,
                             _ => {}
                         }
                     }
@@ -168,12 +191,12 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
     }
 }
 
-fn ui<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_SIZE>) {
+fn ui<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_SIZE>, status: String) {
     let rects = Layout::vertical([Constraint::Min(5), Constraint::Length(3)]).split(f.size());
     app.set_colors();
     render_table::<SLICE_SIZE>(f, app, rects[0]);
     render_scrollbar::<SLICE_SIZE>(f, app, rects[0]);
-    render_footer::<SLICE_SIZE>(f, app, rects[1]);
+    render_footer::<SLICE_SIZE>(f, app, rects[1], status);
 }
 
 fn vec_as_str(v: &[u16], hex: bool) -> String {
@@ -210,7 +233,16 @@ fn render_table<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_SIZE
                 format!("{:#06X} ({})", r.address(), r.address()),
                 format!("{:?}", r.r#type()),
                 r.raw().len().to_string(),
-                format!("{:?}", r.value()),
+                r.value()
+                    .chars()
+                    .map(|c| {
+                        if c as u8 >= 0x20 && c as u8 <= 126 {
+                            c
+                        } else {
+                            '.'
+                        }
+                    })
+                    .collect(),
                 vec_as_str(r.raw(), app.show_as_hex),
             ]
         })
@@ -282,14 +314,43 @@ fn render_scrollbar<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_
     );
 }
 
-fn render_footer<const SLICE_SIZE: usize>(f: &mut Frame, app: &App<SLICE_SIZE>, area: Rect) {
+fn render_footer<const SLICE_SIZE: usize>(
+    f: &mut Frame,
+    app: &App<SLICE_SIZE>,
+    area: Rect,
+    status: String,
+) {
+    let rects = Layout::horizontal([
+        Constraint::Min(20),
+        Constraint::Length(180),
+        Constraint::Min(20),
+    ])
+    .split(area);
     let info_footer = Paragraph::new(Line::from(INFO_TEXT))
         .style(Style::new().fg(app.colors.row_fg).bg(app.colors.buffer_bg))
         .centered()
         .block(
             Block::bordered()
-                .border_type(BorderType::Double)
+                .border_type(BorderType::Plain)
                 .border_style(Style::new().fg(app.colors.footer_border_color)),
         );
-    f.render_widget(info_footer, area);
+    let add_footer = Paragraph::new(Line::from(""))
+        .style(Style::new().fg(app.colors.row_fg).bg(app.colors.buffer_bg))
+        .centered()
+        .block(
+            Block::bordered()
+                .border_type(BorderType::Plain)
+                .border_style(Style::new().fg(app.colors.footer_border_color)),
+        );
+    let status_footer = Paragraph::new(Line::from(status))
+        .style(Style::new().fg(app.colors.row_fg).bg(app.colors.buffer_bg))
+        .centered()
+        .block(
+            Block::bordered()
+                .border_type(BorderType::Plain)
+                .border_style(Style::new().fg(app.colors.footer_border_color)),
+        );
+    f.render_widget(status_footer, rects[0]);
+    f.render_widget(info_footer, rects[1]);
+    f.render_widget(add_footer, rects[2]);
 }

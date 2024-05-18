@@ -3,7 +3,8 @@ mod tests {
     use crate::memory::{Memory, Range};
     use crate::register::{Definition, Handler, Type};
     use std::collections::HashMap;
-    use std::sync::{Arc, Mutex};
+    use std::sync::{Arc};
+    use tokio::sync::Mutex;
 
     #[test]
     fn overlap() {
@@ -37,7 +38,7 @@ mod tests {
             0u16, 4096u16,
         ))));
         let mut definitions: HashMap<String, Definition> = HashMap::new();
-        definitions.insert("Name".to_owned(), Definition::new(0, 2, Type::PackedString));
+        definitions.insert("Name".to_owned(), Definition::new(0, 2, Type::PackedString, 0x04u8));
         let mut register = Handler::new(&definitions, memory);
         assert!(register.update().is_ok());
     }

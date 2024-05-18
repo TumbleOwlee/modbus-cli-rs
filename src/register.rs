@@ -2,6 +2,7 @@ use crate::memory::{Memory, Range};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use tokio_modbus::FunctionCode;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Type {
@@ -83,20 +84,22 @@ impl Address {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Definition {
     address: Address,
     length: u16,
     r#type: Type,
+    func_code: u8,
 }
 
 impl Definition {
     #[allow(dead_code)]
-    pub fn new(address: u16, length: u16, r#type: Type) -> Self {
+    pub fn new(address: u16, length: u16, r#type: Type, func_code: u8) -> Self {
         Self {
             address: Address::Decimal(address),
             length,
             r#type,
+            func_code,
         }
     }
 
@@ -118,6 +121,7 @@ pub struct Register {
     value: String,
     raw: Vec<u16>,
     r#type: Type,
+    func_code: FunctionCode,
 }
 
 impl Register {
@@ -127,6 +131,7 @@ impl Register {
             value: String::new(),
             raw: vec![0; definition.get_range().length()],
             r#type: definition.get_type().clone(),
+            func_code: FunctionCode::new(definition.func_code),
         }
     }
 

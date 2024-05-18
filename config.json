@@ -1,96 +1,67 @@
 {
     "Register1": {
+        "func_code": 4,
         "address": "0x4001",
         "length": 5,
         "type": "LooseString"
     },
     "Register2": {
+        "func_code": 4,
         "address": "0x3000",
         "length": 2,
         "type": "Uint8le"
     },
     "Register3": {
+        "func_code": 4,
         "address": 2000,
         "length": 20,
         "type": "Uint8be"
     },
     "Register4": {
+        "func_code": 4,
         "address": 2000,
         "length": 20,
         "type": "Uint8be"
     },
     "Register5": {
+        "func_code": 4,
         "address": 2000,
         "length": 20,
         "type": "Uint8be"
     },
     "Register6": {
+        "func_code": 4,
         "address": 2000,
         "length": 20,
         "type": "Uint8be"
     },
     "Register7": {
+        "func_code": 4,
         "address": 2000,
         "length": 20,
         "type": "Uint8be"
     },
     "Register8": {
+        "func_code": 4,
         "address": 2000,
         "length": 20,
         "type": "Uint8be"
     },
     "Register9": {
+        "func_code": 4,
         "address": 2000,
         "length": 20,
         "type": "Uint8be"
     },
     "Register10": {
+        "func_code": 4,
         "address": 2000,
         "length": 20,
         "type": "Uint8be"
     },
     "Register11": {
-        "address": 2000,
-        "length": 20,
-        "type": "Uint8be"
-    },
-    "Register12": {
-        "address": 2000,
-        "length": 20,
-        "type": "Uint8be"
-    },
-    "Register13": {
-        "address": 2000,
-        "length": 20,
-        "type": "Uint8be"
-    },
-    "Register14": {
-        "address": 2000,
-        "length": 20,
-        "type": "Uint8be"
-    },
-    "Register15": {
-        "address": 2000,
-        "length": 20,
-        "type": "Uint8be"
-    },
-    "Register16": {
-        "address": 2000,
-        "length": 20,
-        "type": "Uint8be"
-    },
-    "Register17": {
-        "address": 2000,
-        "length": 20,
-        "type": "Uint8be"
-    },
-    "Register18": {
-        "address": 2000,
-        "length": 20,
-        "type": "Uint8be"
-    },
-    "Register19": {
-        "address": 2000,
+        "func_code": 4,
+        "address": 2500,
         "length": 20,
         "type": "Uint8be"
     }

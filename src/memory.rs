@@ -2,6 +2,7 @@ use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::default::Default;
+use std::fmt::Debug;
 
 #[derive(Serialize, Deserialize)]
 pub struct Range<Key: Into<usize> + Clone>(Key, Key);
@@ -16,11 +17,11 @@ impl<Key: Into<usize> + Clone> Range<Key> {
     }
 }
 
-pub struct Memory<const SLICE_SIZE: usize, Value: Default + Copy> {
+pub struct Memory<const SLICE_SIZE: usize, Value: Default + Copy + Debug> {
     slices: HashMap<usize, [Value; SLICE_SIZE]>,
 }
 
-impl<const SLICE_SIZE: usize, Value: Default + Copy> Memory<SLICE_SIZE, Value> {
+impl<const SLICE_SIZE: usize, Value: Default + Copy + Debug> Memory<SLICE_SIZE, Value> {
     pub fn new<Key: Into<usize> + Clone>(range: Range<Key>) -> Self {
         let range = (range.0.into() / SLICE_SIZE, range.1.into() / SLICE_SIZE + 1);
         let mut slices = HashMap::with_capacity(range.1 - range.0);
