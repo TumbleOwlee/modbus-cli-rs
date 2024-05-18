@@ -1,0 +1,17 @@
+{
+    "Register1": {
+        "address": "0x4001",
+        "length": 2,
+        "type": "Uint8Le"
+    },
+    "Register2": {
+        "address": "0x3000",
+        "length": 2,
+        "type": "Uint8Le"
+    },
+    "Register3": {
+        "address": 2000,
+        "length": 2,
+        "type": "Uint8Le"
+    }
+}
