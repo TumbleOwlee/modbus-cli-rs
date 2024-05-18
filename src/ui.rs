@@ -326,11 +326,21 @@ fn render_footer<const SLICE_SIZE: usize>(
         Constraint::Min(20),
     ])
     .split(area);
+    let status_footer = Paragraph::new(Line::from(status))
+        .style(Style::new().fg(app.colors.row_fg).bg(app.colors.buffer_bg))
+        .centered()
+        .block(
+            Block::default()
+                .borders(Borders::LEFT | Borders::TOP | Borders::BOTTOM)
+                .border_type(BorderType::Plain)
+                .border_style(Style::new().fg(app.colors.footer_border_color)),
+        );
     let info_footer = Paragraph::new(Line::from(INFO_TEXT))
         .style(Style::new().fg(app.colors.row_fg).bg(app.colors.buffer_bg))
         .centered()
         .block(
-            Block::bordered()
+            Block::default()
+                .borders(Borders::TOP | Borders::BOTTOM)
                 .border_type(BorderType::Plain)
                 .border_style(Style::new().fg(app.colors.footer_border_color)),
         );
@@ -338,15 +348,8 @@ fn render_footer<const SLICE_SIZE: usize>(
         .style(Style::new().fg(app.colors.row_fg).bg(app.colors.buffer_bg))
         .centered()
         .block(
-            Block::bordered()
-                .border_type(BorderType::Plain)
-                .border_style(Style::new().fg(app.colors.footer_border_color)),
-        );
-    let status_footer = Paragraph::new(Line::from(status))
-        .style(Style::new().fg(app.colors.row_fg).bg(app.colors.buffer_bg))
-        .centered()
-        .block(
-            Block::bordered()
+            Block::default()
+                .borders(Borders::RIGHT | Borders::TOP | Borders::BOTTOM)
                 .border_type(BorderType::Plain)
                 .border_style(Style::new().fg(app.colors.footer_border_color)),
         );
