@@ -64,5 +64,257 @@
         "address": 2500,
         "length": 20,
         "type": "Uint8be"
+    },
+    "SeRegister1": {
+        "func_code": 4,
+        "address": "0x4001",
+        "length": 5,
+        "type": "LooseString"
+    },
+    "SeRegister2": {
+        "func_code": 4,
+        "address": "0x3000",
+        "length": 2,
+        "type": "Uint8le"
+    },
+    "SeRegister3": {
+        "func_code": 4,
+        "address": 2000,
+        "length": 20,
+        "type": "Uint8be"
+    },
+    "SeRegister4": {
+        "func_code": 4,
+        "address": 2000,
+        "length": 20,
+        "type": "Uint8be"
+    },
+    "SeRegister5": {
+        "func_code": 4,
+        "address": 2000,
+        "length": 20,
+        "type": "Uint8be"
+    },
+    "SeRegister6": {
+        "func_code": 4,
+        "address": 2000,
+        "length": 20,
+        "type": "Uint8be"
+    },
+    "SeRegister7": {
+        "func_code": 4,
+        "address": 2000,
+        "length": 20,
+        "type": "Uint8be"
+    },
+    "SeRegister8": {
+        "func_code": 4,
+        "address": 2000,
+        "length": 20,
+        "type": "Uint8be"
+    },
+    "SeRegister9": {
+        "func_code": 4,
+        "address": 2000,
+        "length": 20,
+        "type": "Uint8be"
+    },
+    "SeRegister10": {
+        "func_code": 4,
+        "address": 2000,
+        "length": 20,
+        "type": "Uint8be"
+    },
+    "SeRegister11": {
+        "func_code": 4,
+        "address": 2500,
+        "length": 20,
+        "type": "Uint8be"
+    },
+    "ReRegister1": {
+        "func_code": 4,
+        "address": "0x4001",
+        "length": 5,
+        "type": "LooseString"
+    },
+    "ReRegister2": {
+        "func_code": 4,
+        "address": "0x3000",
+        "length": 2,
+        "type": "Uint8le"
+    },
+    "ReRegister3": {
+        "func_code": 4,
+        "address": 2000,
+        "length": 20,
+        "type": "Uint8be"
+    },
+    "ReRegister4": {
+        "func_code": 4,
+        "address": 2000,
+        "length": 20,
+        "type": "Uint8be"
+    },
+    "ReRegister5": {
+        "func_code": 4,
+        "address": 2000,
+        "length": 20,
+        "type": "Uint8be"
+    },
+    "ReRegister6": {
+        "func_code": 4,
+        "address": 2000,
+        "length": 20,
+        "type": "Uint8be"
+    },
+    "ReRegister7": {
+        "func_code": 4,
+        "address": 2000,
+        "length": 20,
+        "type": "Uint8be"
+    },
+    "ReRegister8": {
+        "func_code": 4,
+        "address": 2000,
+        "length": 20,
+        "type": "Uint8be"
+    },
+    "ReRegister9": {
+        "func_code": 4,
+        "address": 2000,
+        "length": 20,
+        "type": "Uint8be"
+    },
+    "ReRegister10": {
+        "func_code": 4,
+        "address": 2000,
+        "length": 20,
+        "type": "Uint8be"
+    },
+    "ReRegister11": {
+        "func_code": 4,
+        "address": 2500,
+        "length": 20,
+        "type": "Uint8be"
+    },
+    "SSSgister1": {
+        "func_code": 4,
+        "address": "0x4001",
+        "length": 5,
+        "type": "LooseString"
+    },
+    "SSSgister2": {
+        "func_code": 4,
+        "address": "0x3000",
+        "length": 2,
+        "type": "Uint8le"
+    },
+    "SSSgister3": {
+        "func_code": 4,
+        "address": 2000,
+        "length": 20,
+        "type": "Uint8be"
+    },
+    "SSSgister4": {
+        "func_code": 4,
+        "address": 2000,
+        "length": 20,
+        "type": "Uint8be"
+    },
+    "SSSgister5": {
+        "func_code": 4,
+        "address": 2000,
+        "length": 20,
+        "type": "Uint8be"
+    },
+    "SSSgister6": {
+        "func_code": 4,
+        "address": 2000,
+        "length": 20,
+        "type": "Uint8be"
+    },
+    "SSSgister7": {
+        "func_code": 4,
+        "address": 2000,
+        "length": 20,
+        "type": "Uint8be"
+    },
+    "SSSgister8": {
+        "func_code": 4,
+        "address": 2000,
+        "length": 20,
+        "type": "Uint8be"
+    },
+    "SSSgister9": {
+        "func_code": 4,
+        "address": 2000,
+        "length": 20,
+        "type": "Uint8be"
+    },
+    "SSSgister10": {
+        "func_code": 4,
+        "address": 2000,
+        "length": 20,
+        "type": "Uint8be"
+    },
+    "TTTgister1": {
+        "func_code": 4,
+        "address": "0x4001",
+        "length": 5,
+        "type": "LooseString"
+    },
+    "TTTgister2": {
+        "func_code": 4,
+        "address": "0x3000",
+        "length": 2,
+        "type": "Uint8le"
+    },
+    "TTTgister3": {
+        "func_code": 4,
+        "address": 2000,
+        "length": 20,
+        "type": "Uint8be"
+    },
+    "TTTgister4": {
+        "func_code": 4,
+        "address": 2000,
+        "length": 20,
+        "type": "Uint8be"
+    },
+    "TTTgister5": {
+        "func_code": 4,
+        "address": 2000,
+        "length": 20,
+        "type": "Uint8be"
+    },
+    "TTTgister6": {
+        "func_code": 4,
+        "address": 2000,
+        "length": 20,
+        "type": "Uint8be"
+    },
+    "TTTgister7": {
+        "func_code": 4,
+        "address": 2000,
+        "length": 20,
+        "type": "Uint8be"
+    },
+    "TTTgister8": {
+        "func_code": 4,
+        "address": 2000,
+        "length": 20,
+        "type": "Uint8be"
+    },
+    "TTTgister9": {
+        "func_code": 4,
+        "address": 2000,
+        "length": 20,
+        "type": "Uint8be"
+    },
+    "TTTgister10": {
+        "func_code": 4,
+        "address": 2000,
+        "length": 40,
+        "type": "Uint8be"
     }
 }

@@ -8,6 +8,8 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use itertools::Itertools;
+use ratatui::buffer::Buffer;
+use ratatui::layout::Rect;
 use ratatui::{prelude::*, widgets::*};
 use std::io::stdout;
 use std::time::Duration;
@@ -23,7 +25,7 @@ const PALETTES: [tailwind::Palette; 4] = [
 ];
 
 const INFO_TEXT: &str =
-    "(Esc | q) quit | (↑ | k) move up | (↓ | j) move down | (→ | l) next color | (← | h) previous color | (Tab | n) switch display | (d) disconnect | (c) connect";
+    "(Esc | q) quit | (↑ | k) move up | (↓ | j) move down | (← | h) move left | (→ | l) move right | (t) move_down color | (Tab | n) switch display | (d) disconnect | (c) connect";
 
 const ITEM_HEIGHT: usize = 3;
 
@@ -56,7 +58,10 @@ impl TableColors {
 pub struct App<'a, const SLICE_SIZE: usize> {
     register_handler: Handler<'a, SLICE_SIZE>,
     state: TableState,
-    scroll_state: ScrollbarState,
+    vertical_scroll_state: ScrollbarState,
+    horizontal_scroll: u16,
+    total_width: u16,
+    visible_width: u16,
     colors: TableColors,
     color_index: usize,
     show_as_hex: bool,
@@ -75,17 +80,21 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
         Self {
             register_handler,
             state: TableState::default().with_selected(0),
-            scroll_state: ScrollbarState::new((len - 1) * ITEM_HEIGHT),
+            vertical_scroll_state: ScrollbarState::new((len - 1) * ITEM_HEIGHT),
+            horizontal_scroll: 0,
+            total_width: 0,
+            visible_width: 0,
             colors: TableColors::new(&PALETTES[0]),
             color_index: 0,
             show_as_hex: true,
         }
     }
-    pub fn next(&mut self) {
+
+    pub fn move_down(&mut self) {
         let i = match self.state.selected() {
             Some(i) => {
                 if i >= self.register_handler.values().len() - 1 {
-                    0
+                    self.register_handler.values().len() - 1
                 } else {
                     i + 1
                 }
@@ -93,14 +102,14 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
             None => 0,
         };
         self.state.select(Some(i));
-        self.scroll_state = self.scroll_state.position(i * ITEM_HEIGHT);
+        self.vertical_scroll_state = self.vertical_scroll_state.position(i * ITEM_HEIGHT);
     }
 
-    pub fn previous(&mut self) {
+    pub fn move_up(&mut self) {
         let i = match self.state.selected() {
             Some(i) => {
                 if i == 0 {
-                    self.register_handler.values().len() - 1
+                    0
                 } else {
                     i - 1
                 }
@@ -108,16 +117,22 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
             None => 0,
         };
         self.state.select(Some(i));
-        self.scroll_state = self.scroll_state.position(i * ITEM_HEIGHT);
+        self.vertical_scroll_state = self.vertical_scroll_state.position(i * ITEM_HEIGHT);
     }
 
-    pub fn next_color(&mut self) {
+    pub fn move_left(&mut self) {
+        self.horizontal_scroll = std::cmp::max(3, self.horizontal_scroll) - 3;
+    }
+
+    pub fn move_right(&mut self) {
+        self.horizontal_scroll = std::cmp::min(
+            std::cmp::max(self.total_width, self.visible_width) - self.visible_width,
+            self.horizontal_scroll + 3,
+        );
+    }
+
+    pub fn switch_color(&mut self) {
         self.color_index = (self.color_index + 1) % PALETTES.len();
-    }
-
-    pub fn previous_color(&mut self) {
-        let count = PALETTES.len();
-        self.color_index = (self.color_index + count - 1) % count;
     }
 
     pub fn set_colors(&mut self) {
@@ -135,6 +150,7 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
     ) -> anyhow::Result<()> {
         enable_raw_mode()?;
         let mut terminal = App::<SLICE_SIZE>::create_terminal()?;
+        execute!(terminal.backend_mut(), DisableMouseCapture)?;
 
         let mut status = str!("");
         let mut app = self;
@@ -155,11 +171,12 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
                         use KeyCode::*;
                         match key.code {
                             Char('q') | Esc => break,
-                            Char('j') | Down => app.next(),
-                            Char('k') | Up => app.previous(),
-                            Char('l') | Right => app.next_color(),
-                            Char('h') | Left => app.previous_color(),
+                            Char('j') | Down => app.move_down(),
+                            Char('k') | Up => app.move_up(),
+                            Char('h') | Left => app.move_left(),
+                            Char('l') | Right => app.move_right(),
                             Char('n') | Tab => app.switch(),
+                            Char('t') => app.switch_color(),
                             Char('d') => command_send.blocking_send(Command::Disconnect)?,
                             Char('c') => command_send.blocking_send(Command::Connect)?,
                             _ => {}
@@ -226,7 +243,7 @@ fn render_table<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_SIZE
         .register_handler
         .values()
         .iter()
-        .sorted_by(|a, b| Ord::cmp(&b.1.address(), &a.1.address()))
+        .sorted_by(|a, b| Ord::cmp(&a.1.address(), &b.1.address()))
         .map(|(n, r)| {
             [
                 str!(n),
@@ -267,6 +284,9 @@ fn render_table<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_SIZE
             )
         },
     );
+
+    app.total_width = limits.0 + limits.1 + limits.2 + limits.3 + limits.4 + limits.5 + 25;
+
     let rows = items.iter().enumerate().map(|(i, item)| {
         let color = match i % 2 {
             0 => app.colors.normal_row_color,
@@ -297,7 +317,28 @@ fn render_table<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_SIZE
     .highlight_symbol(Text::from(vec!["".into(), bar.into(), "".into()]))
     .bg(app.colors.buffer_bg)
     .highlight_spacing(HighlightSpacing::Always);
-    f.render_stateful_widget(t, area, &mut app.state);
+
+    app.visible_width = f.size().width;
+    if app.total_width <= f.size().width {
+        f.render_stateful_widget(t, area, &mut app.state);
+    } else {
+        let f_rect = area;
+        let rect = Rect {
+            x: 0,
+            y: 0,
+            width: app.total_width,
+            height: f_rect.height,
+        };
+        let mut buffer = Buffer::empty(rect);
+        ratatui::widgets::StatefulWidget::render(t, rect, &mut buffer, &mut app.state);
+        let offset = std::cmp::min(app.total_width - f_rect.width, app.horizontal_scroll);
+        let f_buffer = f.buffer_mut();
+        for (x, y) in itertools::iproduct!(offset..(offset + f_rect.width), 0..(rect.height)) {
+            f_buffer
+                .get_mut(x - offset + f_rect.x, y + f_rect.y)
+                .clone_from(buffer.get(x, y));
+        }
+    }
 }
 
 fn render_scrollbar<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_SIZE>, area: Rect) {
@@ -310,7 +351,7 @@ fn render_scrollbar<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_
             vertical: 1,
             horizontal: 0,
         }),
-        &mut app.scroll_state,
+        &mut app.vertical_scroll_state,
     );
 }
 
@@ -326,9 +367,9 @@ fn render_footer<const SLICE_SIZE: usize>(
         Constraint::Min(20),
     ])
     .split(area);
-    let status_footer = Paragraph::new(Line::from(status))
+    let status_footer = Paragraph::new(Line::from(str!(" ") + &status))
         .style(Style::new().fg(app.colors.row_fg).bg(app.colors.buffer_bg))
-        .centered()
+        .left_aligned()
         .block(
             Block::default()
                 .borders(Borders::LEFT | Borders::TOP | Borders::BOTTOM)
@@ -346,7 +387,7 @@ fn render_footer<const SLICE_SIZE: usize>(
         );
     let add_footer = Paragraph::new(Line::from(""))
         .style(Style::new().fg(app.colors.row_fg).bg(app.colors.buffer_bg))
-        .centered()
+        .right_aligned()
         .block(
             Block::default()
                 .borders(Borders::RIGHT | Borders::TOP | Borders::BOTTOM)
