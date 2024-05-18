@@ -1,17 +1,97 @@
 {
     "Register1": {
         "address": "0x4001",
-        "length": 2,
-        "type": "Uint8Le"
+        "length": 5,
+        "type": "LooseString"
     },
     "Register2": {
         "address": "0x3000",
         "length": 2,
-        "type": "Uint8Le"
+        "type": "Uint8le"
     },
     "Register3": {
         "address": 2000,
-        "length": 2,
-        "type": "Uint8Le"
+        "length": 20,
+        "type": "Uint8be"
+    },
+    "Register4": {
+        "address": 2000,
+        "length": 20,
+        "type": "Uint8be"
+    },
+    "Register5": {
+        "address": 2000,
+        "length": 20,
+        "type": "Uint8be"
+    },
+    "Register6": {
+        "address": 2000,
+        "length": 20,
+        "type": "Uint8be"
+    },
+    "Register7": {
+        "address": 2000,
+        "length": 20,
+        "type": "Uint8be"
+    },
+    "Register8": {
+        "address": 2000,
+        "length": 20,
+        "type": "Uint8be"
+    },
+    "Register9": {
+        "address": 2000,
+        "length": 20,
+        "type": "Uint8be"
+    },
+    "Register10": {
+        "address": 2000,
+        "length": 20,
+        "type": "Uint8be"
+    },
+    "Register11": {
+        "address": 2000,
+        "length": 20,
+        "type": "Uint8be"
+    },
+    "Register12": {
+        "address": 2000,
+        "length": 20,
+        "type": "Uint8be"
+    },
+    "Register13": {
+        "address": 2000,
+        "length": 20,
+        "type": "Uint8be"
+    },
+    "Register14": {
+        "address": 2000,
+        "length": 20,
+        "type": "Uint8be"
+    },
+    "Register15": {
+        "address": 2000,
+        "length": 20,
+        "type": "Uint8be"
+    },
+    "Register16": {
+        "address": 2000,
+        "length": 20,
+        "type": "Uint8be"
+    },
+    "Register17": {
+        "address": 2000,
+        "length": 20,
+        "type": "Uint8be"
+    },
+    "Register18": {
+        "address": 2000,
+        "length": 20,
+        "type": "Uint8be"
+    },
+    "Register19": {
+        "address": 2000,
+        "length": 20,
+        "type": "Uint8be"
     }
 }

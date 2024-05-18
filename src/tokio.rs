@@ -33,6 +33,7 @@ struct Context(HashMap<&'static str, Vec<Box<dyn Joinable>>>);
 ///
 /// A task spawned by `crate::tokio::spawn_detach()` or `crate::tokio::spawn()` will be part of
 /// the global context. These tasks can be joined using `crate::tokio::join_all()`.
+#[allow(dead_code)]
 pub static GLOBAL_CONTEXT: &str = "";
 
 /// Context storage.
@@ -96,6 +97,7 @@ where
 ///     }).await;
 /// }
 /// ```
+#[allow(dead_code)]
 pub async fn spawn_detach_with_context<F: Send + IntoFuture + Future + 'static>(
     ctx: &'static str,
     future: F,
@@ -141,6 +143,7 @@ pub async fn spawn_detach_with_context<F: Send + IntoFuture + Future + 'static>(
 ///     join_all().await;
 /// }
 /// ```
+#[allow(dead_code)]
 pub async fn join_all() {
     loop {
         let mut context = CONTEXT.lock().await;
@@ -188,6 +191,7 @@ pub async fn join_all() {
 ///     join_all_of_context("Local").await;
 /// }
 /// ```
+#[allow(dead_code)]
 pub async fn join_all_of_context(ctx: &'static str) {
     loop {
         let mut context = CONTEXT.lock().await;

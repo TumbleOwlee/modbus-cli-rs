@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::memory::{Memory, Range};
-    use crate::register::{Definition, RegisterHandler, Type};
+    use crate::register::{Definition, Handler, Type};
     use std::collections::HashMap;
     use std::sync::{Arc, Mutex};
 
@@ -37,8 +37,8 @@ mod tests {
             0u16, 4096u16,
         ))));
         let mut definitions: HashMap<String, Definition> = HashMap::new();
-        definitions.insert("Name".to_owned(), Definition::new(0, 2, Type::String));
-        let mut register = RegisterHandler::new(&definitions, memory);
+        definitions.insert("Name".to_owned(), Definition::new(0, 2, Type::PackedString));
+        let mut register = Handler::new(&definitions, memory);
         assert!(register.update().is_ok());
     }
 }

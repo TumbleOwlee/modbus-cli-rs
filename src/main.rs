@@ -3,11 +3,13 @@ mod modbus;
 mod register;
 mod test;
 mod tokio;
+mod ui;
 mod util;
 
 use crate::memory::{Memory, Range};
 use crate::modbus::Server;
-use crate::register::{Definition, RegisterHandler};
+use crate::register::{Definition, Handler};
+use crate::ui::App;
 use crate::util::{str, Expect};
 
 use clap::Parser;
@@ -18,7 +20,7 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use tokio::net::TcpListener;
 use tokio::runtime::Runtime;
-use tokio::{join_all, spawn_detach};
+use tokio::spawn_detach;
 use tokio_modbus::server::tcp::{accept_tcp_connection, Server as TcpServer};
 
 #[derive(Parser)]
@@ -53,24 +55,22 @@ fn main() {
             std::cmp::min(min, def.get_address())
         }),
         definitions.iter().fold(0x0000u16, |max, (_, def)| {
-            std::cmp::min(max, def.get_address())
+            std::cmp::max(max, def.get_address())
         }) + 1,
     ))));
 
     // Initialize register handler
-    let mut register_handler = RegisterHandler::new(&definitions, memory.clone());
+    let register_handler = Handler::new(&definitions, memory.clone());
 
     // Initialize tokio runtime for modbus server
-    let runtime = Runtime::new().expect("Failed to create runtime.");
+    let runtime = Runtime::new().panic(|e| format!("Failed to create runtime. [{}]", e));
     runtime.block_on(async move {
         spawn_detach(async move { run_server(args.ip, args.port, memory).await }).await
     });
 
-    // Update register values from memory
-    let _ = register_handler.update();
-
-    // Block until all jobs are done
-    runtime.block_on(async { join_all().await });
+    // Run UI
+    let app = App::new(register_handler);
+    app.run().panic(|e| format!("Run app failed [{}]", e));
 }
 
 /// Read register configuration from file

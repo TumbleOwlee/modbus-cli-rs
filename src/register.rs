@@ -3,7 +3,64 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum Type {
+    PackedString,
+    LooseString,
+    Uint8le,
+    Uint8be,
+    Uint16le,
+    Uint16be,
+    Uint32le,
+    Uint32be,
+    Uint64le,
+    Uint64be,
+}
+
+impl Type {
+    pub fn from(&self, bytes: &[u16]) -> anyhow::Result<String> {
+        match self {
+            Type::PackedString => Ok(String::from_utf8(
+                bytes
+                    .iter()
+                    .flat_map(|v| vec![(*v >> 8) as u8, (*v & 0xFF) as u8])
+                    .collect(),
+            )
+            .unwrap()),
+            Type::LooseString => {
+                Ok(String::from_utf8(bytes.iter().map(|v| (*v & 0xFF) as u8).collect()).unwrap())
+            }
+            Type::Uint8le => Ok((*(bytes.first().unwrap()) >> 8).to_string()),
+            Type::Uint8be => Ok((*(bytes.first().unwrap()) & 0xFF).to_string()),
+            Type::Uint16le => Ok(u16::from_le(*bytes.first().unwrap()).to_string()),
+            Type::Uint16be => Ok(u16::from_be(*bytes.first().unwrap()).to_string()),
+            Type::Uint32le => Ok(u32::from_le(
+                (((*bytes.first().unwrap()) as u32) << 16) + (*bytes.get(1).unwrap()) as u32,
+            )
+            .to_string()),
+            Type::Uint32be => Ok(u32::from_be(
+                (((*bytes.first().unwrap()) as u32) << 16) + (*bytes.get(1).unwrap()) as u32,
+            )
+            .to_string()),
+            Type::Uint64le => Ok(u64::from_le(
+                (((*bytes.first().unwrap()) as u64) << 48)
+                    + (((*bytes.get(1).unwrap()) as u64) << 32)
+                    + (((*bytes.get(2).unwrap()) as u64) << 16)
+                    + (*bytes.get(3).unwrap()) as u64,
+            )
+            .to_string()),
+            Type::Uint64be => Ok(u64::from_be(
+                (((*bytes.first().unwrap()) as u64) << 48)
+                    + (((*bytes.get(1).unwrap()) as u64) << 32)
+                    + (((*bytes.get(2).unwrap()) as u64) << 16)
+                    + (*bytes.get(3).unwrap()) as u64,
+            )
+            .to_string()),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(untagged)]
 pub enum Address {
     Hex(String),
@@ -51,55 +108,52 @@ impl Definition {
         self.address.as_u16()
     }
 
-    pub fn get_type(&self) -> &Type {
-        &self.r#type
+    pub fn get_type(&self) -> Type {
+        self.r#type.clone()
     }
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub enum Type {
-    String,
-    Uint8Le,
-    Uint8Be,
 }
 
 pub struct Register {
+    address: u16,
     value: String,
     raw: Vec<u16>,
+    r#type: Type,
 }
 
 impl Register {
-    pub fn new(length: usize) -> Self {
+    pub fn new(definition: &Definition) -> Self {
         Self {
+            address: definition.address.as_u16(),
             value: String::new(),
-            raw: vec![0; length],
+            raw: vec![0; definition.get_range().length()],
+            r#type: definition.get_type().clone(),
         }
+    }
+
+    pub fn address(&self) -> u16 {
+        self.address
+    }
+
+    pub fn value(&self) -> &String {
+        &self.value
+    }
+
+    pub fn raw(&self) -> &Vec<u16> {
+        &self.raw
+    }
+
+    pub fn r#type(&self) -> Type {
+        self.r#type.clone()
     }
 }
 
-impl Type {
-    pub fn from(&self, bytes: &[u16]) -> anyhow::Result<String> {
-        match self {
-            Type::String => Ok(String::from_utf8(
-                bytes
-                    .iter()
-                    .flat_map(|v| vec![(*v >> 8) as u8, (*v & 0xFF) as u8])
-                    .collect(),
-            )
-            .unwrap()),
-            Type::Uint8Le => Ok((*(bytes.first().unwrap()) >> 8).to_string()),
-            Type::Uint8Be => Ok((*(bytes.first().unwrap()) & 0xFF).to_string()),
-        }
-    }
-}
-
-pub struct RegisterHandler<'a, const SLICE_SIZE: usize> {
+pub struct Handler<'a, const SLICE_SIZE: usize> {
     definitions: &'a HashMap<String, Definition>,
     values: HashMap<String, Register>,
     memory: Arc<Mutex<Memory<SLICE_SIZE, u16>>>,
 }
 
-impl<'a, const SLICE_SIZE: usize> RegisterHandler<'a, SLICE_SIZE> {
+impl<'a, const SLICE_SIZE: usize> Handler<'a, SLICE_SIZE> {
     #[allow(dead_code)]
     pub fn new(
         definitions: &'a HashMap<String, Definition>,
@@ -109,13 +163,20 @@ impl<'a, const SLICE_SIZE: usize> RegisterHandler<'a, SLICE_SIZE> {
             definitions,
             values: definitions
                 .iter()
-                .map(|(name, def)| (name.clone(), Register::new(def.get_range().length())))
+                .map(|(name, def)| (name.clone(), Register::new(def)))
                 .collect(),
             memory,
         }
     }
 
-    #[allow(dead_code)]
+    pub fn len(&self) -> usize {
+        self.definitions.len()
+    }
+
+    pub fn values(&self) -> &HashMap<String, Register> {
+        &self.values
+    }
+
     pub fn update(&mut self) -> anyhow::Result<()> {
         let mut memory = self.memory.lock().unwrap();
         for (name, def) in self.definitions.iter() {
