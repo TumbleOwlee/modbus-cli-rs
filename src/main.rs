@@ -65,14 +65,14 @@ fn main() {
         read_config(&args.config).panic(|e| format!("Failed to read configuration file. [{}]", e));
 
     // Initialize memory storage for all registers
-    let memory = Arc::new(Mutex::new(Memory::<1024, u16>::new(Range::new(
-        definitions.iter().fold(0xFFFFu16, |min, (_, def)| {
-            std::cmp::min(min, def.get_address())
-        }),
-        definitions.iter().fold(0x0000u16, |max, (_, def)| {
-            std::cmp::max(max, def.get_address())
-        }) + 1,
-    ))));
+    let mut memory = Memory::<1024, u16>::new();
+    memory.init(
+        &definitions
+            .values()
+            .map(|d| d.get_range())
+            .collect::<Vec<_>>(),
+    );
+    let memory = Arc::new(Mutex::new(memory));
 
     let (status_send, status_recv) = channel::<Status>(10);
     let (command_send, command_recv) = channel::<Command>(10);

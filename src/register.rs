@@ -1,4 +1,6 @@
 use crate::memory::{Memory, Range};
+use crate::util::Expect;
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -187,7 +189,8 @@ impl<'a, const SLICE_SIZE: usize> Handler<'a, SLICE_SIZE> {
         for (name, def) in self.definitions.iter() {
             if let Some(value) = self.values.get_mut(name) {
                 let bytes: Vec<u16> = memory
-                    .read(&def.get_range())?
+                    .read(&def.get_range())
+                    .panic(|e| format!("{}", e))
                     .into_iter()
                     .copied()
                     .collect();

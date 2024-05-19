@@ -4,10 +4,10 @@ use std::collections::HashMap;
 use std::default::Default;
 use std::fmt::Debug;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Range<Key: Into<usize> + Clone>(Key, Key);
 
-impl<Key: Into<usize> + Clone> Range<Key> {
+impl<Key: Into<usize> + Clone + Debug> Range<Key> {
     pub fn new(from: Key, to: Key) -> Self {
         Self(from, to)
     }
@@ -22,13 +22,24 @@ pub struct Memory<const SLICE_SIZE: usize, Value: Default + Copy + Debug> {
 }
 
 impl<const SLICE_SIZE: usize, Value: Default + Copy + Debug> Memory<SLICE_SIZE, Value> {
-    pub fn new<Key: Into<usize> + Clone>(range: Range<Key>) -> Self {
-        let range = (range.0.into() / SLICE_SIZE, range.1.into() / SLICE_SIZE + 1);
-        let mut slices = HashMap::with_capacity(range.1 - range.0);
-        for i in range.0..range.1 {
-            slices.insert(i, [Value::default(); SLICE_SIZE]);
+    pub fn new() -> Self {
+        Self {
+            slices: HashMap::new(),
         }
-        Self { slices }
+    }
+
+    pub fn init<Key: Into<usize> + Clone + Debug>(&mut self, ranges: &[Range<Key>]) {
+        for range in ranges.iter() {
+            let range = (
+                range.0.clone().into() / SLICE_SIZE,
+                range.1.clone().into() / SLICE_SIZE + 1,
+            );
+            for i in range.0..range.1 {
+                self.slices
+                    .entry(i)
+                    .or_insert_with(|| [Value::default(); SLICE_SIZE]);
+            }
+        }
     }
 
     pub fn write<'a, Key: Into<usize> + Clone>(
