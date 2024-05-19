@@ -28,22 +28,22 @@ use tokio_modbus::server::tcp::{accept_tcp_connection, Server as TcpServer};
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 struct Args {
-    /// Configuration to load
+    /// Path to the JSON configuration file providing the register definitions.
     config: String,
 
-    /// Verbose
+    /// Switch on verbose output.
     #[arg(short, long, default_value_t = false)]
     verbose: bool,
 
-    /// Either interface to use for listener or target address
+    /// The interface to use for the service or the ip to connect to in client mode.
     #[arg(short, long, default_value_t = str!("127.0.0.1"))]
     ip: String,
 
-    // Either local port for listening or target port
+    /// The port to use for the service or the port to connect to on target host.
     #[arg(short, long, default_value_t = 502)]
     port: u16,
 
-    // Start as client instead of server
+    /// Start as client instead of service.
     #[arg(short, long, default_value_t = false)]
     client: bool,
 }

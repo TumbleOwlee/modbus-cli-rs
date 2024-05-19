@@ -1,320 +1,122 @@
 {
-    "Register1": {
+    "Serial Number": {
         "func_code": 4,
-        "address": "0x4001",
-        "length": 5,
-        "type": "LooseString"
+        "address": "0x4000",
+        "length": 4,
+        "type": "PackedString"
     },
-    "Register2": {
+    "Firmware Version": {
         "func_code": 4,
-        "address": "0x3000",
+        "address": "0x4004",
         "length": 2,
-        "type": "Uint8le"
+        "type": "PackedString"
     },
-    "Register3": {
+    "User Settable Max Current": {
         "func_code": 4,
-        "address": 2000,
-        "length": 20,
-        "type": "Uint8be"
-    },
-    "Register4": {
-        "func_code": 4,
-        "address": 2000,
-        "length": 20,
-        "type": "Uint8be"
-    },
-    "Register5": {
-        "func_code": 4,
-        "address": 2000,
-        "length": 20,
-        "type": "Uint8be"
-    },
-    "Register6": {
-        "func_code": 4,
-        "address": 2000,
-        "length": 20,
-        "type": "Uint8be"
-    },
-    "Register7": {
-        "func_code": 4,
-        "address": 2000,
-        "length": 20,
-        "type": "Uint8be"
-    },
-    "Register8": {
-        "func_code": 4,
-        "address": 2000,
-        "length": 20,
-        "type": "Uint8be"
-    },
-    "Register9": {
-        "func_code": 4,
-        "address": 2000,
-        "length": 20,
-        "type": "Uint8be"
-    },
-    "Register10": {
-        "func_code": 4,
-        "address": 2000,
-        "length": 20,
-        "type": "Uint8be"
-    },
-    "Register11": {
-        "func_code": 4,
-        "address": 2500,
-        "length": 20,
-        "type": "Uint8be"
-    },
-    "SeRegister1": {
-        "func_code": 4,
-        "address": "0x4001",
-        "length": 5,
-        "type": "LooseString"
-    },
-    "SeRegister2": {
-        "func_code": 4,
-        "address": "0x3000",
+        "address": "0x4006",
         "length": 2,
-        "type": "Uint8le"
+        "type": "Uint32be"
     },
-    "SeRegister3": {
+    "Error Code": {
         "func_code": 4,
-        "address": 2000,
-        "length": 20,
-        "type": "Uint8be"
-    },
-    "SeRegister4": {
-        "func_code": 4,
-        "address": 2000,
-        "length": 20,
-        "type": "Uint8be"
-    },
-    "SeRegister5": {
-        "func_code": 4,
-        "address": 2000,
-        "length": 20,
-        "type": "Uint8be"
-    },
-    "SeRegister6": {
-        "func_code": 4,
-        "address": 2000,
-        "length": 20,
-        "type": "Uint8be"
-    },
-    "SeRegister7": {
-        "func_code": 4,
-        "address": 2000,
-        "length": 20,
-        "type": "Uint8be"
-    },
-    "SeRegister8": {
-        "func_code": 4,
-        "address": 2000,
-        "length": 20,
-        "type": "Uint8be"
-    },
-    "SeRegister9": {
-        "func_code": 4,
-        "address": 2000,
-        "length": 20,
-        "type": "Uint8be"
-    },
-    "SeRegister10": {
-        "func_code": 4,
-        "address": 2000,
-        "length": 20,
-        "type": "Uint8be"
-    },
-    "SeRegister11": {
-        "func_code": 4,
-        "address": 2500,
-        "length": 20,
-        "type": "Uint8be"
-    },
-    "ReRegister1": {
-        "func_code": 4,
-        "address": "0x4001",
-        "length": 5,
-        "type": "LooseString"
-    },
-    "ReRegister2": {
-        "func_code": 4,
-        "address": "0x3000",
+        "address": "0x4008",
         "length": 2,
-        "type": "Uint8le"
+        "type": "Uint32be"
     },
-    "ReRegister3": {
+    "Socket Lock State": {
         "func_code": 4,
-        "address": 2000,
-        "length": 20,
-        "type": "Uint8be"
-    },
-    "ReRegister4": {
-        "func_code": 4,
-        "address": 2000,
-        "length": 20,
-        "type": "Uint8be"
-    },
-    "ReRegister5": {
-        "func_code": 4,
-        "address": 2000,
-        "length": 20,
-        "type": "Uint8be"
-    },
-    "ReRegister6": {
-        "func_code": 4,
-        "address": 2000,
-        "length": 20,
-        "type": "Uint8be"
-    },
-    "ReRegister7": {
-        "func_code": 4,
-        "address": 2000,
-        "length": 20,
-        "type": "Uint8be"
-    },
-    "ReRegister8": {
-        "func_code": 4,
-        "address": 2000,
-        "length": 20,
-        "type": "Uint8be"
-    },
-    "ReRegister9": {
-        "func_code": 4,
-        "address": 2000,
-        "length": 20,
-        "type": "Uint8be"
-    },
-    "ReRegister10": {
-        "func_code": 4,
-        "address": 2000,
-        "length": 20,
-        "type": "Uint8be"
-    },
-    "ReRegister11": {
-        "func_code": 4,
-        "address": 2500,
-        "length": 20,
-        "type": "Uint8be"
-    },
-    "SSSgister1": {
-        "func_code": 4,
-        "address": "0x4001",
-        "length": 5,
-        "type": "LooseString"
-    },
-    "SSSgister2": {
-        "func_code": 4,
-        "address": "0x3000",
+        "address": "0x400A",
         "length": 2,
-        "type": "Uint8le"
+        "type": "Uint32be"
     },
-    "SSSgister3": {
+    "Charging State": {
         "func_code": 4,
-        "address": 2000,
-        "length": 20,
-        "type": "Uint8be"
-    },
-    "SSSgister4": {
-        "func_code": 4,
-        "address": 2000,
-        "length": 20,
-        "type": "Uint8be"
-    },
-    "SSSgister5": {
-        "func_code": 4,
-        "address": 2000,
-        "length": 20,
-        "type": "Uint8be"
-    },
-    "SSSgister6": {
-        "func_code": 4,
-        "address": 2000,
-        "length": 20,
-        "type": "Uint8be"
-    },
-    "SSSgister7": {
-        "func_code": 4,
-        "address": 2000,
-        "length": 20,
-        "type": "Uint8be"
-    },
-    "SSSgister8": {
-        "func_code": 4,
-        "address": 2000,
-        "length": 20,
-        "type": "Uint8be"
-    },
-    "SSSgister9": {
-        "func_code": 4,
-        "address": 2000,
-        "length": 20,
-        "type": "Uint8be"
-    },
-    "SSSgister10": {
-        "func_code": 4,
-        "address": 2000,
-        "length": 20,
-        "type": "Uint8be"
-    },
-    "TTTgister1": {
-        "func_code": 4,
-        "address": "0x4001",
-        "length": 5,
-        "type": "LooseString"
-    },
-    "TTTgister2": {
-        "func_code": 4,
-        "address": "0x3000",
+        "address": "0x400C",
         "length": 2,
-        "type": "Uint8le"
+        "type": "Uint32be"
     },
-    "TTTgister3": {
+    "Charging Current Limit": {
         "func_code": 4,
-        "address": 2000,
-        "length": 20,
-        "type": "Uint8be"
+        "address": "0x400E",
+        "length": 2,
+        "type": "Uint32be"
     },
-    "TTTgister4": {
+    "Charging Current L1": {
         "func_code": 4,
-        "address": 2000,
-        "length": 20,
-        "type": "Uint8be"
+        "address": "0x4010",
+        "length": 2,
+        "type": "Uint32be"
     },
-    "TTTgister5": {
+    "Charging Current L2": {
         "func_code": 4,
-        "address": 2000,
-        "length": 20,
-        "type": "Uint8be"
+        "address": "0x4012",
+        "length": 2,
+        "type": "Uint32be"
     },
-    "TTTgister6": {
+    "Charging Current L3": {
         "func_code": 4,
-        "address": 2000,
-        "length": 20,
-        "type": "Uint8be"
+        "address": "0x4014",
+        "length": 2,
+        "type": "Uint32be"
     },
-    "TTTgister7": {
+    "Voltage L1": {
         "func_code": 4,
-        "address": 2000,
-        "length": 20,
-        "type": "Uint8be"
+        "address": "0x4016",
+        "length": 2,
+        "type": "Uint32be"
     },
-    "TTTgister8": {
+    "Voltage L2": {
         "func_code": 4,
-        "address": 2000,
-        "length": 20,
-        "type": "Uint8be"
+        "address": "0x4018",
+        "length": 2,
+        "type": "Uint32be"
     },
-    "TTTgister9": {
+    "Voltage L3": {
         "func_code": 4,
-        "address": 2000,
-        "length": 20,
-        "type": "Uint8be"
+        "address": "0x401A",
+        "length": 2,
+        "type": "Uint32be"
     },
-    "TTTgister10": {
+    "Active Power": {
         "func_code": 4,
-        "address": 2000,
-        "length": 40,
-        "type": "Uint8be"
+        "address": "0x401C",
+        "length": 2,
+        "type": "Uint32be"
+    },
+    "Energy Delivered": {
+        "func_code": 4,
+        "address": "0x401E",
+        "length": 2,
+        "type": "Uint32be"
+    },
+    "Communication Timeout": {
+        "func_code": 4,
+        "address": "0x4020",
+        "length": 1,
+        "type": "Uint16be"
+    },
+    "Set Charging Current Limit": {
+        "func_code": 4,
+        "address": "0x4100",
+        "length": 2,
+        "type": "Uint32be"
+    },
+    "Lock/Unlock Socket Cable": {
+        "func_code": 4,
+        "address": "0x4103",
+        "length": 1,
+        "type": "Uint16be"
+    },
+    "Start/Stop Charging Session": {
+        "func_code": 4,
+        "address": "0x4105",
+        "length": 1,
+        "type": "Uint16be"
+    },
+    "Communication Timeout": {
+        "func_code": 4,
+        "address": "0x4106",
+        "length": 1,
+        "type": "Uint16be"
     }
 }

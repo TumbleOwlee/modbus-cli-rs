@@ -25,7 +25,7 @@ const PALETTES: [tailwind::Palette; 4] = [
 ];
 
 const INFO_TEXT: &str =
-    "(Esc | q) quit | (↑ | k) move up | (↓ | j) move down | (← | h) move left | (→ | l) move right | (t) move_down color | (Tab | n) switch display | (d) disconnect | (c) connect";
+    "(q) quit | (k) up | (j) down | (h) left | (l) right | (t) color | (n) hex/dec | (d) disconnect | (c) connect";
 
 const ITEM_HEIGHT: usize = 3;
 
@@ -155,6 +155,7 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
         let mut status = str!("");
         let mut app = self;
         loop {
+            let _ = app.register_handler.update();
             if let Ok(v) = status_recv.try_recv() {
                 match v {
                     Status::String(v) => {
@@ -162,7 +163,7 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
                     }
                 }
             }
-            app.register_handler.update()?;
+            //app.register_handler.update()?;
             terminal.draw(|f| ui(f, &mut app, status.clone()))?;
 
             if event::poll(Duration::from_millis(50))? {
@@ -362,9 +363,9 @@ fn render_footer<const SLICE_SIZE: usize>(
     status: String,
 ) {
     let rects = Layout::horizontal([
-        Constraint::Min(20),
-        Constraint::Length(180),
-        Constraint::Min(20),
+        Constraint::Length(status.len() as u16 +3),
+        Constraint::Min(1),
+        Constraint::Length(status.len() as u16 + 3),
     ])
     .split(area);
     let status_footer = Paragraph::new(Line::from(str!(" ") + &status))
