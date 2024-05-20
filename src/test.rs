@@ -3,7 +3,7 @@ mod tests {
     use crate::memory::{Memory, Range};
     use crate::register::{Definition, Handler, Type};
     use std::collections::HashMap;
-    use std::sync::{Mutex, Arc};
+    use std::sync::{Arc, Mutex};
 
     #[test]
     fn overlap() {

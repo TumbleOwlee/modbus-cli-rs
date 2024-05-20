@@ -8,11 +8,12 @@ mod util;
 
 use crate::memory::{Memory, Range};
 use crate::modbus::Server;
-use crate::register::{Definition, Handler};
+use crate::register::{Definition, Handler, Type};
 use crate::ui::App;
 use crate::util::{str, Expect};
 
 use clap::Parser;
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::File;
@@ -26,6 +27,7 @@ use tokio::spawn_detach;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tokio_modbus::prelude::{Reader, Writer};
 use tokio_modbus::server::tcp::{accept_tcp_connection, Server as TcpServer};
+use tokio_modbus::FunctionCode;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -146,11 +148,11 @@ async fn run_client(
     mut command_recv: Receiver<Command>,
 ) -> anyhow::Result<()> {
     let addr: SocketAddr = format!("{}:{}", ip, port).parse()?;
-    let bounds = definitions.iter().fold((0xFFFFu16, 0x0000u16), |acc, def| {
-        let addr = def.1.get_address();
-        (std::cmp::min(acc.0, addr), std::cmp::max(acc.1, addr))
-    });
-    let mut lower_bound = bounds.0;
+    //    let bounds = definitions.iter().fold((0xFFFFu16, 0x0000u16), |acc, def| {
+    //        let addr = def.1.get_address();
+    //        (std::cmp::min(acc.0, addr), std::cmp::max(acc.1, addr))
+    //    });
+    //    let mut lower_bound = bounds.0;
     let mut connection = tokio_modbus::client::tcp::connect(addr).await.ok();
     if connection.is_some() {
         let _ = status_send
@@ -162,34 +164,95 @@ async fn run_client(
             .await;
     };
 
+    let mut sorted_defs = definitions
+        .iter()
+        .sorted_by(|a, b| {
+            a.1.read_code()
+                .cmp(&b.1.read_code())
+                .then(a.1.get_address().cmp(&b.1.get_address()))
+        })
+        .collect::<Vec<_>>();
+    let marker = (str!(""), Definition::new(0, 0, Type::Uint8le, 0));
+    sorted_defs.push((&marker.0, &marker.1));
+    let mut fc = 0;
+    let mut operations = Vec::new();
+    let mut range: Option<Range<u16>> = None;
+    for (name, def) in sorted_defs.into_iter() {
+        if range.is_some()
+            && (fc != def.read_code() || def.get_address() != range.as_ref().unwrap().to() as u16)
+        {
+            let fc = FunctionCode::new(fc);
+            match fc {
+                FunctionCode::ReadCoils => {
+                    unimplemented!("Read Coils")
+                }
+                FunctionCode::ReadDiscreteInputs => {
+                    unimplemented!("Read Discrete Inputs")
+                }
+                FunctionCode::ReadInputRegisters | FunctionCode::ReadHoldingRegisters => {
+                    if let Some(r) = range {
+                        let len = r.length();
+                        if len > 0 {
+                            let mut addr = r.from();
+                            loop {
+                                operations.push((
+                                    fc,
+                                    Range::new(addr, std::cmp::min(addr + 127, r.to())),
+                                ));
+                                addr = std::cmp::min(addr + 127, r.to());
+                                if addr == r.to() {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                _ => panic!("Invalid read function code for register {}", name),
+            };
+            range = Some(Range::new(def.get_address(), def.get_address()));
+        }
+        fc = def.read_code();
+        range = match range {
+            None => Some(def.get_range()),
+            Some(v) => Some(Range::new(v.from() as u16, def.get_range().to() as u16)),
+        };
+    }
+
     let mut time_last_read = SystemTime::now()
         .checked_sub(Duration::from_millis(interval_ms + 1))
         .unwrap();
+    let mut op_idx = 0;
     loop {
         if let Some(ref mut context) = connection {
             let now = SystemTime::now();
             let res = now.duration_since(time_last_read);
             if res.is_ok_and(|d| d.as_millis() > interval_ms as u128) {
                 time_last_read = now;
-                if let Ok(vec) = context
-                    .read_holding_registers(
-                        lower_bound,
-                        std::cmp::min(lower_bound + 127, bounds.1) - lower_bound,
-                    )
-                    .await
-                {
+                let (fc, op) = operations.get(op_idx).unwrap();
+                let modbus_result = match fc {
+                    FunctionCode::ReadInputRegisters => {
+                        context
+                            .read_input_registers(op.from() as u16, (op.to() - op.from()) as u16)
+                            .await
+                    }
+                    FunctionCode::ReadHoldingRegisters => {
+                        context
+                            .read_holding_registers(op.from() as u16, (op.to() - op.from()) as u16)
+                            .await
+                    }
+                    _ => panic!("Invalid function code in operation."),
+                };
+                if let Ok(vec) = modbus_result {
                     let mut memory = memory.lock().unwrap();
                     memory
-                        .write(
-                            Range::new(lower_bound, lower_bound + vec.len() as u16),
-                            &vec,
-                        )
+                        .write(Range::new(op.from(), op.from() + vec.len()), &vec)
                         .panic(|e| format!("Failed to write to memory ({})", e));
                     drop(memory);
-                    lower_bound = std::cmp::min(lower_bound + 127, bounds.1);
-                    if lower_bound == bounds.1 {
-                        lower_bound = bounds.0;
-                    }
+                    op_idx = if op_idx + 1 == operations.len() {
+                        0
+                    } else {
+                        op_idx + 1
+                    };
                 } else {
                     let _ = status_send
                         .send(Status::String(str!("Modbus TCP disconnected.")))
@@ -217,7 +280,7 @@ async fn run_client(
                             .send(Status::String(str!("Modbus TCP connected.")))
                             .await;
                     }
-                    lower_bound = bounds.0;
+                    op_idx = 0;
                 }
                 Command::Disconnect => {}
             }

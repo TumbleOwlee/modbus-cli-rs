@@ -363,7 +363,7 @@ fn render_footer<const SLICE_SIZE: usize>(
     status: String,
 ) {
     let rects = Layout::horizontal([
-        Constraint::Length(status.len() as u16 +3),
+        Constraint::Length(status.len() as u16 + 3),
         Constraint::Min(1),
         Constraint::Length(status.len() as u16 + 3),
     ])

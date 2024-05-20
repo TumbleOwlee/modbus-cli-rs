@@ -2,121 +2,121 @@
     "interval_ms": 500,
     "definitions": {
         "Serial Number": {
-            "func_code": 4,
+            "read_code": 4,
             "address": "0x4000",
             "length": 4,
             "type": "PackedString"
         },
         "Firmware Version": {
-            "func_code": 4,
+            "read_code": 4,
             "address": "0x4004",
             "length": 2,
             "type": "PackedString"
         },
         "User Settable Max Current": {
-            "func_code": 4,
+            "read_code": 4,
             "address": "0x4006",
             "length": 2,
             "type": "Uint32be"
         },
         "Error Code": {
-            "func_code": 4,
+            "read_code": 4,
             "address": "0x4008",
             "length": 2,
             "type": "Uint32be"
         },
         "Socket Lock State": {
-            "func_code": 4,
+            "read_code": 4,
             "address": "0x400A",
             "length": 2,
             "type": "Uint32be"
         },
         "Charging State": {
-            "func_code": 4,
+            "read_code": 4,
             "address": "0x400C",
             "length": 2,
             "type": "Uint32be"
         },
         "Charging Current Limit": {
-            "func_code": 4,
+            "read_code": 4,
             "address": "0x400E",
             "length": 2,
             "type": "Uint32be"
         },
         "Charging Current L1": {
-            "func_code": 4,
+            "read_code": 4,
             "address": "0x4010",
             "length": 2,
             "type": "Uint32be"
         },
         "Charging Current L2": {
-            "func_code": 4,
+            "read_code": 4,
             "address": "0x4012",
             "length": 2,
             "type": "Uint32be"
         },
         "Charging Current L3": {
-            "func_code": 4,
+            "read_code": 4,
             "address": "0x4014",
             "length": 2,
             "type": "Uint32be"
         },
         "Voltage L1": {
-            "func_code": 4,
+            "read_code": 4,
             "address": "0x4016",
             "length": 2,
             "type": "Uint32be"
         },
         "Voltage L2": {
-            "func_code": 4,
+            "read_code": 4,
             "address": "0x4018",
             "length": 2,
             "type": "Uint32be"
         },
         "Voltage L3": {
-            "func_code": 4,
+            "read_code": 4,
             "address": "0x401A",
             "length": 2,
             "type": "Uint32be"
         },
         "Active Power": {
-            "func_code": 4,
+            "read_code": 4,
             "address": "0x401C",
             "length": 2,
             "type": "Uint32be"
         },
         "Energy Delivered": {
-            "func_code": 4,
+            "read_code": 4,
             "address": "0x401E",
             "length": 2,
             "type": "Uint32be"
         },
         "Communication Timeout": {
-            "func_code": 4,
+            "read_code": 4,
             "address": "0x4020",
             "length": 1,
             "type": "Uint16be"
         },
         "Set Charging Current Limit": {
-            "func_code": 4,
+            "read_code": 4,
             "address": "0x4100",
             "length": 2,
             "type": "Uint32be"
         },
         "Lock/Unlock Socket Cable": {
-            "func_code": 4,
+            "read_code": 4,
             "address": "0x4103",
             "length": 1,
             "type": "Uint16be"
         },
         "Start/Stop Charging Session": {
-            "func_code": 4,
+            "read_code": 4,
             "address": "0x4105",
             "length": 1,
             "type": "Uint16be"
         },
-        "Communication Timeout": {
-            "func_code": 4,
+        "Set Communication Timeout": {
+            "read_code": 4,
             "address": "0x4106",
             "length": 1,
             "type": "Uint16be"

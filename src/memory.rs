@@ -4,16 +4,27 @@ use std::collections::HashMap;
 use std::default::Default;
 use std::fmt::Debug;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct Range<Key: Into<usize> + Clone>(Key, Key);
 
 impl<Key: Into<usize> + Clone + Debug> Range<Key> {
     pub fn new(from: Key, to: Key) -> Self {
+        if from.clone().into() > to.clone().into() {
+            panic!("Range invalid: end is lower than start.");
+        }
         Self(from, to)
     }
 
     pub fn length(&self) -> usize {
         self.1.clone().into() - self.0.clone().into()
+    }
+
+    pub fn from(&self) -> usize {
+        self.0.clone().into()
+    }
+
+    pub fn to(&self) -> usize {
+        self.1.clone().into()
     }
 }
 

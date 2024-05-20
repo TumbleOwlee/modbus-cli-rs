@@ -91,17 +91,17 @@ pub struct Definition {
     address: Address,
     length: u16,
     r#type: Type,
-    func_code: u8,
+    read_code: u8,
 }
 
 impl Definition {
     #[allow(dead_code)]
-    pub fn new(address: u16, length: u16, r#type: Type, func_code: u8) -> Self {
+    pub fn new(address: u16, length: u16, r#type: Type, read_code: u8) -> Self {
         Self {
             address: Address::Decimal(address),
             length,
             r#type,
-            func_code,
+            read_code,
         }
     }
 
@@ -116,6 +116,10 @@ impl Definition {
     pub fn get_type(&self) -> Type {
         self.r#type.clone()
     }
+
+    pub fn read_code(&self) -> u8 {
+        self.read_code.clone()
+    }
 }
 
 pub struct Register {
@@ -123,17 +127,32 @@ pub struct Register {
     value: String,
     raw: Vec<u16>,
     r#type: Type,
-    func_code: FunctionCode,
+    read_code: FunctionCode,
 }
 
 impl Register {
     pub fn new(definition: &Definition) -> Self {
+        let read_code = FunctionCode::new(definition.read_code);
+        match read_code {
+            FunctionCode::WriteSingleCoil
+            | FunctionCode::WriteMultipleCoils
+            | FunctionCode::WriteSingleRegister
+            | FunctionCode::WriteMultipleRegisters
+            | FunctionCode::ReadWriteMultipleRegisters
+            | FunctionCode::Custom(_) => {
+                panic!(
+                    "Invalid read function code for register {:?}",
+                    definition.address
+                )
+            }
+            _ => {}
+        };
         Self {
             address: definition.address.as_u16(),
             value: String::new(),
             raw: vec![0; definition.get_range().length()],
             r#type: definition.get_type().clone(),
-            func_code: FunctionCode::new(definition.func_code),
+            read_code,
         }
     }
 
