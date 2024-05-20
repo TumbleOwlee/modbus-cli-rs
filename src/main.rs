@@ -13,11 +13,13 @@ use crate::ui::App;
 use crate::util::{str, Expect};
 
 use clap::Parser;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, SystemTime};
 use tokio::net::TcpListener;
 use tokio::runtime::Runtime;
 use tokio::spawn_detach;
@@ -57,12 +59,19 @@ pub enum Command {
     Disconnect,
 }
 
+#[derive(Deserialize, Serialize, Debug)]
+pub struct Config {
+    interval_ms: u64,
+    definitions: HashMap<String, Definition>,
+}
+
 fn main() {
     let args = Args::parse();
 
     // Read register definitions
-    let definitions =
+    let config =
         read_config(&args.config).panic(|e| format!("Failed to read configuration file. [{}]", e));
+    let definitions = config.definitions;
 
     // Initialize memory storage for all registers
     let mut memory = Memory::<1024, u16>::new();
@@ -88,6 +97,7 @@ fn main() {
                 run_client(
                     args.ip,
                     args.port,
+                    config.interval_ms,
                     memory,
                     definitions,
                     status_send,
@@ -119,7 +129,7 @@ fn main() {
 }
 
 /// Read register configuration from file
-fn read_config(path: &str) -> anyhow::Result<HashMap<String, Definition>> {
+fn read_config(path: &str) -> anyhow::Result<Config> {
     let file = File::open(path)?;
     let reader = BufReader::new(file);
     serde_json::from_reader(reader).map_err(|e| e.into())
@@ -129,6 +139,7 @@ fn read_config(path: &str) -> anyhow::Result<HashMap<String, Definition>> {
 async fn run_client(
     ip: String,
     port: u16,
+    interval_ms: u64,
     memory: Arc<Mutex<Memory<1024, u16>>>,
     definitions: HashMap<String, Definition>,
     status_send: Sender<Status>,
@@ -151,32 +162,40 @@ async fn run_client(
             .await;
     };
 
+    let mut time_last_read = SystemTime::now()
+        .checked_sub(Duration::from_millis(interval_ms + 1))
+        .unwrap();
     loop {
         if let Some(ref mut context) = connection {
-            if let Ok(vec) = context
-                .read_holding_registers(
-                    lower_bound,
-                    std::cmp::min(lower_bound + 127, bounds.1) - lower_bound,
-                )
-                .await
-            {
-                let mut memory = memory.lock().unwrap();
-                memory
-                    .write(
-                        Range::new(lower_bound, lower_bound + vec.len() as u16),
-                        &vec,
+            let now = SystemTime::now();
+            let res = now.duration_since(time_last_read);
+            if res.is_ok_and(|d| d.as_millis() > interval_ms as u128) {
+                time_last_read = now;
+                if let Ok(vec) = context
+                    .read_holding_registers(
+                        lower_bound,
+                        std::cmp::min(lower_bound + 127, bounds.1) - lower_bound,
                     )
-                    .panic(|e| format!("Failed to write to memory ({})", e));
-                drop(memory);
-                lower_bound = std::cmp::min(lower_bound + 127, bounds.1);
-                if lower_bound == bounds.1 {
-                    lower_bound = bounds.0;
+                    .await
+                {
+                    let mut memory = memory.lock().unwrap();
+                    memory
+                        .write(
+                            Range::new(lower_bound, lower_bound + vec.len() as u16),
+                            &vec,
+                        )
+                        .panic(|e| format!("Failed to write to memory ({})", e));
+                    drop(memory);
+                    lower_bound = std::cmp::min(lower_bound + 127, bounds.1);
+                    if lower_bound == bounds.1 {
+                        lower_bound = bounds.0;
+                    }
+                } else {
+                    let _ = status_send
+                        .send(Status::String(str!("Modbus TCP disconnected.")))
+                        .await;
+                    connection = None;
                 }
-            } else {
-                let _ = status_send
-                    .send(Status::String(str!("Modbus TCP disconnected.")))
-                    .await;
-                connection = None;
             }
             if let Ok(cmd) = command_recv.try_recv() {
                 match cmd {
