@@ -19,13 +19,15 @@ use unicode_width::UnicodeWidthStr;
 
 const PALETTES: [tailwind::Palette; 4] = [
     tailwind::BLUE,
-    tailwind::EMERALD,
     tailwind::INDIGO,
+    tailwind::EMERALD,
     tailwind::RED,
 ];
 
 const INFO_TEXT: &str =
     "(q) quit | (k) up | (j) down | (h) left | (l) right | (t) color | (n) hex/dec | (d) disconnect | (c) connect";
+
+const LOG_HEADER: &str = " Modbus Log";
 
 const ITEM_HEIGHT: usize = 3;
 
@@ -37,7 +39,8 @@ struct TableColors {
     selected_style_fg: Color,
     normal_row_color: Color,
     alt_row_color: Color,
-    footer_border_color: Color,
+    error_color: Color,
+    success_color: Color,
 }
 
 impl TableColors {
@@ -50,25 +53,45 @@ impl TableColors {
             selected_style_fg: color.c400,
             normal_row_color: tailwind::SLATE.c950,
             alt_row_color: tailwind::SLATE.c900,
-            footer_border_color: color.c400,
+            error_color: tailwind::RED.c900,
+            success_color: tailwind::GREEN.c900,
+        }
+    }
+}
+
+pub struct UiTable {
+    table_state: TableState,
+    vertical_scroll_state: ScrollbarState,
+    horizontal_scroll_offset: u16,
+    row_max_width: u16,
+    visible_width: u16,
+}
+
+impl UiTable {
+    pub fn new(len: usize, item_height: usize) -> Self {
+        Self {
+            table_state: TableState::default().with_selected(0),
+            vertical_scroll_state: ScrollbarState::new((len - 1) * item_height),
+            horizontal_scroll_offset: 0,
+            row_max_width: 0,
+            visible_width: 0,
         }
     }
 }
 
 pub struct App<'a, const SLICE_SIZE: usize> {
     register_handler: Handler<'a, SLICE_SIZE>,
-    state: TableState,
-    vertical_scroll_state: ScrollbarState,
-    horizontal_scroll: u16,
-    total_width: u16,
-    visible_width: u16,
+    register_table: UiTable,
+    log_entries: Vec<Result<String, String>>,
+    log_table: UiTable,
     colors: TableColors,
     color_index: usize,
     show_as_hex: bool,
+    history_len: usize,
 }
 
 impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
-    pub fn new(register_handler: Handler<'a, SLICE_SIZE>) -> Self {
+    pub fn new(register_handler: Handler<'a, SLICE_SIZE>, history_len: usize) -> Self {
         let original_hook = std::panic::take_hook();
         std::panic::set_hook(Box::new(move |panic| {
             disable_raw_mode().unwrap();
@@ -79,34 +102,39 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
         let len = register_handler.len();
         Self {
             register_handler,
-            state: TableState::default().with_selected(0),
-            vertical_scroll_state: ScrollbarState::new((len - 1) * ITEM_HEIGHT),
-            horizontal_scroll: 0,
-            total_width: 0,
-            visible_width: 0,
+            register_table: UiTable::new(len, ITEM_HEIGHT),
+            log_entries: Vec::with_capacity(history_len + 10),
+            log_table: UiTable::new(1, 1),
             colors: TableColors::new(&PALETTES[0]),
             color_index: 0,
             show_as_hex: true,
+            history_len,
         }
     }
 
-    pub fn move_down(&mut self) {
-        let i = match self.state.selected() {
+    pub fn log_move_down(&mut self) {
+        if self.log_entries.is_empty() {
+            return;
+        }
+        let i = match self.log_table.table_state.selected() {
             Some(i) => {
-                if i >= self.register_handler.values().len() - 1 {
-                    self.register_handler.values().len() - 1
+                if i >= self.log_entries.len() - 1 {
+                    self.log_entries.len() - 1
                 } else {
                     i + 1
                 }
             }
             None => 0,
         };
-        self.state.select(Some(i));
-        self.vertical_scroll_state = self.vertical_scroll_state.position(i * ITEM_HEIGHT);
+        self.log_table.table_state.select(Some(i));
+        self.log_table.vertical_scroll_state = self.log_table.vertical_scroll_state.position(i);
     }
 
-    pub fn move_up(&mut self) {
-        let i = match self.state.selected() {
+    pub fn log_move_up(&mut self) {
+        if self.log_entries.is_empty() {
+            return;
+        }
+        let i = match self.log_table.table_state.selected() {
             Some(i) => {
                 if i == 0 {
                     0
@@ -116,18 +144,58 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
             }
             None => 0,
         };
-        self.state.select(Some(i));
-        self.vertical_scroll_state = self.vertical_scroll_state.position(i * ITEM_HEIGHT);
+        self.log_table.table_state.select(Some(i));
+        self.log_table.vertical_scroll_state = self.log_table.vertical_scroll_state.position(i);
+    }
+
+    pub fn move_down(&mut self) {
+        let i = match self.register_table.table_state.selected() {
+            Some(i) => {
+                if i >= self.register_handler.values().len() - 1 {
+                    self.register_handler.values().len() - 1
+                } else {
+                    i + 1
+                }
+            }
+            None => 0,
+        };
+        self.register_table.table_state.select(Some(i));
+        self.register_table.vertical_scroll_state = self
+            .register_table
+            .vertical_scroll_state
+            .position(i * ITEM_HEIGHT);
+    }
+
+    pub fn move_up(&mut self) {
+        let i = match self.register_table.table_state.selected() {
+            Some(i) => {
+                if i == 0 {
+                    0
+                } else {
+                    i - 1
+                }
+            }
+            None => 0,
+        };
+        self.register_table.table_state.select(Some(i));
+        self.register_table.vertical_scroll_state = self
+            .register_table
+            .vertical_scroll_state
+            .position(i * ITEM_HEIGHT);
     }
 
     pub fn move_left(&mut self) {
-        self.horizontal_scroll = std::cmp::max(3, self.horizontal_scroll) - 3;
+        self.register_table.horizontal_scroll_offset =
+            std::cmp::max(3, self.register_table.horizontal_scroll_offset) - 3;
     }
 
     pub fn move_right(&mut self) {
-        self.horizontal_scroll = std::cmp::min(
-            std::cmp::max(self.total_width, self.visible_width) - self.visible_width,
-            self.horizontal_scroll + 3,
+        self.register_table.horizontal_scroll_offset = std::cmp::min(
+            std::cmp::max(
+                self.register_table.row_max_width,
+                self.register_table.visible_width,
+            ) - self.register_table.visible_width,
+            self.register_table.horizontal_scroll_offset + 3,
         );
     }
 
@@ -146,6 +214,7 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
     pub fn run(
         self,
         mut status_recv: Receiver<Status>,
+        mut log_recv: Receiver<Result<String, String>>,
         command_send: Sender<Command>,
     ) -> anyhow::Result<()> {
         enable_raw_mode()?;
@@ -161,6 +230,24 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
                     Status::String(v) => {
                         status = v;
                     }
+                }
+            }
+            for _ in 0..5 {
+                if let Ok(v) = log_recv.try_recv() {
+                    app.log_entries.push(v);
+                    match app.log_table.table_state.selected() {
+                        Some(i) if i + 2 == app.log_entries.len() => {
+                            app.log_table
+                                .table_state
+                                .select(Some(std::cmp::min(19, app.log_entries.len() - 1)));
+                        }
+                        None => {
+                            app.log_table.table_state.select(Some(0));
+                        }
+                        _ => {}
+                    };
+                } else {
+                    break;
                 }
             }
             //app.register_handler.update()?;
@@ -180,6 +267,8 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
                             Char('t') => app.switch_color(),
                             Char('d') => command_send.blocking_send(Command::Disconnect)?,
                             Char('c') => command_send.blocking_send(Command::Connect)?,
+                            PageUp => app.log_move_up(),
+                            PageDown => app.log_move_down(),
                             _ => {}
                         }
                     }
@@ -210,11 +299,22 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
 }
 
 fn ui<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_SIZE>, status: String) {
-    let rects = Layout::vertical([Constraint::Min(5), Constraint::Length(3)]).split(f.size());
+    let rects = Layout::vertical([
+        Constraint::Min(5),
+        Constraint::Length(2),
+        Constraint::Max(7),
+        Constraint::Length(1),
+    ])
+    .split(f.size());
     app.set_colors();
-    render_table::<SLICE_SIZE>(f, app, rects[0]);
-    render_scrollbar::<SLICE_SIZE>(f, app, rects[0]);
-    render_footer::<SLICE_SIZE>(f, app, rects[1], status);
+    // Draw register table
+    render_register::<SLICE_SIZE>(f, app, rects[0]);
+    render_scrollbar::<SLICE_SIZE>(f, &mut app.register_table.vertical_scroll_state, rects[0]);
+    render_register_footer::<SLICE_SIZE>(f, app, rects[1], status);
+    // Draw log table
+    render_log::<SLICE_SIZE>(f, app, rects[2]);
+    render_scrollbar::<SLICE_SIZE>(f, &mut app.log_table.vertical_scroll_state, rects[2]);
+    render_log_footer::<SLICE_SIZE>(f, app, rects[3]);
 }
 
 fn vec_as_str(v: &[u16], hex: bool) -> String {
@@ -225,7 +325,7 @@ fn vec_as_str(v: &[u16], hex: bool) -> String {
     }
 }
 
-fn render_table<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_SIZE>, area: Rect) {
+fn render_register<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_SIZE>, area: Rect) {
     let header_style = Style::default()
         .fg(app.colors.header_fg)
         .bg(app.colors.header_bg);
@@ -286,7 +386,8 @@ fn render_table<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_SIZE
         },
     );
 
-    app.total_width = limits.0 + limits.1 + limits.2 + limits.3 + limits.4 + limits.5 + 25;
+    app.register_table.row_max_width =
+        limits.0 + limits.1 + limits.2 + limits.3 + limits.4 + limits.5 + 25;
 
     let rows = items.iter().enumerate().map(|(i, item)| {
         let color = match i % 2 {
@@ -315,24 +416,32 @@ fn render_table<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_SIZE
     )
     .header(header)
     .highlight_style(selected_style)
-    .highlight_symbol(Text::from(vec!["".into(), bar.into(), "".into()]))
+    .highlight_symbol(Text::from(vec!["".into(), bar.into(), "".into()]).style(header_style))
     .bg(app.colors.buffer_bg)
     .highlight_spacing(HighlightSpacing::Always);
 
-    app.visible_width = f.size().width;
-    if app.total_width <= f.size().width {
-        f.render_stateful_widget(t, area, &mut app.state);
+    app.register_table.visible_width = f.size().width;
+    if app.register_table.row_max_width <= f.size().width {
+        f.render_stateful_widget(t, area, &mut app.register_table.table_state);
     } else {
         let f_rect = area;
         let rect = Rect {
             x: 0,
             y: 0,
-            width: app.total_width,
+            width: app.register_table.row_max_width,
             height: f_rect.height,
         };
         let mut buffer = Buffer::empty(rect);
-        ratatui::widgets::StatefulWidget::render(t, rect, &mut buffer, &mut app.state);
-        let offset = std::cmp::min(app.total_width - f_rect.width, app.horizontal_scroll);
+        ratatui::widgets::StatefulWidget::render(
+            t,
+            rect,
+            &mut buffer,
+            &mut app.register_table.table_state,
+        );
+        let offset = std::cmp::min(
+            app.register_table.row_max_width - f_rect.width,
+            app.register_table.horizontal_scroll_offset,
+        );
         let f_buffer = f.buffer_mut();
         for (x, y) in itertools::iproduct!(offset..(offset + f_rect.width), 0..(rect.height)) {
             f_buffer
@@ -342,7 +451,11 @@ fn render_table<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_SIZE
     }
 }
 
-fn render_scrollbar<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_SIZE>, area: Rect) {
+fn render_scrollbar<const SLICE_SIZE: usize>(
+    f: &mut Frame,
+    state: &mut ScrollbarState,
+    area: Rect,
+) {
     f.render_stateful_widget(
         Scrollbar::default()
             .orientation(ScrollbarOrientation::VerticalRight)
@@ -352,50 +465,129 @@ fn render_scrollbar<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_
             vertical: 1,
             horizontal: 0,
         }),
-        &mut app.vertical_scroll_state,
+        state,
     );
 }
 
-fn render_footer<const SLICE_SIZE: usize>(
+fn render_register_footer<const SLICE_SIZE: usize>(
     f: &mut Frame,
     app: &App<SLICE_SIZE>,
     area: Rect,
     status: String,
 ) {
-    let rects = Layout::horizontal([
-        Constraint::Length(status.len() as u16 + 3),
-        Constraint::Min(1),
-        Constraint::Length(status.len() as u16 + 3),
-    ])
-    .split(area);
+    let rects = Layout::vertical([Constraint::Length(1), Constraint::Length(1)]).split(area);
     let status_footer = Paragraph::new(Line::from(str!(" ") + &status))
-        .style(Style::new().fg(app.colors.row_fg).bg(app.colors.buffer_bg))
-        .left_aligned()
-        .block(
-            Block::default()
-                .borders(Borders::LEFT | Borders::TOP | Borders::BOTTOM)
-                .border_type(BorderType::Plain)
-                .border_style(Style::new().fg(app.colors.footer_border_color)),
-        );
+        .style(
+            Style::new()
+                .fg(app.colors.header_fg)
+                .bg(app.colors.header_bg),
+        )
+        .centered();
     let info_footer = Paragraph::new(Line::from(INFO_TEXT))
-        .style(Style::new().fg(app.colors.row_fg).bg(app.colors.buffer_bg))
-        .centered()
-        .block(
-            Block::default()
-                .borders(Borders::TOP | Borders::BOTTOM)
-                .border_type(BorderType::Plain)
-                .border_style(Style::new().fg(app.colors.footer_border_color)),
-        );
-    let add_footer = Paragraph::new(Line::from(""))
-        .style(Style::new().fg(app.colors.row_fg).bg(app.colors.buffer_bg))
-        .right_aligned()
-        .block(
-            Block::default()
-                .borders(Borders::RIGHT | Borders::TOP | Borders::BOTTOM)
-                .border_type(BorderType::Plain)
-                .border_style(Style::new().fg(app.colors.footer_border_color)),
-        );
+        .style(
+            Style::new()
+                .fg(app.colors.header_fg)
+                .bg(app.colors.header_bg),
+        )
+        .centered();
     f.render_widget(status_footer, rects[0]);
     f.render_widget(info_footer, rects[1]);
-    f.render_widget(add_footer, rects[2]);
+}
+
+fn render_log_footer<const SLICE_SIZE: usize>(f: &mut Frame, app: &App<SLICE_SIZE>, area: Rect) {
+    let status_footer = Paragraph::new(Line::from(LOG_HEADER))
+        .style(
+            Style::new()
+                .fg(app.colors.header_fg)
+                .bg(app.colors.header_bg),
+        )
+        .left_aligned();
+    f.render_widget(status_footer, area);
+}
+
+fn render_log<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_SIZE>, area: Rect) {
+    let header_style = Style::default()
+        .fg(app.colors.header_fg)
+        .bg(app.colors.header_bg);
+    let selected_style = Style::default()
+        .add_modifier(Modifier::REVERSED)
+        .fg(app.colors.selected_style_fg);
+
+    if app.log_entries.len() > app.history_len {
+        let len_to_remove = app.log_entries.len() - app.history_len;
+        app.log_entries = app.log_entries[len_to_remove..].to_vec();
+        match app.log_table.table_state.selected() {
+            Some(i) if i < (app.log_entries.len() - 1) => {
+                app.log_table
+                    .table_state
+                    .select(Some(std::cmp::max(i, len_to_remove) - len_to_remove));
+            }
+            _ => {}
+        };
+    } else {
+    }
+    app.log_table.vertical_scroll_state = ScrollbarState::new(app.log_entries.len());
+
+    let items = app
+        .log_entries
+        .iter()
+        .map(|item| match item {
+            Ok(v) => (true, v),
+            Err(v) => (false, v),
+        })
+        .collect::<Vec<_>>();
+    let limits = items
+        .iter()
+        .fold(0, |acc, item| std::cmp::max(acc, item.1.width() as u16));
+
+    app.log_table.row_max_width = limits;
+
+    let rows = items.iter().enumerate().map(|(i, (is_ok, item))| {
+        let color = match i % 2 {
+            _ if !is_ok => app.colors.error_color,
+            _ if !!is_ok => app.colors.success_color,
+            0 => app.colors.normal_row_color,
+            _ => app.colors.alt_row_color,
+        };
+        Row::new(Text::from((*item).clone()))
+            .style(Style::new().fg(app.colors.row_fg).bg(color))
+            .height(1)
+    });
+
+    let bar = " █ ";
+    let t = Table::new(rows, [Constraint::Min(limits + 1)])
+        .highlight_style(selected_style)
+        .highlight_symbol(Text::from(bar).style(header_style))
+        .bg(app.colors.buffer_bg)
+        .highlight_spacing(HighlightSpacing::Always);
+
+    app.log_table.visible_width = f.size().width;
+    if app.log_table.row_max_width <= f.size().width {
+        f.render_stateful_widget(t, area, &mut app.log_table.table_state);
+    } else {
+        let f_rect = area;
+        let rect = Rect {
+            x: 0,
+            y: 0,
+            width: app.log_table.row_max_width,
+            height: f_rect.height,
+        };
+        let mut buffer = Buffer::empty(rect);
+        ratatui::widgets::StatefulWidget::render(
+            t,
+            rect,
+            &mut buffer,
+            &mut app.log_table.table_state,
+        );
+        let offset = std::cmp::min(
+            app.log_table.row_max_width - f_rect.width,
+            app.log_table.horizontal_scroll_offset,
+        );
+        let f_buffer = f.buffer_mut();
+        for (x, y) in itertools::iproduct!(offset..(offset + f_rect.width), 0..(rect.height)) {
+            f_buffer
+                .get_mut(x - offset + f_rect.x, y + f_rect.y)
+                .clone_from(buffer.get(x, y));
+        }
+    }
 }

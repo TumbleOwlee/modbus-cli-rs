@@ -63,6 +63,7 @@ pub enum Command {
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct Config {
+    history_length: usize,
     interval_ms: u64,
     definitions: HashMap<String, Definition>,
 }
@@ -86,6 +87,7 @@ fn main() {
     let memory = Arc::new(Mutex::new(memory));
 
     let (status_send, status_recv) = channel::<Status>(10);
+    let (log_send, log_recv) = channel::<Result<String, String>>(10);
     let (command_send, command_recv) = channel::<Command>(10);
 
     // Initialize tokio runtime for modbus server
@@ -104,6 +106,7 @@ fn main() {
                     definitions,
                     status_send,
                     command_recv,
+                    log_send,
                 )
                 .await
             })
@@ -114,7 +117,15 @@ fn main() {
         let memory = memory.clone();
         runtime.block_on(async move {
             spawn_detach(async move {
-                run_server(args.ip, args.port, memory, status_send, command_recv).await
+                run_server(
+                    args.ip,
+                    args.port,
+                    memory,
+                    status_send,
+                    command_recv,
+                    log_send,
+                )
+                .await
             })
             .await
         });
@@ -124,8 +135,8 @@ fn main() {
     let register_handler = Handler::new(&definitions, memory.clone());
 
     // Run UI
-    let app = App::new(register_handler);
-    app.run(status_recv, command_send)
+    let app = App::new(register_handler, config.history_length);
+    app.run(status_recv, log_recv, command_send)
         .panic(|e| format!("Run app failed [{}]", e));
     //runtime.block_on(async { tokio::join_all().await });
 }
@@ -146,21 +157,23 @@ async fn run_client(
     definitions: HashMap<String, Definition>,
     status_send: Sender<Status>,
     mut command_recv: Receiver<Command>,
+    log_send: Sender<Result<String, String>>,
 ) -> anyhow::Result<()> {
     let addr: SocketAddr = format!("{}:{}", ip, port).parse()?;
-    //    let bounds = definitions.iter().fold((0xFFFFu16, 0x0000u16), |acc, def| {
-    //        let addr = def.1.get_address();
-    //        (std::cmp::min(acc.0, addr), std::cmp::max(acc.1, addr))
-    //    });
-    //    let mut lower_bound = bounds.0;
     let mut connection = tokio_modbus::client::tcp::connect(addr).await.ok();
     if connection.is_some() {
         let _ = status_send
             .send(Status::String(str!("Modbus TCP connected.")))
             .await;
+        let _ = log_send
+            .send(Ok(format!("Modbus TCP connected to {}:{}", ip, port)))
+            .await;
     } else {
         let _ = status_send
             .send(Status::String(str!("Modbus TCP disconnected.")))
+            .await;
+        let _ = log_send
+            .send(Err(format!("Modbus TCP disconnected from {}:{}", ip, port)))
             .await;
     };
 
@@ -243,6 +256,15 @@ async fn run_client(
                     _ => panic!("Invalid function code in operation."),
                 };
                 if let Ok(vec) = modbus_result {
+                    let _ = log_send
+                        .send(Ok(format!(
+                            "Read address space [ {:#06X} ({}), {:#06X} ({}) ) successful.",
+                            op.from(),
+                            op.from(),
+                            op.to(),
+                            op.to()
+                        )))
+                        .await;
                     let mut memory = memory.lock().unwrap();
                     memory
                         .write(Range::new(op.from(), op.from() + vec.len()), &vec)
@@ -254,6 +276,15 @@ async fn run_client(
                         op_idx + 1
                     };
                 } else {
+                    let _ = log_send
+                        .send(Err(format!(
+                            "Read address space [ {:#06X} ({}), {:#06X} ({}) ) failed.",
+                            op.from(),
+                            op.from(),
+                            op.to(),
+                            op.to()
+                        )))
+                        .await;
                     let _ = status_send
                         .send(Status::String(str!("Modbus TCP disconnected.")))
                         .await;
@@ -265,6 +296,9 @@ async fn run_client(
                     Command::Disconnect => {
                         let _ = status_send
                             .send(Status::String(str!("Modbus TCP disconnected.")))
+                            .await;
+                        let _ = log_send
+                            .send(Ok(format!("Modbus TCP disconnected from {}:{}", ip, port)))
                             .await;
                         connection = None;
                     }
@@ -278,6 +312,19 @@ async fn run_client(
                     if connection.is_some() {
                         let _ = status_send
                             .send(Status::String(str!("Modbus TCP connected.")))
+                            .await;
+                        let _ = log_send
+                            .send(Ok(format!(
+                                "Modbus TCP connected successfully to {}:{}",
+                                ip, port
+                            )))
+                            .await;
+                    } else {
+                        let _ = log_send
+                            .send(Err(format!(
+                                "Modbus TCP failed to connect to {}:{}",
+                                ip, port
+                            )))
                             .await;
                     }
                     op_idx = 0;
@@ -299,6 +346,7 @@ async fn run_server(
     memory: Arc<Mutex<Memory<1024, u16>>>,
     status_send: Sender<Status>,
     command_recv: Receiver<Command>,
+    log_send: Sender<Result<String, String>>,
 ) -> anyhow::Result<()> {
     let addr: SocketAddr = format!("{}:{}", ip, port).parse()?;
     let listener = TcpListener::bind(addr)
