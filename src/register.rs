@@ -108,7 +108,7 @@ impl Definition {
     }
 
     pub fn read_code(&self) -> u8 {
-        self.read_code.clone()
+        self.read_code
     }
 }
 
@@ -117,7 +117,6 @@ pub struct Register {
     value: String,
     raw: Vec<u16>,
     r#type: Type,
-    read_code: FunctionCode,
 }
 
 impl Register {
@@ -142,7 +141,6 @@ impl Register {
             value: String::new(),
             raw: vec![0; definition.get_range().length()],
             r#type: definition.get_type().clone(),
-            read_code,
         }
     }
 

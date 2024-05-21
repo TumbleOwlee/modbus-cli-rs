@@ -1,6 +1,6 @@
 use crate::memory::{Memory, Range};
 use crate::util::str;
-use crate::{LogMsg, Status};
+use crate::LogMsg;
 use std::{
     future,
     sync::{Arc, Mutex},
@@ -10,7 +10,6 @@ use tokio_modbus::prelude::{Exception, Request, Response};
 
 pub struct Server<const SLICE_SIZE: usize> {
     memory: Arc<Mutex<Memory<SLICE_SIZE, u16>>>,
-    status_sender: Sender<Status>,
     log_sender: Sender<LogMsg>,
 }
 
@@ -146,15 +145,7 @@ impl<const SLICE_SIZE: usize> tokio_modbus::server::Service for Server<SLICE_SIZ
 }
 
 impl<const SLICE_SIZE: usize> Server<SLICE_SIZE> {
-    pub fn new(
-        memory: Arc<Mutex<Memory<SLICE_SIZE, u16>>>,
-        status_sender: Sender<Status>,
-        log_sender: Sender<LogMsg>,
-    ) -> Self {
-        Self {
-            memory,
-            status_sender,
-            log_sender,
-        }
+    pub fn new(memory: Arc<Mutex<Memory<SLICE_SIZE, u16>>>, log_sender: Sender<LogMsg>) -> Self {
+        Self { memory, log_sender }
     }
 }

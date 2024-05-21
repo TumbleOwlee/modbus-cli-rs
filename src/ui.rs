@@ -24,8 +24,10 @@ const PALETTES: [tailwind::Palette; 4] = [
     tailwind::RED,
 ];
 
-const INFO_TEXT: &str =
-    "(q) quit | (k) up | (j) down | (h) left | (l) right | (t) color | (n) hex/dec | (d) disconnect | (c) connect\n(PageUp) log up | (PageDown) log down | (Home) log left | (End) log right";
+const REGISTER_INFO_TEXT: &str =
+    "(q) quit | (k) up | (j) down | (h) left | (l) right | (t) color | (n) hex/dec | (d) disconnect | (c) connect";
+const LOGGER_INFO_TEXT: &str =
+    "(q) quit | (k) up | (PageUp) log up | (PageDown) log down | (Home) log left | (End) log right";
 
 const LOG_HEADER: &str = " Modbus Log";
 
@@ -320,9 +322,9 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
 fn ui<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_SIZE>, status: String) {
     let rects = Layout::vertical([
         Constraint::Min(5),
-        Constraint::Length(3),
+        Constraint::Length(2),
         Constraint::Max(10),
-        Constraint::Length(1),
+        Constraint::Length(2),
     ])
     .split(f.size());
     app.set_colors();
@@ -502,7 +504,7 @@ fn render_register_footer<const SLICE_SIZE: usize>(
                 .bg(app.colors.header_bg),
         )
         .centered();
-    let info_footer = Paragraph::new(Text::from(INFO_TEXT))
+    let info_footer = Paragraph::new(Line::from(REGISTER_INFO_TEXT))
         .style(Style::new().fg(tailwind::WHITE).bg(tailwind::SLATE.c900))
         .centered();
     f.render_widget(status_footer, rects[0]);
@@ -510,6 +512,7 @@ fn render_register_footer<const SLICE_SIZE: usize>(
 }
 
 fn render_log_footer<const SLICE_SIZE: usize>(f: &mut Frame, app: &App<SLICE_SIZE>, area: Rect) {
+    let rects = Layout::vertical([Constraint::Length(1), Constraint::Length(1)]).split(area);
     let status_footer = Paragraph::new(Line::from(LOG_HEADER))
         .style(
             Style::new()
@@ -517,7 +520,12 @@ fn render_log_footer<const SLICE_SIZE: usize>(f: &mut Frame, app: &App<SLICE_SIZ
                 .bg(app.colors.header_bg),
         )
         .left_aligned();
-    f.render_widget(status_footer, area);
+    f.render_widget(status_footer, rects[0]);
+
+    let info_footer = Paragraph::new(Line::from(LOGGER_INFO_TEXT))
+        .style(Style::new().fg(tailwind::WHITE).bg(tailwind::SLATE.c900))
+        .centered();
+    f.render_widget(info_footer, rects[1]);
 }
 
 fn render_log<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_SIZE>, area: Rect) {

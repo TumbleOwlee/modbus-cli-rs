@@ -63,6 +63,13 @@ pub enum Command {
 }
 
 #[derive(Clone, Debug)]
+pub struct TcpConfig {
+    pub port: u16,
+    pub ip: String,
+    pub interval_ms: u64,
+}
+
+#[derive(Clone, Debug)]
 pub struct Message {
     pub timestamp: String,
     pub message: String,
@@ -136,9 +143,11 @@ fn main() {
         runtime.block_on(async move {
             spawn_detach(async move {
                 run_client(
-                    args.ip,
-                    args.port,
-                    config.interval_ms,
+                    TcpConfig {
+                        port: args.port,
+                        ip: args.ip,
+                        interval_ms: config.interval_ms,
+                    },
                     memory,
                     definitions,
                     status_send,
@@ -179,16 +188,14 @@ fn read_config(path: &str) -> anyhow::Result<Config> {
 
 /// Run modbus client
 async fn run_client(
-    ip: String,
-    port: u16,
-    interval_ms: u64,
+    tcp_config: TcpConfig,
     memory: Arc<Mutex<Memory<1024, u16>>>,
     definitions: HashMap<String, Definition>,
     status_send: Sender<Status>,
     mut command_recv: Receiver<Command>,
     log_send: Sender<LogMsg>,
 ) -> anyhow::Result<()> {
-    let addr: SocketAddr = format!("{}:{}", ip, port).parse()?;
+    let addr: SocketAddr = format!("{}:{}", tcp_config.ip, tcp_config.port).parse()?;
     let mut connection = tokio_modbus::client::tcp::connect(addr).await.ok();
     if connection.is_some() {
         let _ = status_send
@@ -197,7 +204,7 @@ async fn run_client(
         let _ = log_send
             .send(LogMsg::ok(&format!(
                 "Modbus TCP connected to {}:{}",
-                ip, port
+                tcp_config.ip, tcp_config.port
             )))
             .await;
     } else {
@@ -207,7 +214,7 @@ async fn run_client(
         let _ = log_send
             .send(LogMsg::err(&format!(
                 "Modbus TCP failed to connect to {}:{}",
-                ip, port
+                tcp_config.ip, tcp_config.port
             )))
             .await;
     };
@@ -267,14 +274,14 @@ async fn run_client(
     }
 
     let mut time_last_read = SystemTime::now()
-        .checked_sub(Duration::from_millis(interval_ms + 1))
+        .checked_sub(Duration::from_millis(tcp_config.interval_ms + 1))
         .unwrap();
     let mut op_idx = 0;
     loop {
         if let Some(ref mut context) = connection {
             let now = SystemTime::now();
             let res = now.duration_since(time_last_read);
-            if res.is_ok_and(|d| d.as_millis() > interval_ms as u128) {
+            if res.is_ok_and(|d| d.as_millis() > tcp_config.interval_ms as u128) {
                 time_last_read = now;
                 let (fc, op) = operations.get(op_idx).unwrap();
                 let modbus_result = match fc {
@@ -335,7 +342,7 @@ async fn run_client(
                         let _ = log_send
                             .send(LogMsg::ok(&format!(
                                 "Modbus TCP disconnected from {}:{}",
-                                ip, port
+                                tcp_config.ip, tcp_config.port
                             )))
                             .await;
                         connection = None;
@@ -354,14 +361,14 @@ async fn run_client(
                         let _ = log_send
                             .send(LogMsg::ok(&format!(
                                 "Modbus TCP connected successfully to {}:{}",
-                                ip, port
+                                tcp_config.ip, tcp_config.port
                             )))
                             .await;
                     } else {
                         let _ = log_send
                             .send(LogMsg::err(&format!(
                                 "Modbus TCP failed to connect to {}:{}",
-                                ip, port
+                                tcp_config.ip, tcp_config.port
                             )))
                             .await;
                     }
@@ -388,13 +395,7 @@ async fn run_server(
     let addr: SocketAddr = format!("{}:{}", ip, port).parse()?;
     if let Ok(listener) = TcpListener::bind(addr).await {
         let server = TcpServer::new(listener);
-        let new_service = |_socket_addr| {
-            Ok(Some(Server::new(
-                memory.clone(),
-                status_send.clone(),
-                log_send.clone(),
-            )))
-        };
+        let new_service = |_socket_addr| Ok(Some(Server::new(memory.clone(), log_send.clone())));
         let on_connected = |stream, socket_addr| async move {
             accept_tcp_connection(stream, socket_addr, new_service)
         };
