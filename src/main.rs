@@ -173,7 +173,7 @@ async fn run_client(
             .send(Status::String(str!("Modbus TCP disconnected.")))
             .await;
         let _ = log_send
-            .send(Err(format!("Modbus TCP disconnected from {}:{}", ip, port)))
+            .send(Err(format!("Modbus TCP failed to connect to {}:{}", ip, port)))
             .await;
     };
 

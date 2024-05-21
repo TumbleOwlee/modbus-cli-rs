@@ -121,6 +121,12 @@
             "address": "0x4106",
             "length": 1,
             "type": "U16"
+        },
+        "Set Fallback Limit": {
+            "read_code": 4,
+            "address": "0x4109",
+            "length": 1,
+            "type": "U16"
         }
     }
 }

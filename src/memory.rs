@@ -53,7 +53,7 @@ impl<const SLICE_SIZE: usize, Value: Default + Copy + Debug> Memory<SLICE_SIZE, 
         }
     }
 
-    pub fn write<'a, Key: Into<usize> + Clone>(
+    pub fn write<'a, Key: Into<usize> + Clone + Debug>(
         &mut self,
         range: Range<Key>,
         mut values: &'a [Value],
