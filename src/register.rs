@@ -10,14 +10,10 @@ use tokio_modbus::FunctionCode;
 pub enum Type {
     PackedString,
     LooseString,
-    Uint8le,
-    Uint8be,
-    Uint16le,
-    Uint16be,
-    Uint32le,
-    Uint32be,
-    Uint64le,
-    Uint64be,
+    U8,
+    U16,
+    U32,
+    U64,
 }
 
 impl Type {
@@ -33,32 +29,14 @@ impl Type {
             Type::LooseString => {
                 Ok(String::from_utf8(bytes.iter().map(|v| (*v & 0xFF) as u8).collect()).unwrap())
             }
-            Type::Uint8le => Ok((*(bytes.first().unwrap()) >> 8).to_string()),
-            Type::Uint8be => Ok((*(bytes.first().unwrap()) & 0xFF).to_string()),
-            Type::Uint16le => Ok(u16::from_le(*bytes.first().unwrap()).to_string()),
-            Type::Uint16be => Ok(u16::from_be(*bytes.first().unwrap()).to_string()),
-            Type::Uint32le => Ok(u32::from_le(
-                (((*bytes.first().unwrap()) as u32) << 16) + (*bytes.get(1).unwrap()) as u32,
-            )
-            .to_string()),
-            Type::Uint32be => Ok(u32::from_be(
-                (((*bytes.first().unwrap()) as u32) << 16) + (*bytes.get(1).unwrap()) as u32,
-            )
-            .to_string()),
-            Type::Uint64le => Ok(u64::from_le(
-                (((*bytes.first().unwrap()) as u64) << 48)
+            Type::U8 => Ok((*(bytes.first().unwrap()) & 0xFF).to_string()),
+            Type::U16 => Ok(bytes.first().unwrap().to_string()),
+            Type::U32 => Ok(((((*bytes.first().unwrap()) as u32) << 16) + ((*bytes.get(1).unwrap()) as u32)).to_string()),
+            Type::U64 => Ok(
+                ((((*bytes.first().unwrap()) as u64) << 48)
                     + (((*bytes.get(1).unwrap()) as u64) << 32)
                     + (((*bytes.get(2).unwrap()) as u64) << 16)
-                    + (*bytes.get(3).unwrap()) as u64,
-            )
-            .to_string()),
-            Type::Uint64be => Ok(u64::from_be(
-                (((*bytes.first().unwrap()) as u64) << 48)
-                    + (((*bytes.get(1).unwrap()) as u64) << 32)
-                    + (((*bytes.get(2).unwrap()) as u64) << 16)
-                    + (*bytes.get(3).unwrap()) as u64,
-            )
-            .to_string()),
+                    + (*bytes.get(3).unwrap()) as u64) .to_string()),
         }
     }
 }

@@ -185,7 +185,7 @@ async fn run_client(
                 .then(a.1.get_address().cmp(&b.1.get_address()))
         })
         .collect::<Vec<_>>();
-    let marker = (str!(""), Definition::new(0, 0, Type::Uint8le, 0));
+    let marker = (str!(""), Definition::new(0, 0, Type::U8, 0));
     sorted_defs.push((&marker.0, &marker.1));
     let mut fc = 0;
     let mut operations = Vec::new();
