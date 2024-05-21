@@ -154,6 +154,21 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
         self.log_table.vertical_scroll_state = self.log_table.vertical_scroll_state.position(i);
     }
 
+    pub fn log_move_left(&mut self) {
+        self.log_table.horizontal_scroll_offset =
+            std::cmp::max(3, self.log_table.horizontal_scroll_offset) - 3;
+    }
+
+    pub fn log_move_right(&mut self) {
+        self.log_table.horizontal_scroll_offset = std::cmp::min(
+            std::cmp::max(
+                self.log_table.row_max_width,
+                self.log_table.visible_width,
+            ) - self.log_table.visible_width,
+            self.log_table.horizontal_scroll_offset + 3,
+        );
+    }
+
     pub fn move_down(&mut self) {
         let i = match self.register_table.table_state.selected() {
             Some(i) => {
@@ -251,19 +266,20 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
             if event::poll(Duration::from_millis(50))? {
                 if let Event::Key(key) = event::read()? {
                     if key.kind == KeyEventKind::Press {
-                        use KeyCode::*;
                         match key.code {
-                            Char('q') | Esc => break,
-                            Char('j') | Down => app.move_down(),
-                            Char('k') | Up => app.move_up(),
-                            Char('h') | Left => app.move_left(),
-                            Char('l') | Right => app.move_right(),
-                            Char('n') | Tab => app.switch(),
-                            Char('t') => app.switch_color(),
-                            Char('d') => command_send.blocking_send(Command::Disconnect)?,
-                            Char('c') => command_send.blocking_send(Command::Connect)?,
-                            PageUp => app.log_move_up(),
-                            PageDown => app.log_move_down(),
+                            KeyCode::Char('q') | KeyCode::Esc => break,
+                            KeyCode::Char('j') | KeyCode::Down => app.move_down(),
+                            KeyCode::Char('k') | KeyCode::Up => app.move_up(),
+                            KeyCode::Char('h') | KeyCode::Left => app.move_left(),
+                            KeyCode::Char('l') | KeyCode::Right => app.move_right(),
+                            KeyCode::Char('n') | KeyCode::Tab => app.switch(),
+                            KeyCode::Char('t') => app.switch_color(),
+                            KeyCode::Char('d') => command_send.blocking_send(Command::Disconnect)?,
+                            KeyCode::Char('c') => command_send.blocking_send(Command::Connect)?,
+                            KeyCode::PageUp => app.log_move_up(),
+                            KeyCode::PageDown => app.log_move_down(),
+                            KeyCode::Home => app.log_move_left(),
+                            KeyCode::End => app.log_move_right(),
                             _ => {}
                         }
                     }
@@ -519,7 +535,7 @@ fn render_log<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_SIZE>,
                 app.log_table.vertical_scroll_state = app.log_table.vertical_scroll_state.position(std::cmp::max(i, len_to_remove) - len_to_remove);
             }
         }
-    } else if app.log_table.end_of_table && app.log_entries.len() > 0 { 
+    } else if app.log_table.end_of_table && app.log_entries.len() > 0 {
         app.log_table
             .table_state
             .select(Some(app.log_entries.len() - 1));

@@ -7,10 +7,10 @@ mod ui;
 mod util;
 
 use crate::memory::{Memory, Range};
-use crate::modbus::Server;
 use crate::register::{Definition, Handler, Type};
 use crate::ui::App;
 use crate::util::{str, Expect};
+use crate::modbus::Server;
 
 use clap::Parser;
 use itertools::Itertools;
@@ -25,7 +25,7 @@ use tokio::net::TcpListener;
 use tokio::runtime::Runtime;
 use tokio::spawn_detach;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
-use tokio_modbus::prelude::{Reader, Writer};
+use tokio_modbus::prelude::Reader;
 use tokio_modbus::server::tcp::{accept_tcp_connection, Server as TcpServer};
 use tokio_modbus::FunctionCode;
 
@@ -122,7 +122,6 @@ fn main() {
                     args.port,
                     memory,
                     status_send,
-                    command_recv,
                     log_send,
                 )
                 .await
@@ -345,7 +344,6 @@ async fn run_server(
     port: u16,
     memory: Arc<Mutex<Memory<1024, u16>>>,
     status_send: Sender<Status>,
-    command_recv: Receiver<Command>,
     log_send: Sender<Result<String, String>>,
 ) -> anyhow::Result<()> {
     let addr: SocketAddr = format!("{}:{}", ip, port).parse()?;
@@ -353,7 +351,7 @@ async fn run_server(
         .await
         .panic(|e| format!("Failed to bind to address {}:{} [{}]", ip, port, e));
     let server = TcpServer::new(listener);
-    let new_service = |_socket_addr| Ok(Some(Server::new(memory.clone())));
+    let new_service = |_socket_addr| { Ok(Some(Server::new(memory.clone(), status_send.clone(), log_send.clone()))) };
     let on_connected = |stream, socket_addr| async move {
         accept_tcp_connection(stream, socket_addr, new_service)
     };
