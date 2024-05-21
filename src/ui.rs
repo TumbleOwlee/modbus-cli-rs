@@ -191,7 +191,14 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
     }
 
     pub fn move_bottom(&mut self) {
-        let i = self.register_handler.values().len() - 1;
+        let i = self
+            .register_handler
+            .values()
+            .iter()
+            .filter(|(n, _)| !n.starts_with("hide_"))
+            .count()
+            - 1;
+
         self.register_table.table_state.select(Some(i));
         self.register_table.vertical_scroll_state = self
             .register_table
@@ -206,10 +213,16 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
     }
 
     pub fn move_down(&mut self) {
+        let len = self
+            .register_handler
+            .values()
+            .iter()
+            .filter(|(n, _)| !n.starts_with("hide_"))
+            .count();
         let i = match self.register_table.table_state.selected() {
             Some(i) => {
-                if i >= self.register_handler.values().len() - 1 {
-                    self.register_handler.values().len() - 1
+                if i >= len - 1 {
+                    len - 1
                 } else {
                     i + 1
                 }
@@ -397,6 +410,7 @@ fn render_register<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_S
         .register_handler
         .values()
         .iter()
+        .filter(|(n, _)| !n.starts_with("hide_"))
         .sorted_by(|a, b| Ord::cmp(&a.1.address(), &b.1.address()))
         .map(|(n, r)| {
             [
