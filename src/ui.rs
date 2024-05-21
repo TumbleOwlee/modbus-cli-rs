@@ -65,6 +65,7 @@ pub struct UiTable {
     horizontal_scroll_offset: u16,
     row_max_width: u16,
     visible_width: u16,
+    end_of_table: bool,
 }
 
 impl UiTable {
@@ -75,6 +76,7 @@ impl UiTable {
             horizontal_scroll_offset: 0,
             row_max_width: 0,
             visible_width: 0,
+            end_of_table: true,
         }
     }
 }
@@ -103,8 +105,8 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
         Self {
             register_handler,
             register_table: UiTable::new(len, ITEM_HEIGHT),
-            log_entries: Vec::with_capacity(history_len + 10),
-            log_table: UiTable::new(1, 1),
+            log_entries: Vec::new(),
+            log_table: UiTable::new(history_len, 1),
             colors: TableColors::new(&PALETTES[0]),
             color_index: 0,
             show_as_hex: true,
@@ -126,6 +128,8 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
             }
             None => 0,
         };
+
+        self.log_table.end_of_table = i == (self.log_entries.len() - 1);
         self.log_table.table_state.select(Some(i));
         self.log_table.vertical_scroll_state = self.log_table.vertical_scroll_state.position(i);
     }
@@ -144,6 +148,8 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
             }
             None => 0,
         };
+
+        self.log_table.end_of_table = i == (self.log_entries.len() - 1);
         self.log_table.table_state.select(Some(i));
         self.log_table.vertical_scroll_state = self.log_table.vertical_scroll_state.position(i);
     }
@@ -235,17 +241,6 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
             for _ in 0..5 {
                 if let Ok(v) = log_recv.try_recv() {
                     app.log_entries.push(v);
-                    match app.log_table.table_state.selected() {
-                        Some(i) if i + 2 == app.log_entries.len() => {
-                            app.log_table
-                                .table_state
-                                .select(Some(std::cmp::min(19, app.log_entries.len() - 1)));
-                        }
-                        None => {
-                            app.log_table.table_state.select(Some(0));
-                        }
-                        _ => {}
-                    };
                 } else {
                     break;
                 }
@@ -516,17 +511,20 @@ fn render_log<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_SIZE>,
     if app.log_entries.len() > app.history_len {
         let len_to_remove = app.log_entries.len() - app.history_len;
         app.log_entries = app.log_entries[len_to_remove..].to_vec();
-        match app.log_table.table_state.selected() {
-            Some(i) if i < (app.log_entries.len() - 1) => {
+        if !app.log_table.end_of_table {
+            if let Some(i) = app.log_table.table_state.selected() {
                 app.log_table
                     .table_state
                     .select(Some(std::cmp::max(i, len_to_remove) - len_to_remove));
+                app.log_table.vertical_scroll_state = app.log_table.vertical_scroll_state.position(std::cmp::max(i, len_to_remove) - len_to_remove);
             }
-            _ => {}
-        };
-    } else {
+        }
+    } else if app.log_table.end_of_table && app.log_entries.len() > 0 { 
+        app.log_table
+            .table_state
+            .select(Some(app.log_entries.len() - 1));
+        app.log_table.vertical_scroll_state = app.log_table.vertical_scroll_state.position(app.log_entries.len() - 1);
     }
-    app.log_table.vertical_scroll_state = ScrollbarState::new(app.log_entries.len());
 
     let items = app
         .log_entries
