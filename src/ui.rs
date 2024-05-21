@@ -25,9 +25,9 @@ const PALETTES: [tailwind::Palette; 4] = [
 ];
 
 const REGISTER_INFO_TEXT: &str =
-    "(q) quit | (k) up | (j) down | (h) left | (l) right | (t) color | (n) hex/dec | (d) disconnect | (c) connect";
+    "(q) quit | (k) up | (j) down | (h) left | (l) right | (g) move top | (G) move bottom | (t) color | (f) hex/dec | (d) disconnect | (c) connect";
 const LOGGER_INFO_TEXT: &str =
-    "(q) quit | (k) up | (PageUp) log up | (PageDown) log down | (Home) log left | (End) log right";
+    "(q) quit | (PageUp | m) log up | (PageDown | n) log down | (Home | b) log left | (End | ,) log right | (v) log move top | (V) log move bottom";
 
 const LOG_HEADER: &str = " Modbus Log";
 
@@ -124,6 +124,19 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
         }
     }
 
+    pub fn log_move_bottom(&mut self) {
+        let i = self.log_entries.len() - 1;
+        self.log_table.end_of_table = true;
+        self.log_table.table_state.select(Some(i));
+        self.log_table.vertical_scroll_state = self.log_table.vertical_scroll_state.position(i);
+    }
+
+    pub fn log_move_top(&mut self) {
+        self.log_table.end_of_table = false;
+        self.log_table.table_state.select(Some(0));
+        self.log_table.vertical_scroll_state = self.log_table.vertical_scroll_state.position(0);
+    }
+
     pub fn log_move_down(&mut self) {
         if self.log_entries.is_empty() {
             return;
@@ -175,6 +188,21 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
                 - self.log_table.visible_width,
             self.log_table.horizontal_scroll_offset + 3,
         );
+    }
+
+    pub fn move_bottom(&mut self) {
+        let i = self.register_handler.values().len() - 1;
+        self.register_table.table_state.select(Some(i));
+        self.register_table.vertical_scroll_state = self
+            .register_table
+            .vertical_scroll_state
+            .position(i * ITEM_HEIGHT);
+    }
+
+    pub fn move_top(&mut self) {
+        self.register_table.table_state.select(Some(0));
+        self.register_table.vertical_scroll_state =
+            self.register_table.vertical_scroll_state.position(0);
     }
 
     pub fn move_down(&mut self) {
@@ -280,16 +308,20 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
                             KeyCode::Char('k') | KeyCode::Up => app.move_up(),
                             KeyCode::Char('h') | KeyCode::Left => app.move_left(),
                             KeyCode::Char('l') | KeyCode::Right => app.move_right(),
-                            KeyCode::Char('n') | KeyCode::Tab => app.switch(),
+                            KeyCode::Char('f') | KeyCode::Tab => app.switch(),
                             KeyCode::Char('t') => app.switch_color(),
                             KeyCode::Char('d') => {
                                 command_send.blocking_send(Command::Disconnect)?
                             }
+                            KeyCode::Char('g') => app.move_top(),
+                            KeyCode::Char('G') => app.move_bottom(),
                             KeyCode::Char('c') => command_send.blocking_send(Command::Connect)?,
-                            KeyCode::PageUp => app.log_move_up(),
-                            KeyCode::PageDown => app.log_move_down(),
-                            KeyCode::Home => app.log_move_left(),
-                            KeyCode::End => app.log_move_right(),
+                            KeyCode::PageUp | KeyCode::Char('m') => app.log_move_up(),
+                            KeyCode::PageDown | KeyCode::Char('n') => app.log_move_down(),
+                            KeyCode::Home | KeyCode::Char('b') => app.log_move_left(),
+                            KeyCode::End | KeyCode::Char(',') => app.log_move_right(),
+                            KeyCode::Char('v') => app.log_move_top(),
+                            KeyCode::Char('V') => app.log_move_bottom(),
                             _ => {}
                         }
                     }
