@@ -1,17 +1,17 @@
 use crate::memory::{Memory, Range};
-use crate::Status;
 use crate::util::str;
-use tokio::sync::mpsc::Sender;
+use crate::{LogMsg, Status};
 use std::{
     future,
     sync::{Arc, Mutex},
 };
+use tokio::sync::mpsc::Sender;
 use tokio_modbus::prelude::{Exception, Request, Response};
 
 pub struct Server<const SLICE_SIZE: usize> {
     memory: Arc<Mutex<Memory<SLICE_SIZE, u16>>>,
     status_sender: Sender<Status>,
-    log_sender: Sender<Result<String, String>>,
+    log_sender: Sender<LogMsg>,
 }
 
 fn refs_to_str(values: &[&u16]) -> String {
@@ -50,11 +50,21 @@ impl<const SLICE_SIZE: usize> tokio_modbus::server::Service for Server<SLICE_SIZ
                     .unwrap()
                     .read(&Range::new(addr, addr + cnt))
                     .map_err(|e| {
-                        let _ = self.log_sender.try_send(Err(format!("ReadInputRegisters: [{:#06X}, {:#06X}) ({})", addr, addr + cnt, e)));
+                        let _ = self.log_sender.try_send(LogMsg::err(&format!(
+                            "ReadInputRegisters: [{:#06X}, {:#06X}) ({})",
+                            addr,
+                            addr + cnt,
+                            e
+                        )));
                         Exception::IllegalDataAddress
                     })
                     .map(|v| {
-                        let _ = self.log_sender.try_send(Ok(format!("ReadInputRegisters: [{:#06X}, {:#06X}) = {}", addr, addr + cnt, refs_to_str(&v))));
+                        let _ = self.log_sender.try_send(LogMsg::info(&format!(
+                            "ReadInputRegisters: [{:#06X}, {:#06X}) = {}",
+                            addr,
+                            addr + cnt,
+                            refs_to_str(&v)
+                        )));
                         Response::ReadInputRegisters(v.into_iter().copied().collect())
                     }),
             ),
@@ -64,11 +74,21 @@ impl<const SLICE_SIZE: usize> tokio_modbus::server::Service for Server<SLICE_SIZ
                     .unwrap()
                     .read(&Range::new(addr, addr + cnt))
                     .map_err(|e| {
-                        let _ = self.log_sender.try_send(Err(format!("ReadHoldingRegisters: [{:#06X}, {:#06X}) ({})", addr, addr + cnt, e)));
+                        let _ = self.log_sender.try_send(LogMsg::err(&format!(
+                            "ReadHoldingRegisters: [{:#06X}, {:#06X}) ({})",
+                            addr,
+                            addr + cnt,
+                            e
+                        )));
                         Exception::IllegalDataAddress
                     })
                     .map(|v| {
-                        let _ = self.log_sender.try_send(Ok(format!("ReadHoldingRegisters: [{:#06X}, {:#06X}) = {}", addr, addr + cnt, refs_to_str(&v))));
+                        let _ = self.log_sender.try_send(LogMsg::info(&format!(
+                            "ReadHoldingRegisters: [{:#06X}, {:#06X}) = {}",
+                            addr,
+                            addr + cnt,
+                            refs_to_str(&v)
+                        )));
                         Response::ReadHoldingRegisters(v.into_iter().copied().collect())
                     }),
             ),
@@ -78,11 +98,21 @@ impl<const SLICE_SIZE: usize> tokio_modbus::server::Service for Server<SLICE_SIZ
                     .unwrap()
                     .write(Range::new(addr, addr + (values.len() as u16)), &values)
                     .map_err(|e| {
-                        let _ = self.log_sender.try_send(Err(format!("WriteMultipleRegisters: [{:#06X}, {:#06X}) ({})", addr, addr as usize + values.len(), e)));
+                        let _ = self.log_sender.try_send(LogMsg::err(&format!(
+                            "WriteMultipleRegisters: [{:#06X}, {:#06X}) ({})",
+                            addr,
+                            addr as usize + values.len(),
+                            e
+                        )));
                         Exception::IllegalDataAddress
                     })
                     .map(|_| {
-                        let _ = self.log_sender.try_send(Ok(format!("WriteMultipleRegisters: [{:#06X}, {:#06X}) = {}", addr, addr as usize + values.len(), to_str(&values))));
+                        let _ = self.log_sender.try_send(LogMsg::info(&format!(
+                            "WriteMultipleRegisters: [{:#06X}, {:#06X}) = {}",
+                            addr,
+                            addr as usize + values.len(),
+                            to_str(&values)
+                        )));
                         Response::WriteMultipleRegisters(addr, values.len() as u16)
                     }),
             ),
@@ -92,11 +122,21 @@ impl<const SLICE_SIZE: usize> tokio_modbus::server::Service for Server<SLICE_SIZ
                     .unwrap()
                     .write(Range::new(addr, addr + 1), &[value])
                     .map_err(|e| {
-                        let _ = self.log_sender.try_send(Err(format!("WriteSingleRegister: [{:#06X}, {:#06X}) ({})", addr, addr + 1, e)));
+                        let _ = self.log_sender.try_send(LogMsg::err(&format!(
+                            "WriteSingleRegister: [{:#06X}, {:#06X}) ({})",
+                            addr,
+                            addr + 1,
+                            e
+                        )));
                         Exception::IllegalDataAddress
                     })
                     .map(|_| {
-                        let _ = self.log_sender.try_send(Ok(format!("WriteSingleRegister: [{:#06X}, {:#06X}) = {}", addr, addr + 1, value)));
+                        let _ = self.log_sender.try_send(LogMsg::info(&format!(
+                            "WriteSingleRegister: [{:#06X}, {:#06X}) = {}",
+                            addr,
+                            addr + 1,
+                            value
+                        )));
                         Response::WriteSingleRegister(addr, value)
                     }),
             ),
@@ -106,7 +146,15 @@ impl<const SLICE_SIZE: usize> tokio_modbus::server::Service for Server<SLICE_SIZ
 }
 
 impl<const SLICE_SIZE: usize> Server<SLICE_SIZE> {
-    pub fn new(memory: Arc<Mutex<Memory<SLICE_SIZE, u16>>>, status_sender: Sender<Status>, log_sender: Sender<Result<String, String>>) -> Self {
-        Self { memory, status_sender, log_sender }
+    pub fn new(
+        memory: Arc<Mutex<Memory<SLICE_SIZE, u16>>>,
+        status_sender: Sender<Status>,
+        log_sender: Sender<LogMsg>,
+    ) -> Self {
+        Self {
+            memory,
+            status_sender,
+            log_sender,
+        }
     }
 }

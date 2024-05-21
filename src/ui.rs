@@ -1,6 +1,6 @@
 use crate::register::Handler;
 use crate::util::str;
-use crate::{Command, Status};
+use crate::{Command, LogMsg, Status};
 
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind},
@@ -37,10 +37,14 @@ struct TableColors {
     header_fg: Color,
     row_fg: Color,
     selected_style_fg: Color,
+    selected_style_fg_error: Color,
+    selected_style_fg_success: Color,
     normal_row_color: Color,
     alt_row_color: Color,
     error_color: Color,
+    alt_error_color: Color,
     success_color: Color,
+    alt_success_color: Color,
 }
 
 impl TableColors {
@@ -51,10 +55,14 @@ impl TableColors {
             header_fg: tailwind::SLATE.c200,
             row_fg: tailwind::SLATE.c200,
             selected_style_fg: color.c400,
+            selected_style_fg_error: tailwind::RED.c900,
+            selected_style_fg_success: tailwind::GREEN.c950,
             normal_row_color: tailwind::SLATE.c950,
             alt_row_color: tailwind::SLATE.c900,
-            error_color: tailwind::RED.c900,
+            error_color: tailwind::RED.c950,
+            alt_error_color: tailwind::RED.c800,
             success_color: tailwind::GREEN.c900,
+            alt_success_color: tailwind::GREEN.c800,
         }
     }
 }
@@ -84,7 +92,7 @@ impl UiTable {
 pub struct App<'a, const SLICE_SIZE: usize> {
     register_handler: Handler<'a, SLICE_SIZE>,
     register_table: UiTable,
-    log_entries: Vec<Result<String, String>>,
+    log_entries: Vec<LogMsg>,
     log_table: UiTable,
     colors: TableColors,
     color_index: usize,
@@ -161,10 +169,8 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
 
     pub fn log_move_right(&mut self) {
         self.log_table.horizontal_scroll_offset = std::cmp::min(
-            std::cmp::max(
-                self.log_table.row_max_width,
-                self.log_table.visible_width,
-            ) - self.log_table.visible_width,
+            std::cmp::max(self.log_table.row_max_width, self.log_table.visible_width)
+                - self.log_table.visible_width,
             self.log_table.horizontal_scroll_offset + 3,
         );
     }
@@ -235,7 +241,7 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
     pub fn run(
         self,
         mut status_recv: Receiver<Status>,
-        mut log_recv: Receiver<Result<String, String>>,
+        mut log_recv: Receiver<LogMsg>,
         command_send: Sender<Command>,
     ) -> anyhow::Result<()> {
         enable_raw_mode()?;
@@ -274,7 +280,9 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
                             KeyCode::Char('l') | KeyCode::Right => app.move_right(),
                             KeyCode::Char('n') | KeyCode::Tab => app.switch(),
                             KeyCode::Char('t') => app.switch_color(),
-                            KeyCode::Char('d') => command_send.blocking_send(Command::Disconnect)?,
+                            KeyCode::Char('d') => {
+                                command_send.blocking_send(Command::Disconnect)?
+                            }
                             KeyCode::Char('c') => command_send.blocking_send(Command::Connect)?,
                             KeyCode::PageUp => app.log_move_up(),
                             KeyCode::PageDown => app.log_move_down(),
@@ -313,7 +321,7 @@ fn ui<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_SIZE>, status:
     let rects = Layout::vertical([
         Constraint::Min(5),
         Constraint::Length(2),
-        Constraint::Max(7),
+        Constraint::Max(10),
         Constraint::Length(1),
     ])
     .split(f.size());
@@ -495,11 +503,7 @@ fn render_register_footer<const SLICE_SIZE: usize>(
         )
         .centered();
     let info_footer = Paragraph::new(Line::from(INFO_TEXT))
-        .style(
-            Style::new()
-                .fg(app.colors.header_fg)
-                .bg(app.colors.header_bg),
-        )
+        .style(Style::new().fg(tailwind::WHITE).bg(tailwind::SLATE.c900))
         .centered();
     f.render_widget(status_footer, rects[0]);
     f.render_widget(info_footer, rects[1]);
@@ -523,6 +527,22 @@ fn render_log<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_SIZE>,
     let selected_style = Style::default()
         .add_modifier(Modifier::REVERSED)
         .fg(app.colors.selected_style_fg);
+    let selected_style_error = Style::default()
+        .add_modifier(Modifier::REVERSED)
+        .bg(tailwind::WHITE)
+        .fg(app.colors.selected_style_fg_error);
+    let selected_style_success = Style::default()
+        .add_modifier(Modifier::REVERSED)
+        .bg(tailwind::WHITE)
+        .fg(app.colors.selected_style_fg_success);
+
+    let cols = ["Timestamp", "Message"];
+    let header = cols
+        .into_iter()
+        .map(Cell::from)
+        .collect::<Row>()
+        .style(header_style)
+        .height(1);
 
     if app.log_entries.len() > app.history_len {
         let len_to_remove = app.log_entries.len() - app.history_len;
@@ -532,48 +552,84 @@ fn render_log<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_SIZE>,
                 app.log_table
                     .table_state
                     .select(Some(std::cmp::max(i, len_to_remove) - len_to_remove));
-                app.log_table.vertical_scroll_state = app.log_table.vertical_scroll_state.position(std::cmp::max(i, len_to_remove) - len_to_remove);
+                app.log_table.vertical_scroll_state = app
+                    .log_table
+                    .vertical_scroll_state
+                    .position(std::cmp::max(i, len_to_remove) - len_to_remove);
             }
         }
-    } else if app.log_table.end_of_table && app.log_entries.len() > 0 {
+    } else if app.log_table.end_of_table && !app.log_entries.is_empty() {
         app.log_table
             .table_state
             .select(Some(app.log_entries.len() - 1));
-        app.log_table.vertical_scroll_state = app.log_table.vertical_scroll_state.position(app.log_entries.len() - 1);
+        app.log_table.vertical_scroll_state = app
+            .log_table
+            .vertical_scroll_state
+            .position(app.log_entries.len() - 1);
     }
 
-    let items = app
+    let limits = app.log_entries.iter().fold((0, 0), |acc, item| match item {
+        LogMsg::Err(v) => (
+            std::cmp::max(acc.0, v.timestamp.width() as u16),
+            std::cmp::max(acc.1, v.message.width() as u16),
+        ),
+        LogMsg::Info(v) => (
+            std::cmp::max(acc.0, v.timestamp.width() as u16),
+            std::cmp::max(acc.1, v.message.width() as u16),
+        ),
+        LogMsg::Ok(v) => (
+            std::cmp::max(acc.0, v.timestamp.width() as u16),
+            std::cmp::max(acc.1, v.message.width() as u16),
+        ),
+    });
+
+    let selected_style = match app
         .log_entries
-        .iter()
-        .map(|item| match item {
-            Ok(v) => (true, v),
-            Err(v) => (false, v),
-        })
-        .collect::<Vec<_>>();
-    let limits = items
-        .iter()
-        .fold(0, |acc, item| std::cmp::max(acc, item.1.width() as u16));
+        .get(app.log_table.table_state.selected().unwrap_or(0))
+        .unwrap_or(&LogMsg::info(""))
+    {
+        LogMsg::Info(_) => selected_style,
+        LogMsg::Err(_) => selected_style_error,
+        LogMsg::Ok(_) => selected_style_success,
+    };
 
-    app.log_table.row_max_width = limits;
+    app.log_table.row_max_width = limits.0 + limits.1;
 
-    let rows = items.iter().enumerate().map(|(i, (is_ok, item))| {
+    let rows = app.log_entries.iter().enumerate().map(|(i, item)| {
         let color = match i % 2 {
-            _ if !is_ok => app.colors.error_color,
-            _ if !!is_ok => app.colors.success_color,
-            0 => app.colors.normal_row_color,
-            _ => app.colors.alt_row_color,
+            0 => match item {
+                LogMsg::Info(_) => app.colors.normal_row_color,
+                LogMsg::Err(_) => app.colors.error_color,
+                LogMsg::Ok(_) => app.colors.success_color,
+            },
+            _ => match item {
+                LogMsg::Info(_) => app.colors.alt_row_color,
+                LogMsg::Err(_) => app.colors.alt_error_color,
+                LogMsg::Ok(_) => app.colors.alt_success_color,
+            },
         };
-        Row::new(Text::from((*item).clone()))
+        let item = match item {
+            LogMsg::Info(ref v) => [&v.timestamp, &v.message],
+            LogMsg::Err(ref v) => [&v.timestamp, &v.message],
+            LogMsg::Ok(ref v) => [&v.timestamp, &v.message],
+        };
+        item.iter()
+            .map(|content| Cell::from(Text::from(str!(*content))))
+            .collect::<Row>()
             .style(Style::new().fg(app.colors.row_fg).bg(color))
             .height(1)
     });
 
     let bar = " █ ";
-    let t = Table::new(rows, [Constraint::Min(limits + 1)])
-        .highlight_style(selected_style)
-        .highlight_symbol(Text::from(bar).style(header_style))
-        .bg(app.colors.buffer_bg)
-        .highlight_spacing(HighlightSpacing::Always);
+    let t = Table::new(
+        rows,
+        [Constraint::Max(limits.0 + 1), Constraint::Min(limits.1 + 1)],
+    )
+    .header(header)
+    .highlight_style(selected_style)
+    .highlight_symbol(Text::from(bar).style(header_style))
+    .bg(app.colors.buffer_bg)
+    .highlight_spacing(HighlightSpacing::Always);
 
     app.log_table.visible_width = f.size().width;
     if app.log_table.row_max_width <= f.size().width {
