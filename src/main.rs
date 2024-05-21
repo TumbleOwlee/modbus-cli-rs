@@ -103,6 +103,14 @@ impl LogMsg {
             message: str!(msg),
         })
     }
+
+    pub fn timestamp(&self) -> String {
+        match self {
+            Self::Ok(v) => v.timestamp.clone(),
+            Self::Info(v) => v.timestamp.clone(),
+            Self::Err(v) => v.timestamp.clone(),
+        }
+    }
 }
 
 #[derive(Deserialize, Serialize, Debug)]

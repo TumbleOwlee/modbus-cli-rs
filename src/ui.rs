@@ -576,20 +576,14 @@ fn render_log<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_SIZE>,
             .position(app.log_entries.len() - 1);
     }
 
-    let limits = app.log_entries.iter().fold((0, 0), |acc, item| match item {
-        LogMsg::Err(v) => (
-            std::cmp::max(acc.0, v.timestamp.width() as u16),
-            std::cmp::max(acc.1, v.message.width() as u16),
-        ),
-        LogMsg::Info(v) => (
-            std::cmp::max(acc.0, v.timestamp.width() as u16),
-            std::cmp::max(acc.1, v.message.width() as u16),
-        ),
-        LogMsg::Ok(v) => (
-            std::cmp::max(acc.0, v.timestamp.width() as u16),
-            std::cmp::max(acc.1, v.message.width() as u16),
-        ),
-    });
+    let limits = (
+        LogMsg::info("").timestamp().width() as u16,
+        app.log_entries.iter().fold(0, |acc, item| match item {
+            LogMsg::Err(v) => std::cmp::max(acc, v.message.width() as u16),
+            LogMsg::Info(v) => std::cmp::max(acc, v.message.width() as u16),
+            LogMsg::Ok(v) => std::cmp::max(acc, v.message.width() as u16),
+        }),
+    );
 
     let selected_style = match app
         .log_entries
@@ -601,7 +595,7 @@ fn render_log<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_SIZE>,
         LogMsg::Ok(_) => selected_style_success,
     };
 
-    app.log_table.row_max_width = limits.0 + limits.1;
+    app.log_table.row_max_width = limits.0 + limits.1 + 10;
 
     let rows = app.log_entries.iter().enumerate().map(|(i, item)| {
         let color = match i % 2 {
