@@ -32,15 +32,16 @@ impl Type {
             Type::U8 => {
                 let val: u8 = (*(bytes.first().unwrap()) & 0xFF) as u8;
                 Ok(format!("{:#04X} ({})", val, val))
-            },
+            }
             Type::U16 => {
                 let val: u16 = *bytes.first().unwrap();
                 Ok(format!("{:#06X} ({})", val, val))
             }
             Type::U32 => {
-                let val: u32 = (((*bytes.first().unwrap()) as u32) << 16) + ((*bytes.get(1).unwrap()) as u32);
+                let val: u32 =
+                    (((*bytes.first().unwrap()) as u32) << 16) + ((*bytes.get(1).unwrap()) as u32);
                 Ok(format!("0x{:02$X} ({})", val, val, 8))
-            },
+            }
             Type::U64 => {
                 let val: u64 = (((*bytes.first().unwrap()) as u64) << 48)
                     + (((*bytes.get(1).unwrap()) as u64) << 32)
