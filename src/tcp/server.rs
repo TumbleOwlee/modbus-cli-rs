@@ -1,14 +1,21 @@
 use crate::memory::{Memory, Range};
+use crate::tcp::TcpConfig;
 use crate::util::str;
+use crate::util::Expect;
 use crate::LogMsg;
+use crate::Status;
+
+use std::net::SocketAddr;
 use std::{
     future,
     sync::{Arc, Mutex},
 };
+use tokio::net::TcpListener;
 use tokio::sync::mpsc::Sender;
 use tokio_modbus::prelude::{Exception, Request, Response};
+use tokio_modbus::server::tcp::{accept_tcp_connection, Server as TcpServer};
 
-pub struct Server<const SLICE_SIZE: usize> {
+struct Server<const SLICE_SIZE: usize> {
     memory: Arc<Mutex<Memory<SLICE_SIZE, u16>>>,
     log_sender: Sender<LogMsg>,
 }
@@ -148,4 +155,41 @@ impl<const SLICE_SIZE: usize> Server<SLICE_SIZE> {
     pub fn new(memory: Arc<Mutex<Memory<SLICE_SIZE, u16>>>, log_sender: Sender<LogMsg>) -> Self {
         Self { memory, log_sender }
     }
+}
+
+/// Run modbus server to provide read and write operations
+pub async fn run(
+    config: TcpConfig,
+    memory: Arc<Mutex<Memory<1024, u16>>>,
+    status_send: Sender<Status>,
+    log_send: Sender<LogMsg>,
+) -> anyhow::Result<()> {
+    let addr: SocketAddr = format!("{}:{}", config.ip, config.port).parse()?;
+    if let Ok(listener) = TcpListener::bind(addr).await {
+        let server = TcpServer::new(listener);
+        let new_service = |_socket_addr| Ok(Some(Server::new(memory.clone(), log_send.clone())));
+        let on_connected = |stream, socket_addr| async move {
+            accept_tcp_connection(stream, socket_addr, new_service)
+        };
+        let on_process_log = log_send.clone();
+        let on_process_error = move |err| {
+            let _ = on_process_log
+                .try_send(LogMsg::err(&format!("Server processing failed. [{}]", err)));
+        };
+        server
+            .serve(&on_connected, on_process_error)
+            .await
+            .panic(|e| format!("Serve server failed [{}]", e));
+    } else {
+        let _ = status_send
+            .send(Status::String(str!("Server not running.")))
+            .await;
+        let _ = log_send
+            .send(LogMsg::err(&format!(
+                "Failed to bind to address {}:{}. Please restart.",
+                config.ip, config.port
+            )))
+            .await;
+    }
+    Ok(())
 }
