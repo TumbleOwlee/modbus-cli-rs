@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 use tokio_modbus::FunctionCode;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum Type {
+pub enum ValueType {
     PackedString,
     LooseString,
     U8,
@@ -16,33 +16,33 @@ pub enum Type {
     U64,
 }
 
-impl Type {
+impl ValueType {
     pub fn from(&self, bytes: &[u16]) -> anyhow::Result<String> {
         match self {
-            Type::PackedString => Ok(String::from_utf8(
+            ValueType::PackedString => Ok(String::from_utf8(
                 bytes
                     .iter()
                     .flat_map(|v| vec![(*v >> 8) as u8, (*v & 0xFF) as u8])
                     .collect(),
             )
             .unwrap()),
-            Type::LooseString => {
+            ValueType::LooseString => {
                 Ok(String::from_utf8(bytes.iter().map(|v| (*v & 0xFF) as u8).collect()).unwrap())
             }
-            Type::U8 => {
+            ValueType::U8 => {
                 let val: u8 = (*(bytes.first().unwrap()) & 0xFF) as u8;
                 Ok(format!("{:#04X} ({})", val, val))
             }
-            Type::U16 => {
+            ValueType::U16 => {
                 let val: u16 = *bytes.first().unwrap();
                 Ok(format!("{:#06X} ({})", val, val))
             }
-            Type::U32 => {
+            ValueType::U32 => {
                 let val: u32 =
                     (((*bytes.first().unwrap()) as u32) << 16) + ((*bytes.get(1).unwrap()) as u32);
                 Ok(format!("0x{:02$X} ({})", val, val, 8))
             }
-            Type::U64 => {
+            ValueType::U64 => {
                 let val: u64 = (((*bytes.first().unwrap()) as u64) << 48)
                     + (((*bytes.get(1).unwrap()) as u64) << 32)
                     + (((*bytes.get(2).unwrap()) as u64) << 16)
@@ -77,21 +77,46 @@ impl Address {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum AccessType {
+    ReadWrite,
+    ReadOnly,
+    WriteOnly,
+}
+
+impl std::fmt::Display for AccessType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        match self {
+            AccessType::ReadOnly => f.write_str("ReadOnly"),
+            AccessType::WriteOnly => f.write_str("WriteOnly"),
+            AccessType::ReadWrite => f.write_str("ReadWrite"),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Definition {
     address: Address,
     length: u16,
-    r#type: Type,
+    r#type: ValueType,
     read_code: u8,
+    access: AccessType,
 }
 
 impl Definition {
     #[allow(dead_code)]
-    pub fn new(address: u16, length: u16, r#type: Type, read_code: u8) -> Self {
+    pub fn new(
+        address: u16,
+        length: u16,
+        r#type: ValueType,
+        read_code: u8,
+        access: AccessType,
+    ) -> Self {
         Self {
             address: Address::Decimal(address),
             length,
             r#type,
             read_code,
+            access,
         }
     }
 
@@ -103,12 +128,16 @@ impl Definition {
         self.address.as_u16()
     }
 
-    pub fn get_type(&self) -> Type {
+    pub fn get_type(&self) -> ValueType {
         self.r#type.clone()
     }
 
     pub fn read_code(&self) -> u8 {
         self.read_code
+    }
+
+    pub fn access_type(&self) -> AccessType {
+        self.access.clone()
     }
 }
 
@@ -116,7 +145,8 @@ pub struct Register {
     address: u16,
     value: String,
     raw: Vec<u16>,
-    r#type: Type,
+    r#type: ValueType,
+    access: AccessType,
 }
 
 impl Register {
@@ -141,6 +171,7 @@ impl Register {
             value: String::new(),
             raw: vec![0; definition.get_range().length()],
             r#type: definition.get_type().clone(),
+            access: definition.access_type(),
         }
     }
 
@@ -156,8 +187,12 @@ impl Register {
         &self.raw
     }
 
-    pub fn r#type(&self) -> Type {
+    pub fn r#type(&self) -> ValueType {
         self.r#type.clone()
+    }
+
+    pub fn access_type(&self) -> AccessType {
+        self.access.clone()
     }
 }
 

@@ -1,5 +1,5 @@
 use crate::memory::{Memory, Range};
-use crate::register::{Definition, Type};
+use crate::register::{AccessType, Definition, ValueType};
 use crate::tcp::TcpConfig;
 use crate::types::LogMsg;
 use crate::util::{str, Expect};
@@ -55,7 +55,10 @@ pub async fn run(
                 .then(a.1.get_address().cmp(&b.1.get_address()))
         })
         .collect::<Vec<_>>();
-    let marker = (str!(""), Definition::new(0, 0, Type::U8, 0));
+    let marker = (
+        str!(""),
+        Definition::new(0, 0, ValueType::U8, 0, AccessType::ReadOnly),
+    );
     sorted_defs.push((&marker.0, &marker.1));
     let mut fc = 0;
     let mut operations = Vec::new();

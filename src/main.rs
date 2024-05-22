@@ -71,12 +71,11 @@ fn main() {
     // Read register definitions
     let config =
         Config::read(&args.config).panic(|e| format!("Failed to read configuration file. [{}]", e));
-    let definitions = config.definitions;
 
     // Initialize memory storage for all registers
     let mut memory = Memory::<1024, u16>::new();
     memory.init(
-        &definitions
+        &config.definitions
             .values()
             .map(|d| d.get_range())
             .collect::<Vec<_>>(),
@@ -97,7 +96,7 @@ fn main() {
     };
     if args.client {
         let memory = memory.clone();
-        let definitions = definitions.clone();
+        let definitions = config.definitions.clone();
         let status_send = status_send.clone();
         runtime.block_on(async move {
             spawn_detach(async move {
@@ -123,7 +122,7 @@ fn main() {
     };
 
     // Initialize register handler
-    let register_handler = Handler::new(&definitions, memory.clone());
+    let register_handler = Handler::new(&config.definitions, memory.clone());
 
     // Run UI
     let app = App::new(register_handler, config.history_length);

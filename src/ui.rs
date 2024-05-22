@@ -399,7 +399,9 @@ fn render_register<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_S
         .add_modifier(Modifier::REVERSED)
         .fg(app.colors.selected_style_fg);
 
-    let cols = ["Name", "Address", "Type", "Length", "Value", "Raw Data"];
+    let cols = [
+        "Access", "Name", "Address", "Type", "Length", "Value", "Raw Data",
+    ];
     let header = cols
         .into_iter()
         .map(Cell::from)
@@ -414,6 +416,7 @@ fn render_register<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_S
         .sorted_by(|a, b| Ord::cmp(&a.1.address(), &b.1.address()))
         .map(|(n, r)| {
             [
+                format!("{}", r.access_type()),
                 str!(n),
                 format!("{:#06X} ({})", r.address(), r.address()),
                 format!("{:?}", r.r#type()),
@@ -440,6 +443,7 @@ fn render_register<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_S
             cols[3].width() as u16,
             cols[4].width() as u16,
             cols[5].width() as u16,
+            cols[6].width() as u16,
         ),
         |acc, item| {
             (
@@ -449,12 +453,13 @@ fn render_register<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_S
                 std::cmp::max(acc.3, item[3].width() as u16),
                 std::cmp::max(acc.4, item[4].width() as u16),
                 std::cmp::max(acc.5, item[5].width() as u16),
+                std::cmp::max(acc.6, item[6].width() as u16),
             )
         },
     );
 
     app.register_table.row_max_width =
-        limits.0 + limits.1 + limits.2 + limits.3 + limits.4 + limits.5 + 25;
+        limits.0 + limits.1 + limits.2 + limits.3 + limits.4 + limits.5 + limits.6 + 25;
 
     let rows = items.iter().enumerate().map(|(i, item)| {
         let color = match i % 2 {
@@ -478,7 +483,8 @@ fn render_register<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_S
             Constraint::Min(limits.2 + 1),
             Constraint::Min(limits.3 + 1),
             Constraint::Min(limits.4 + 1),
-            Constraint::Min(limits.5 + 3),
+            Constraint::Min(limits.5 + 1),
+            Constraint::Min(limits.6 + 3),
         ],
     )
     .header(header)
