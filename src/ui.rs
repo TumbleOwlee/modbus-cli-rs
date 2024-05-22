@@ -102,22 +102,22 @@ impl TableColors {
 
 pub struct UiTable {
     table_state: TableState,
-    vertical_scroll_state: ScrollbarState,
-    horizontal_scroll_offset: u16,
-    register_table_max_width: u16,
-    visible_width: u16,
-    end_of_table: bool,
+    vertical_scroll: ScrollbarState,
+    horizontal_scroll: u16,
+    table_max_width: u16,
+    table_visible_width: u16,
+    reached_end_of_table: bool,
 }
 
 impl UiTable {
     pub fn new(len: usize, item_height: usize) -> Self {
         Self {
             table_state: TableState::default().with_selected(0),
-            vertical_scroll_state: ScrollbarState::new((len - 1) * item_height),
-            horizontal_scroll_offset: 0,
-            register_table_max_width: 0,
-            visible_width: 0,
-            end_of_table: true,
+            vertical_scroll: ScrollbarState::new((len - 1) * item_height),
+            horizontal_scroll: 0,
+            table_max_width: 0,
+            table_visible_width: 0,
+            reached_end_of_table: true,
         }
     }
 }
@@ -157,15 +157,15 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
 
     pub fn log_move_bottom(&mut self) {
         let i = self.log_entries.len() - 1;
-        self.log_table.end_of_table = true;
+        self.log_table.reached_end_of_table = true;
         self.log_table.table_state.select(Some(i));
-        self.log_table.vertical_scroll_state = self.log_table.vertical_scroll_state.position(i);
+        self.log_table.vertical_scroll = self.log_table.vertical_scroll.position(i);
     }
 
     pub fn log_move_top(&mut self) {
-        self.log_table.end_of_table = false;
+        self.log_table.reached_end_of_table = false;
         self.log_table.table_state.select(Some(0));
-        self.log_table.vertical_scroll_state = self.log_table.vertical_scroll_state.position(0);
+        self.log_table.vertical_scroll = self.log_table.vertical_scroll.position(0);
     }
 
     pub fn log_move_down(&mut self) {
@@ -177,9 +177,9 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
                 .map(|i| std::cmp::min(i + 1, std::cmp::max(self.log_entries.len(), 1) - 1))
                 .unwrap_or(0);
 
-            self.log_table.end_of_table = i == (self.log_entries.len() - 1);
+            self.log_table.reached_end_of_table = i == (self.log_entries.len() - 1);
             self.log_table.table_state.select(Some(i));
-            self.log_table.vertical_scroll_state = self.log_table.vertical_scroll_state.position(i);
+            self.log_table.vertical_scroll = self.log_table.vertical_scroll.position(i);
         }
     }
 
@@ -191,24 +191,23 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
                 .selected()
                 .map(|i| std::cmp::max(i, 1) - 1)
                 .unwrap_or(0);
-            self.log_table.end_of_table = i == (self.log_entries.len() - 1);
+            self.log_table.reached_end_of_table = i == (self.log_entries.len() - 1);
             self.log_table.table_state.select(Some(i));
-            self.log_table.vertical_scroll_state = self.log_table.vertical_scroll_state.position(i);
+            self.log_table.vertical_scroll = self.log_table.vertical_scroll.position(i);
         }
     }
 
     pub fn log_move_left(&mut self) {
-        self.log_table.horizontal_scroll_offset =
-            std::cmp::max(3, self.log_table.horizontal_scroll_offset) - 3;
+        self.log_table.horizontal_scroll = std::cmp::max(3, self.log_table.horizontal_scroll) - 3;
     }
 
     pub fn log_move_right(&mut self) {
-        self.log_table.horizontal_scroll_offset = std::cmp::min(
+        self.log_table.horizontal_scroll = std::cmp::min(
             std::cmp::max(
-                self.log_table.register_table_max_width,
-                self.log_table.visible_width,
-            ) - self.log_table.visible_width,
-            self.log_table.horizontal_scroll_offset + 3,
+                self.log_table.table_max_width,
+                self.log_table.table_visible_width,
+            ) - self.log_table.table_visible_width,
+            self.log_table.horizontal_scroll + 3,
         );
     }
 
@@ -222,16 +221,15 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
             - 1;
 
         self.register_table.table_state.select(Some(i));
-        self.register_table.vertical_scroll_state = self
+        self.register_table.vertical_scroll = self
             .register_table
-            .vertical_scroll_state
+            .vertical_scroll
             .position(i * ITEM_HEIGHT);
     }
 
     pub fn move_top(&mut self) {
         self.register_table.table_state.select(Some(0));
-        self.register_table.vertical_scroll_state =
-            self.register_table.vertical_scroll_state.position(0);
+        self.register_table.vertical_scroll = self.register_table.vertical_scroll.position(0);
     }
 
     pub fn move_down(&mut self) {
@@ -249,9 +247,9 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
                 .map(|i| std::cmp::min(i + 1, std::cmp::max(len, 1) - 1))
                 .unwrap_or(0);
             self.register_table.table_state.select(Some(i));
-            self.register_table.vertical_scroll_state = self
+            self.register_table.vertical_scroll = self
                 .register_table
-                .vertical_scroll_state
+                .vertical_scroll
                 .position(i * ITEM_HEIGHT);
         }
     }
@@ -265,25 +263,25 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
                 .map(|i| std::cmp::max(i, 1) - 1)
                 .unwrap_or(0);
             self.register_table.table_state.select(Some(i));
-            self.register_table.vertical_scroll_state = self
+            self.register_table.vertical_scroll = self
                 .register_table
-                .vertical_scroll_state
+                .vertical_scroll
                 .position(i * ITEM_HEIGHT);
         }
     }
 
     pub fn move_left(&mut self) {
-        self.register_table.horizontal_scroll_offset =
-            std::cmp::max(3, self.register_table.horizontal_scroll_offset) - 3;
+        self.register_table.horizontal_scroll =
+            std::cmp::max(3, self.register_table.horizontal_scroll) - 3;
     }
 
     pub fn move_right(&mut self) {
-        self.register_table.horizontal_scroll_offset = std::cmp::min(
+        self.register_table.horizontal_scroll = std::cmp::min(
             std::cmp::max(
-                self.register_table.register_table_max_width,
-                self.register_table.visible_width,
-            ) - self.register_table.visible_width,
-            self.register_table.horizontal_scroll_offset + 3,
+                self.register_table.table_max_width,
+                self.register_table.table_visible_width,
+            ) - self.register_table.table_visible_width,
+            self.register_table.horizontal_scroll + 3,
         );
     }
 
@@ -399,11 +397,11 @@ fn ui<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_SIZE>, status:
     app.set_colors();
     // Draw register table
     render_register::<SLICE_SIZE>(f, app, rects[0]);
-    render_scrollbar::<SLICE_SIZE>(f, &mut app.register_table.vertical_scroll_state, rects[0]);
+    render_scrollbar::<SLICE_SIZE>(f, &mut app.register_table.vertical_scroll, rects[0]);
     render_register_footer::<SLICE_SIZE>(f, app, rects[1], status);
     // Draw log table
     render_log::<SLICE_SIZE>(f, app, rects[2]);
-    render_scrollbar::<SLICE_SIZE>(f, &mut app.log_table.vertical_scroll_state, rects[2]);
+    render_scrollbar::<SLICE_SIZE>(f, &mut app.log_table.vertical_scroll, rects[2]);
     render_log_footer::<SLICE_SIZE>(f, app, rects[3]);
 }
 
@@ -482,7 +480,7 @@ fn render_register<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_S
         },
     );
 
-    app.register_table.register_table_max_width =
+    app.register_table.table_max_width =
         limits.0 + limits.1 + limits.2 + limits.3 + limits.4 + limits.5 + limits.6 + 25;
 
     let rows = items.iter().enumerate().map(|(i, item)| {
@@ -513,15 +511,15 @@ fn render_register<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_S
     .bg(app.colors.buffer.bg)
     .highlight_spacing(HighlightSpacing::Always);
 
-    app.register_table.visible_width = f.size().width;
-    if app.register_table.register_table_max_width <= f.size().width {
+    app.register_table.table_visible_width = f.size().width;
+    if app.register_table.table_max_width <= f.size().width {
         f.render_stateful_widget(t, area, &mut app.register_table.table_state);
     } else {
         let f_rect = area;
         let rect = Rect {
             x: 0,
             y: 0,
-            width: app.register_table.register_table_max_width,
+            width: app.register_table.table_max_width,
             height: f_rect.height,
         };
         let mut buffer = Buffer::empty(rect);
@@ -532,8 +530,8 @@ fn render_register<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_S
             &mut app.register_table.table_state,
         );
         let offset = std::cmp::min(
-            app.register_table.register_table_max_width - f_rect.width,
-            app.register_table.horizontal_scroll_offset,
+            app.register_table.table_max_width - f_rect.width,
+            app.register_table.horizontal_scroll,
         );
         let f_buffer = f.buffer_mut();
         for (x, y) in itertools::iproduct!(offset..(offset + f_rect.width), 0..(rect.height)) {
@@ -625,24 +623,24 @@ fn render_log<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_SIZE>,
     if app.log_entries.len() > app.history_len {
         let len_to_remove = app.log_entries.len() - app.history_len;
         app.log_entries = app.log_entries[len_to_remove..].to_vec();
-        if !app.log_table.end_of_table {
+        if !app.log_table.reached_end_of_table {
             if let Some(i) = app.log_table.table_state.selected() {
                 app.log_table
                     .table_state
                     .select(Some(std::cmp::max(i, len_to_remove) - len_to_remove));
-                app.log_table.vertical_scroll_state = app
+                app.log_table.vertical_scroll = app
                     .log_table
-                    .vertical_scroll_state
+                    .vertical_scroll
                     .position(std::cmp::max(i, len_to_remove) - len_to_remove);
             }
         }
-    } else if app.log_table.end_of_table && !app.log_entries.is_empty() {
+    } else if app.log_table.reached_end_of_table && !app.log_entries.is_empty() {
         app.log_table
             .table_state
             .select(Some(app.log_entries.len() - 1));
-        app.log_table.vertical_scroll_state = app
+        app.log_table.vertical_scroll = app
             .log_table
-            .vertical_scroll_state
+            .vertical_scroll
             .position(app.log_entries.len() - 1);
     }
 
@@ -665,7 +663,7 @@ fn render_log<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_SIZE>,
         LogMsg::Ok(_) => selected_style_success,
     };
 
-    app.log_table.register_table_max_width = limits.0 + limits.1 + 10;
+    app.log_table.table_max_width = limits.0 + limits.1 + 10;
 
     let rows = app.log_entries.iter().enumerate().map(|(i, item)| {
         let (item, fg, bg) = match item {
@@ -704,15 +702,15 @@ fn render_log<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_SIZE>,
     .bg(app.colors.buffer.bg)
     .highlight_spacing(HighlightSpacing::Always);
 
-    app.log_table.visible_width = f.size().width;
-    if app.log_table.register_table_max_width <= f.size().width {
+    app.log_table.table_visible_width = f.size().width;
+    if app.log_table.table_max_width <= f.size().width {
         f.render_stateful_widget(t, area, &mut app.log_table.table_state);
     } else {
         let f_rect = area;
         let rect = Rect {
             x: 0,
             y: 0,
-            width: app.log_table.register_table_max_width,
+            width: app.log_table.table_max_width,
             height: f_rect.height,
         };
         let mut buffer = Buffer::empty(rect);
@@ -723,8 +721,8 @@ fn render_log<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_SIZE>,
             &mut app.log_table.table_state,
         );
         let offset = std::cmp::min(
-            app.log_table.register_table_max_width - f_rect.width,
-            app.log_table.horizontal_scroll_offset,
+            app.log_table.table_max_width - f_rect.width,
+            app.log_table.horizontal_scroll,
         );
         let f_buffer = f.buffer_mut();
         for (x, y) in itertools::iproduct!(offset..(offset + f_rect.width), 0..(rect.height)) {
