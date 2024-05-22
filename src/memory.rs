@@ -30,17 +30,21 @@ impl<Key: Into<usize> + Clone + Debug> Range<Key> {
 
 pub struct Memory<const SLICE_SIZE: usize, Value: Default + Copy + Debug> {
     slices: HashMap<usize, [Value; SLICE_SIZE]>,
+    bounds: Range<usize>,
 }
 
 impl<const SLICE_SIZE: usize, Value: Default + Copy + Debug> Memory<SLICE_SIZE, Value> {
     pub fn new() -> Self {
         Self {
             slices: HashMap::new(),
+            bounds: Range::new(usize::max_value(), usize::max_value()),
         }
     }
 
     pub fn init<Key: Into<usize> + Clone + Debug>(&mut self, ranges: &[Range<Key>]) {
         for range in ranges.iter() {
+            let upper = if self.bounds.1 == usize::max_value() { 0 } else { self.bounds.1 };
+            self.bounds = Range::new(std::cmp::min(range.0.clone().into(), self.bounds.0), std::cmp::max(range.1.clone().into(), upper));
             let range = (
                 range.0.clone().into() / SLICE_SIZE,
                 range.1.clone().into() / SLICE_SIZE + 1,
@@ -59,6 +63,9 @@ impl<const SLICE_SIZE: usize, Value: Default + Copy + Debug> Memory<SLICE_SIZE, 
         mut values: &'a [Value],
     ) -> anyhow::Result<&'a [Value]> {
         let range = (range.0.into(), range.1.into());
+        if self.bounds.0 > range.0 || self.bounds.1 < range.1 {
+            return Err(anyhow!("Range not available in memory."));
+        }
         let mut len = range.1 - range.0;
         if len != values.len() {
             return Err(anyhow!("Range too large/small for given value slice."));
@@ -86,6 +93,9 @@ impl<const SLICE_SIZE: usize, Value: Default + Copy + Debug> Memory<SLICE_SIZE, 
         range: &Range<Key>,
     ) -> anyhow::Result<Vec<&Value>> {
         let range = (range.0.clone().into(), range.1.clone().into());
+        if self.bounds.0 > range.0 || self.bounds.1 < range.1 {
+            return Err(anyhow!("Range not available in memory."));
+        }
         if !((range.0 / SLICE_SIZE)..(range.1 / SLICE_SIZE + 1))
             .all(|v| self.slices.contains_key(&v))
         {
