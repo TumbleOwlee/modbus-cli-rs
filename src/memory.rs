@@ -43,8 +43,15 @@ impl<const SLICE_SIZE: usize, Value: Default + Copy + Debug> Memory<SLICE_SIZE, 
 
     pub fn init<Key: Into<usize> + Clone + Debug>(&mut self, ranges: &[Range<Key>]) {
         for range in ranges.iter() {
-            let upper = if self.bounds.1 == usize::max_value() { 0 } else { self.bounds.1 };
-            self.bounds = Range::new(std::cmp::min(range.0.clone().into(), self.bounds.0), std::cmp::max(range.1.clone().into(), upper));
+            let upper = if self.bounds.1 == usize::max_value() {
+                0
+            } else {
+                self.bounds.1
+            };
+            self.bounds = Range::new(
+                std::cmp::min(range.0.clone().into(), self.bounds.0),
+                std::cmp::max(range.1.clone().into(), upper),
+            );
             let range = (
                 range.0.clone().into() / SLICE_SIZE,
                 range.1.clone().into() / SLICE_SIZE + 1,

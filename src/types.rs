@@ -10,7 +10,6 @@ pub enum Command {
     Disconnect,
 }
 
-
 #[derive(Clone, Debug)]
 pub struct Message {
     pub timestamp: String,

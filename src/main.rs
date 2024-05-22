@@ -101,7 +101,15 @@ fn main() {
         let status_send = status_send.clone();
         runtime.block_on(async move {
             spawn_detach(async move {
-                run_client(tcp_config, memory, definitions, status_send, command_recv, log_send).await
+                run_client(
+                    tcp_config,
+                    memory,
+                    definitions,
+                    status_send,
+                    command_recv,
+                    log_send,
+                )
+                .await
             })
             .await
         });
@@ -109,16 +117,8 @@ fn main() {
         let status_send = status_send.clone();
         let memory = memory.clone();
         runtime.block_on(async move {
-            spawn_detach(async move {
-                run_server(
-                    tcp_config,
-                    memory,
-                    status_send,
-                    log_send,
-                )
+            spawn_detach(async move { run_server(tcp_config, memory, status_send, log_send).await })
                 .await
-            })
-            .await
         });
     };
 
