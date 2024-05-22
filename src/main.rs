@@ -75,7 +75,8 @@ fn main() {
     // Initialize memory storage for all registers
     let mut memory = Memory::<1024, u16>::new();
     memory.init(
-        &config.definitions
+        &config
+            .definitions
             .values()
             .map(|d| d.get_range())
             .collect::<Vec<_>>(),

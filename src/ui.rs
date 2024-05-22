@@ -33,38 +33,69 @@ const LOG_HEADER: &str = " Modbus Log";
 
 const ITEM_HEIGHT: usize = 3;
 
+#[derive(Clone, Debug)]
+struct RowColorPair {
+    pub normal: Color,
+    pub alt: Color,
+}
+
+impl RowColorPair {
+    pub const fn new(normal: Color, alt: Color) -> Self {
+        Self { normal, alt }
+    }
+
+    pub fn get(&self, i: usize) -> Color {
+        match i {
+            0 => self.normal,
+            1 => self.alt,
+            _ => panic!("Invalid index."),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+struct ColorPair<Forground: Clone, Background: Clone> {
+    pub fg: Forground,
+    pub bg: Background,
+}
+
+impl<Forground: Clone, Background: Clone> ColorPair<Forground, Background> {
+    pub const fn new(fg: Forground, bg: Background) -> Self {
+        Self { fg, bg }
+    }
+}
+
 struct TableColors {
-    buffer_bg: Color,
-    header_bg: Color,
-    header_fg: Color,
-    row_fg: Color,
-    selected_style_fg: Color,
-    selected_style_fg_error: Color,
-    selected_style_fg_success: Color,
-    normal_row_color: Color,
-    alt_row_color: Color,
-    error_color: Color,
-    alt_error_color: Color,
-    success_color: Color,
-    alt_success_color: Color,
+    buffer: ColorPair<Color, Color>,
+    header: ColorPair<Color, Color>,
+    selected_color: ColorPair<Color, Color>,
+    selected_color_error: ColorPair<Color, Color>,
+    selected_color_success: ColorPair<Color, Color>,
+    row_color: ColorPair<Color, RowColorPair>,
+    row_error_color: ColorPair<Color, RowColorPair>,
+    row_success_color: ColorPair<Color, RowColorPair>,
 }
 
 impl TableColors {
     const fn new(color: &tailwind::Palette) -> Self {
         Self {
-            buffer_bg: tailwind::SLATE.c950,
-            header_bg: color.c900,
-            header_fg: tailwind::SLATE.c200,
-            row_fg: tailwind::SLATE.c200,
-            selected_style_fg: color.c400,
-            selected_style_fg_error: tailwind::RED.c900,
-            selected_style_fg_success: tailwind::GREEN.c950,
-            normal_row_color: tailwind::SLATE.c950,
-            alt_row_color: tailwind::SLATE.c900,
-            error_color: tailwind::RED.c950,
-            alt_error_color: tailwind::RED.c800,
-            success_color: tailwind::GREEN.c900,
-            alt_success_color: tailwind::GREEN.c800,
+            buffer: ColorPair::new(tailwind::SLATE.c200, tailwind::SLATE.c950),
+            header: ColorPair::new(tailwind::SLATE.c200, color.c900),
+            selected_color: ColorPair::new(tailwind::SLATE.c200, color.c400),
+            selected_color_error: ColorPair::new(tailwind::WHITE, tailwind::RED.c900),
+            selected_color_success: ColorPair::new(tailwind::WHITE, tailwind::GREEN.c950),
+            row_color: ColorPair::new(
+                tailwind::SLATE.c200,
+                RowColorPair::new(tailwind::SLATE.c950, tailwind::SLATE.c900),
+            ),
+            row_error_color: ColorPair::new(
+                tailwind::SLATE.c200,
+                RowColorPair::new(tailwind::RED.c950, tailwind::RED.c800),
+            ),
+            row_success_color: ColorPair::new(
+                tailwind::SLATE.c200,
+                RowColorPair::new(tailwind::GREEN.c900, tailwind::GREEN.c800),
+            ),
         }
     }
 }
@@ -73,7 +104,7 @@ pub struct UiTable {
     table_state: TableState,
     vertical_scroll_state: ScrollbarState,
     horizontal_scroll_offset: u16,
-    row_max_width: u16,
+    register_table_max_width: u16,
     visible_width: u16,
     end_of_table: bool,
 }
@@ -84,7 +115,7 @@ impl UiTable {
             table_state: TableState::default().with_selected(0),
             vertical_scroll_state: ScrollbarState::new((len - 1) * item_height),
             horizontal_scroll_offset: 0,
-            row_max_width: 0,
+            register_table_max_width: 0,
             visible_width: 0,
             end_of_table: true,
         }
@@ -138,43 +169,32 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
     }
 
     pub fn log_move_down(&mut self) {
-        if self.log_entries.is_empty() {
-            return;
-        }
-        let i = match self.log_table.table_state.selected() {
-            Some(i) => {
-                if i >= self.log_entries.len() - 1 {
-                    self.log_entries.len() - 1
-                } else {
-                    i + 1
-                }
-            }
-            None => 0,
-        };
+        if !self.log_entries.is_empty() {
+            let i = self
+                .log_table
+                .table_state
+                .selected()
+                .map(|i| std::cmp::min(i + 1, std::cmp::max(self.log_entries.len(), 1) - 1))
+                .unwrap_or(0);
 
-        self.log_table.end_of_table = i == (self.log_entries.len() - 1);
-        self.log_table.table_state.select(Some(i));
-        self.log_table.vertical_scroll_state = self.log_table.vertical_scroll_state.position(i);
+            self.log_table.end_of_table = i == (self.log_entries.len() - 1);
+            self.log_table.table_state.select(Some(i));
+            self.log_table.vertical_scroll_state = self.log_table.vertical_scroll_state.position(i);
+        }
     }
 
     pub fn log_move_up(&mut self) {
-        if self.log_entries.is_empty() {
-            return;
+        if !self.log_entries.is_empty() {
+            let i = self
+                .log_table
+                .table_state
+                .selected()
+                .map(|i| std::cmp::max(i, 1) - 1)
+                .unwrap_or(0);
+            self.log_table.end_of_table = i == (self.log_entries.len() - 1);
+            self.log_table.table_state.select(Some(i));
+            self.log_table.vertical_scroll_state = self.log_table.vertical_scroll_state.position(i);
         }
-        let i = match self.log_table.table_state.selected() {
-            Some(i) => {
-                if i == 0 {
-                    0
-                } else {
-                    i - 1
-                }
-            }
-            None => 0,
-        };
-
-        self.log_table.end_of_table = i == (self.log_entries.len() - 1);
-        self.log_table.table_state.select(Some(i));
-        self.log_table.vertical_scroll_state = self.log_table.vertical_scroll_state.position(i);
     }
 
     pub fn log_move_left(&mut self) {
@@ -184,8 +204,10 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
 
     pub fn log_move_right(&mut self) {
         self.log_table.horizontal_scroll_offset = std::cmp::min(
-            std::cmp::max(self.log_table.row_max_width, self.log_table.visible_width)
-                - self.log_table.visible_width,
+            std::cmp::max(
+                self.log_table.register_table_max_width,
+                self.log_table.visible_width,
+            ) - self.log_table.visible_width,
             self.log_table.horizontal_scroll_offset + 3,
         );
     }
@@ -213,45 +235,41 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
     }
 
     pub fn move_down(&mut self) {
-        let len = self
-            .register_handler
-            .values()
-            .iter()
-            .filter(|(n, _)| !n.starts_with("hide_"))
-            .count();
-        let i = match self.register_table.table_state.selected() {
-            Some(i) => {
-                if i >= len - 1 {
-                    len - 1
-                } else {
-                    i + 1
-                }
-            }
-            None => 0,
-        };
-        self.register_table.table_state.select(Some(i));
-        self.register_table.vertical_scroll_state = self
-            .register_table
-            .vertical_scroll_state
-            .position(i * ITEM_HEIGHT);
+        if !self.register_handler.values().is_empty() {
+            let len = self
+                .register_handler
+                .values()
+                .iter()
+                .filter(|(n, _)| !n.starts_with("hide_"))
+                .count();
+            let i = self
+                .register_table
+                .table_state
+                .selected()
+                .map(|i| std::cmp::min(i + 1, std::cmp::max(len, 1) - 1))
+                .unwrap_or(0);
+            self.register_table.table_state.select(Some(i));
+            self.register_table.vertical_scroll_state = self
+                .register_table
+                .vertical_scroll_state
+                .position(i * ITEM_HEIGHT);
+        }
     }
 
     pub fn move_up(&mut self) {
-        let i = match self.register_table.table_state.selected() {
-            Some(i) => {
-                if i == 0 {
-                    0
-                } else {
-                    i - 1
-                }
-            }
-            None => 0,
-        };
-        self.register_table.table_state.select(Some(i));
-        self.register_table.vertical_scroll_state = self
-            .register_table
-            .vertical_scroll_state
-            .position(i * ITEM_HEIGHT);
+        if !self.register_handler.values().is_empty() {
+            let i = self
+                .register_table
+                .table_state
+                .selected()
+                .map(|i| std::cmp::max(i, 1) - 1)
+                .unwrap_or(0);
+            self.register_table.table_state.select(Some(i));
+            self.register_table.vertical_scroll_state = self
+                .register_table
+                .vertical_scroll_state
+                .position(i * ITEM_HEIGHT);
+        }
     }
 
     pub fn move_left(&mut self) {
@@ -262,7 +280,7 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
     pub fn move_right(&mut self) {
         self.register_table.horizontal_scroll_offset = std::cmp::min(
             std::cmp::max(
-                self.register_table.row_max_width,
+                self.register_table.register_table_max_width,
                 self.register_table.visible_width,
             ) - self.register_table.visible_width,
             self.register_table.horizontal_scroll_offset + 3,
@@ -295,6 +313,8 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
         let mut app = self;
         loop {
             let _ = app.register_handler.update();
+
+            // Update status
             if let Ok(v) = status_recv.try_recv() {
                 match v {
                     Status::String(v) => {
@@ -302,6 +322,8 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
                     }
                 }
             }
+
+            // Update log
             for _ in 0..5 {
                 if let Ok(v) = log_recv.try_recv() {
                     app.log_entries.push(v);
@@ -309,9 +331,11 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
                     break;
                 }
             }
+
             //app.register_handler.update()?;
             terminal.draw(|f| ui(f, &mut app, status.clone()))?;
 
+            // Handle inputs
             if event::poll(Duration::from_millis(50))? {
                 if let Event::Key(key) = event::read()? {
                     if key.kind == KeyEventKind::Press {
@@ -393,11 +417,11 @@ fn vec_as_str(v: &[u16], hex: bool) -> String {
 
 fn render_register<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_SIZE>, area: Rect) {
     let header_style = Style::default()
-        .fg(app.colors.header_fg)
-        .bg(app.colors.header_bg);
+        .fg(app.colors.header.fg)
+        .bg(app.colors.header.bg);
     let selected_style = Style::default()
-        .add_modifier(Modifier::REVERSED)
-        .fg(app.colors.selected_style_fg);
+        .fg(app.colors.selected_color.fg)
+        .bg(app.colors.selected_color.bg);
 
     let cols = [
         "Access", "Name", "Address", "Type", "Length", "Value", "Raw Data",
@@ -458,18 +482,15 @@ fn render_register<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_S
         },
     );
 
-    app.register_table.row_max_width =
+    app.register_table.register_table_max_width =
         limits.0 + limits.1 + limits.2 + limits.3 + limits.4 + limits.5 + limits.6 + 25;
 
     let rows = items.iter().enumerate().map(|(i, item)| {
-        let color = match i % 2 {
-            0 => app.colors.normal_row_color,
-            _ => app.colors.alt_row_color,
-        };
+        let color = app.colors.row_color.bg.get(i % 2);
         item.iter()
             .map(|content| Cell::from(Text::from(format!("\n{content}\n"))))
             .collect::<Row>()
-            .style(Style::new().fg(app.colors.row_fg).bg(color))
+            .style(Style::new().fg(app.colors.row_color.fg).bg(color))
             .height(ITEM_HEIGHT as u16)
     });
 
@@ -477,7 +498,6 @@ fn render_register<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_S
     let t = Table::new(
         rows,
         [
-            // + 1 is for padding.
             Constraint::Min(limits.0 + 1),
             Constraint::Min(limits.1 + 1),
             Constraint::Min(limits.2 + 1),
@@ -490,18 +510,18 @@ fn render_register<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_S
     .header(header)
     .highlight_style(selected_style)
     .highlight_symbol(Text::from(vec!["".into(), bar.into(), "".into()]).style(header_style))
-    .bg(app.colors.buffer_bg)
+    .bg(app.colors.buffer.bg)
     .highlight_spacing(HighlightSpacing::Always);
 
     app.register_table.visible_width = f.size().width;
-    if app.register_table.row_max_width <= f.size().width {
+    if app.register_table.register_table_max_width <= f.size().width {
         f.render_stateful_widget(t, area, &mut app.register_table.table_state);
     } else {
         let f_rect = area;
         let rect = Rect {
             x: 0,
             y: 0,
-            width: app.register_table.row_max_width,
+            width: app.register_table.register_table_max_width,
             height: f_rect.height,
         };
         let mut buffer = Buffer::empty(rect);
@@ -512,7 +532,7 @@ fn render_register<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_S
             &mut app.register_table.table_state,
         );
         let offset = std::cmp::min(
-            app.register_table.row_max_width - f_rect.width,
+            app.register_table.register_table_max_width - f_rect.width,
             app.register_table.horizontal_scroll_offset,
         );
         let f_buffer = f.buffer_mut();
@@ -552,8 +572,8 @@ fn render_register_footer<const SLICE_SIZE: usize>(
     let status_footer = Paragraph::new(Line::from(str!(" ") + &status))
         .style(
             Style::new()
-                .fg(app.colors.header_fg)
-                .bg(app.colors.header_bg),
+                .fg(app.colors.header.fg)
+                .bg(app.colors.header.bg),
         )
         .centered();
     let info_footer = Paragraph::new(Line::from(REGISTER_INFO_TEXT))
@@ -568,8 +588,8 @@ fn render_log_footer<const SLICE_SIZE: usize>(f: &mut Frame, app: &App<SLICE_SIZ
     let status_footer = Paragraph::new(Line::from(LOG_HEADER))
         .style(
             Style::new()
-                .fg(app.colors.header_fg)
-                .bg(app.colors.header_bg),
+                .fg(app.colors.header.fg)
+                .bg(app.colors.header.bg),
         )
         .left_aligned();
     f.render_widget(status_footer, rects[0]);
@@ -582,19 +602,17 @@ fn render_log_footer<const SLICE_SIZE: usize>(f: &mut Frame, app: &App<SLICE_SIZ
 
 fn render_log<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_SIZE>, area: Rect) {
     let header_style = Style::default()
-        .fg(app.colors.header_fg)
-        .bg(app.colors.header_bg);
+        .fg(app.colors.header.fg)
+        .bg(app.colors.header.bg);
     let selected_style = Style::default()
-        .add_modifier(Modifier::REVERSED)
-        .fg(app.colors.selected_style_fg);
+        .fg(app.colors.selected_color.fg)
+        .bg(app.colors.selected_color.bg);
     let selected_style_error = Style::default()
-        .add_modifier(Modifier::REVERSED)
-        .bg(tailwind::WHITE)
-        .fg(app.colors.selected_style_fg_error);
+        .fg(app.colors.selected_color_error.fg)
+        .bg(app.colors.selected_color_error.bg);
     let selected_style_success = Style::default()
-        .add_modifier(Modifier::REVERSED)
-        .bg(tailwind::WHITE)
-        .fg(app.colors.selected_style_fg_success);
+        .fg(app.colors.selected_color_success.fg)
+        .bg(app.colors.selected_color_success.bg);
 
     let cols = ["Timestamp", "Message"];
     let header = cols
@@ -647,30 +665,30 @@ fn render_log<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_SIZE>,
         LogMsg::Ok(_) => selected_style_success,
     };
 
-    app.log_table.row_max_width = limits.0 + limits.1 + 10;
+    app.log_table.register_table_max_width = limits.0 + limits.1 + 10;
 
     let rows = app.log_entries.iter().enumerate().map(|(i, item)| {
-        let color = match i % 2 {
-            0 => match item {
-                LogMsg::Info(_) => app.colors.normal_row_color,
-                LogMsg::Err(_) => app.colors.error_color,
-                LogMsg::Ok(_) => app.colors.success_color,
-            },
-            _ => match item {
-                LogMsg::Info(_) => app.colors.alt_row_color,
-                LogMsg::Err(_) => app.colors.alt_error_color,
-                LogMsg::Ok(_) => app.colors.alt_success_color,
-            },
-        };
-        let item = match item {
-            LogMsg::Info(ref v) => [&v.timestamp, &v.message],
-            LogMsg::Err(ref v) => [&v.timestamp, &v.message],
-            LogMsg::Ok(ref v) => [&v.timestamp, &v.message],
+        let (item, fg, bg) = match item {
+            LogMsg::Info(v) => (
+                [&v.timestamp, &v.message],
+                app.colors.row_error_color.fg,
+                app.colors.row_color.bg.get(i % 2),
+            ),
+            LogMsg::Err(v) => (
+                [&v.timestamp, &v.message],
+                app.colors.row_error_color.fg,
+                app.colors.row_error_color.bg.get(i % 2),
+            ),
+            LogMsg::Ok(v) => (
+                [&v.timestamp, &v.message],
+                app.colors.row_error_color.fg,
+                app.colors.row_success_color.bg.get(i % 2),
+            ),
         };
         item.iter()
             .map(|content| Cell::from(Text::from(str!(*content))))
             .collect::<Row>()
-            .style(Style::new().fg(app.colors.row_fg).bg(color))
+            .style(Style::new().fg(fg).bg(bg))
             .height(1)
     });
 
@@ -682,18 +700,19 @@ fn render_log<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_SIZE>,
     .header(header)
     .highlight_style(selected_style)
     .highlight_symbol(Text::from(bar).style(header_style))
-    .bg(app.colors.buffer_bg)
+    .fg(app.colors.buffer.fg)
+    .bg(app.colors.buffer.bg)
     .highlight_spacing(HighlightSpacing::Always);
 
     app.log_table.visible_width = f.size().width;
-    if app.log_table.row_max_width <= f.size().width {
+    if app.log_table.register_table_max_width <= f.size().width {
         f.render_stateful_widget(t, area, &mut app.log_table.table_state);
     } else {
         let f_rect = area;
         let rect = Rect {
             x: 0,
             y: 0,
-            width: app.log_table.row_max_width,
+            width: app.log_table.register_table_max_width,
             height: f_rect.height,
         };
         let mut buffer = Buffer::empty(rect);
@@ -704,7 +723,7 @@ fn render_log<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_SIZE>,
             &mut app.log_table.table_state,
         );
         let offset = std::cmp::min(
-            app.log_table.row_max_width - f_rect.width,
+            app.log_table.register_table_max_width - f_rect.width,
             app.log_table.horizontal_scroll_offset,
         );
         let f_buffer = f.buffer_mut();

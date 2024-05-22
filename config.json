@@ -5,7 +5,7 @@
         "Serial Number": {
             "read_code": 4,
             "address": "0x4000",
-            "length": 30,
+            "length": 4,
             "access": "ReadOnly",
             "type": "PackedString"
         },
