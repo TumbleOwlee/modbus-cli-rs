@@ -7,8 +7,8 @@ mod types;
 mod ui;
 mod util;
 
-use crate::memory::Memory;
-use crate::register::{Definition, Handler};
+use crate::memory::{Memory, Range};
+use crate::register::{Address, Definition, Handler};
 use crate::tcp::client::run as run_client;
 use crate::tcp::server::run as run_server;
 use crate::tcp::TcpConfig;
@@ -49,10 +49,17 @@ struct Args {
     client: bool,
 }
 
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct ContiguousMemory {
+    read_code: u8,
+    range: Range<Address>,
+}
+
 #[derive(Deserialize, Serialize, Debug)]
 pub struct Config {
     history_length: usize,
     interval_ms: u64,
+    contiguous_memory: Vec<ContiguousMemory>,
     definitions: HashMap<String, Definition>,
 }
 
@@ -98,12 +105,14 @@ fn main() {
     if args.client {
         let memory = memory.clone();
         let definitions = config.definitions.clone();
+        let contiguous_memory = config.contiguous_memory.clone();
         let status_send = status_send.clone();
         runtime.block_on(async move {
             spawn_detach(async move {
                 run_client(
                     tcp_config,
                     memory,
+                    contiguous_memory,
                     definitions,
                     status_send,
                     command_recv,

@@ -3,7 +3,7 @@ use crate::register::{AccessType, Definition, ValueType};
 use crate::tcp::TcpConfig;
 use crate::types::LogMsg;
 use crate::util::{str, Expect};
-use crate::{Command, Status};
+use crate::{Command, ContiguousMemory, Status};
 
 use itertools::Itertools;
 use std::collections::HashMap;
@@ -18,6 +18,7 @@ use tokio_modbus::FunctionCode;
 pub async fn run(
     tcp_config: TcpConfig,
     memory: Arc<Mutex<Memory<1024, u16>>>,
+    contiguous_memory: Vec<ContiguousMemory>,
     definitions: HashMap<String, Definition>,
     status_send: Sender<Status>,
     mut command_recv: Receiver<Command>,
@@ -60,47 +61,70 @@ pub async fn run(
         Definition::new(0, 0, ValueType::U8, 0, AccessType::ReadOnly),
     );
     sorted_defs.push((&marker.0, &marker.1));
-    let mut fc = 0;
+
+    let is_allowed = |fc: u8, addr: u16, end: usize| {
+        for mem in contiguous_memory.iter() {
+            if mem.read_code == fc
+                && addr as usize >= mem.range.start()
+                && addr as usize <= mem.range.end()
+                && end >= mem.range.start()
+                && end <= mem.range.end()
+            {
+                return true;
+            }
+        }
+        false
+    };
+
+    let mut fc: u8 = 0;
     let mut operations = Vec::new();
     let mut range: Option<Range<u16>> = None;
     for (name, def) in sorted_defs.into_iter() {
-        if range.is_some()
-            && (fc != def.read_code() || def.get_address() != range.as_ref().unwrap().to() as u16)
-        {
-            let fc = FunctionCode::new(fc);
-            match fc {
-                FunctionCode::ReadCoils => {
-                    unimplemented!("Read Coils")
-                }
-                FunctionCode::ReadDiscreteInputs => {
-                    unimplemented!("Read Discrete Inputs")
-                }
-                FunctionCode::ReadInputRegisters | FunctionCode::ReadHoldingRegisters => {
-                    if let Some(r) = range {
-                        let len = r.length();
+        if let Some(ref mut range) = range {
+            let (def_addr, def_fc, def_range) =
+                (def.get_address(), def.read_code(), def.get_range());
+            if (range.length() + def_addr as usize - range.start() + def_range.length()) > 127
+                || (fc != def_fc
+                    || (def_addr >= range.end() as u16 && !is_allowed(fc, def_addr, range.end())))
+            {
+                let fc = FunctionCode::new(fc);
+                match fc {
+                    FunctionCode::ReadCoils => {
+                        unimplemented!("Read Coils")
+                    }
+                    FunctionCode::ReadDiscreteInputs => {
+                        unimplemented!("Read Discrete Inputs")
+                    }
+                    FunctionCode::ReadInputRegisters | FunctionCode::ReadHoldingRegisters => {
+                        let len = range.length();
                         if len > 0 {
-                            let mut addr = r.from();
+                            let mut addr = range.start();
                             loop {
                                 operations.push((
                                     fc,
-                                    Range::new(addr, std::cmp::min(addr + 127, r.to())),
+                                    Range::new(addr, std::cmp::min(addr + 127, range.end())),
                                 ));
-                                addr = std::cmp::min(addr + 127, r.to());
-                                if addr == r.to() {
+                                eprintln!(
+                                    "Push {:#06X?}, {:#06X?}",
+                                    addr,
+                                    std::cmp::min(addr + 127, range.end())
+                                );
+                                addr = std::cmp::min(addr + 127, range.end());
+                                if addr == range.end() {
                                     break;
                                 }
                             }
                         }
                     }
-                }
-                _ => panic!("Invalid read function code for register {}", name),
-            };
-            range = Some(Range::new(def.get_address(), def.get_address()));
+                    _ => panic!("Invalid read function code for register {}", name),
+                };
+                Range::new(def_addr, def_addr).clone_into(range);
+            }
         }
         fc = def.read_code();
         range = match range {
             None => Some(def.get_range()),
-            Some(v) => Some(Range::new(v.from() as u16, def.get_range().to() as u16)),
+            Some(v) => Some(Range::new(v.start() as u16, def.get_range().end() as u16)),
         };
     }
 
@@ -118,12 +142,15 @@ pub async fn run(
                 let modbus_result = match fc {
                     FunctionCode::ReadInputRegisters => {
                         context
-                            .read_input_registers(op.from() as u16, (op.to() - op.from()) as u16)
+                            .read_input_registers(op.start() as u16, (op.end() - op.start()) as u16)
                             .await
                     }
                     FunctionCode::ReadHoldingRegisters => {
                         context
-                            .read_holding_registers(op.from() as u16, (op.to() - op.from()) as u16)
+                            .read_holding_registers(
+                                op.start() as u16,
+                                (op.end() - op.start()) as u16,
+                            )
                             .await
                     }
                     _ => panic!("Invalid function code in operation."),
@@ -131,16 +158,14 @@ pub async fn run(
                 if let Ok(vec) = modbus_result {
                     let _ = log_send
                         .send(LogMsg::info(&format!(
-                            "Read address space [ {:#06X} ({}), {:#06X} ({}) ) successful.",
-                            op.from(),
-                            op.from(),
-                            op.to(),
-                            op.to()
+                            "Read address space [ {start:#06X} ({start}), {end:#06X} ({end}) ) successful.",
+                            start = op.start(),
+                            end = op.start()
                         )))
                         .await;
                     let mut memory = memory.lock().unwrap();
                     memory
-                        .write(Range::new(op.from(), op.from() + vec.len()), &vec)
+                        .write(Range::new(op.start(), op.start() + vec.len()), &vec)
                         .panic(|e| format!("Failed to write to memory ({})", e));
                     drop(memory);
                     op_idx = if op_idx + 1 == operations.len() {
@@ -151,11 +176,9 @@ pub async fn run(
                 } else {
                     let _ = log_send
                         .send(LogMsg::err(&format!(
-                            "Read address space [ {:#06X} ({}), {:#06X} ({}) ) failed.",
-                            op.from(),
-                            op.from(),
-                            op.to(),
-                            op.to()
+                            "Read address space [ {start:#06X} ({start}), {end:#06X} ({end}) ) failed.",
+                            start = op.start(),
+                            end = op.start()
                         )))
                         .await;
                     let _ = status_send

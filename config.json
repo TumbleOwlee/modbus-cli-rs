@@ -1,6 +1,15 @@
 {
     "history_length": 30,
     "interval_ms": 500,
+    "contiguous_memory": [
+        {
+            "read_code": 4,
+            "range": {
+                "start": "0x4000",
+                "end": "0x4109"
+            }
+        }
+    ],
     "definitions": {
         "Serial Number": {
             "read_code": 4,

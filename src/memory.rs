@@ -5,26 +5,29 @@ use std::default::Default;
 use std::fmt::Debug;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
-pub struct Range<Key: Into<usize> + Clone>(Key, Key);
+pub struct Range<Key: Into<usize> + Clone> {
+    start: Key,
+    end: Key,
+}
 
 impl<Key: Into<usize> + Clone + Debug> Range<Key> {
-    pub fn new(from: Key, to: Key) -> Self {
-        if from.clone().into() > to.clone().into() {
+    pub fn new(start: Key, end: Key) -> Self {
+        if start.clone().into() > end.clone().into() {
             panic!("Range invalid: end is lower than start.");
         }
-        Self(from, to)
+        Self { start, end }
     }
 
     pub fn length(&self) -> usize {
-        self.1.clone().into() - self.0.clone().into()
+        self.end.clone().into() - self.start.clone().into()
     }
 
-    pub fn from(&self) -> usize {
-        self.0.clone().into()
+    pub fn start(&self) -> usize {
+        self.start.clone().into()
     }
 
-    pub fn to(&self) -> usize {
-        self.1.clone().into()
+    pub fn end(&self) -> usize {
+        self.end.clone().into()
     }
 }
 
@@ -43,19 +46,16 @@ impl<const SLICE_SIZE: usize, Value: Default + Copy + Debug> Memory<SLICE_SIZE, 
 
     pub fn init<Key: Into<usize> + Clone + Debug>(&mut self, ranges: &[Range<Key>]) {
         for range in ranges.iter() {
-            let upper = if self.bounds.1 == usize::max_value() {
+            let upper = if self.bounds.end() == usize::max_value() {
                 0
             } else {
-                self.bounds.1
+                self.bounds.end()
             };
             self.bounds = Range::new(
-                std::cmp::min(range.0.clone().into(), self.bounds.0),
-                std::cmp::max(range.1.clone().into(), upper),
+                std::cmp::min(range.start(), self.bounds.start()),
+                std::cmp::max(range.end(), upper),
             );
-            let range = (
-                range.0.clone().into() / SLICE_SIZE,
-                range.1.clone().into() / SLICE_SIZE + 1,
-            );
+            let range = (range.start() / SLICE_SIZE, range.end() / SLICE_SIZE + 1);
             for i in range.0..range.1 {
                 self.slices
                     .entry(i)
@@ -69,9 +69,9 @@ impl<const SLICE_SIZE: usize, Value: Default + Copy + Debug> Memory<SLICE_SIZE, 
         range: Range<Key>,
         mut values: &'a [Value],
     ) -> anyhow::Result<&'a [Value]> {
-        let range = (range.0.into(), range.1.into());
-        if self.bounds.0 > range.0 || self.bounds.1 < range.1 {
-            return Err(anyhow!("Range not available in memory."));
+        let range = (range.start(), range.end());
+        if self.bounds.start() > range.0 || self.bounds.end() < range.1 {
+            return Err(anyhow!("Range not available in memory"));
         }
         let mut len = range.1 - range.0;
         if len != values.len() {
@@ -79,7 +79,7 @@ impl<const SLICE_SIZE: usize, Value: Default + Copy + Debug> Memory<SLICE_SIZE, 
         } else if !((range.0 / SLICE_SIZE)..(range.1 / SLICE_SIZE + 1))
             .all(|v| self.slices.contains_key(&v))
         {
-            return Err(anyhow!("Range not available in memory."));
+            return Err(anyhow!("Range not available in memory"));
         }
 
         let mut start = std::cmp::min(range.0 % SLICE_SIZE, SLICE_SIZE);
@@ -99,14 +99,14 @@ impl<const SLICE_SIZE: usize, Value: Default + Copy + Debug> Memory<SLICE_SIZE, 
         &mut self,
         range: &Range<Key>,
     ) -> anyhow::Result<Vec<&Value>> {
-        let range = (range.0.clone().into(), range.1.clone().into());
-        if self.bounds.0 > range.0 || self.bounds.1 < range.1 {
-            return Err(anyhow!("Range not available in memory."));
+        let range = (range.start.clone().into(), range.end.clone().into());
+        if self.bounds.start() > range.0 || self.bounds.end() < range.1 {
+            return Err(anyhow!("Range not available in memory"));
         }
         if !((range.0 / SLICE_SIZE)..(range.1 / SLICE_SIZE + 1))
             .all(|v| self.slices.contains_key(&v))
         {
-            return Err(anyhow!("Range not available in memory."));
+            return Err(anyhow!("Range not available in memory"));
         }
 
         let mut len = range.1 - range.0;

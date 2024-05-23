@@ -60,6 +60,12 @@ pub enum Address {
     Decimal(u16),
 }
 
+impl From<Address> for usize {
+    fn from(address: Address) -> usize {
+        address.as_u16() as usize
+    }
+}
+
 impl Address {
     pub fn as_u16(&self) -> u16 {
         match self {
