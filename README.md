@@ -1,8 +1,14 @@
 # Modbus CLI
 
-Modbus CLI is Rust implementation of a simple and intuative commandline application to interact with or simulate a modbus server. 
+Modbus CLI is Rust implementation of a simple and intuative commandline application to interact with or simulate a modbus server.
 
 **Goal:** Provide a CLI application that can interact with a modbus server and modbus clients and visualize the status of modbus registers with live updates.
+
+<p align="center">
+    <p align="center">
+        <img src="./img/modbus-cli-rs.png" style="border-radius: 8px">
+    </p>
+</p>
 
 ## Features
 
@@ -12,7 +18,7 @@ Modbus CLI is Rust implementation of a simple and intuative commandline applicat
 
 ## Quickstart
 
-This project is written in Rust, thus you will have to install the rust toolchain to compile it. Just follow the instructions on [rustup.rs](https://rustup.rs/) 
+This project is written in Rust, thus you will have to install the rust toolchain to compile it. Just follow the instructions on [rustup.rs](https://rustup.rs/)
 to set up the environment. Afterwards you are able to compile this project from source using the following command.
 
 ```sh
@@ -47,7 +53,7 @@ The `history_length` defines the scroll back limit of the displayed log messages
 and is only used if the `modbus-cli-rs` application is executed in client mode using the `-c` flag. Based on the modbus server it may be necessary to
 increase the duration if it can only handle a limited amount of commands per second.
 
-In `contiguous_memory` you can define address ranges that are available on a modbus server. This is used to group multiple registers together and 
+In `contiguous_memory` you can define address ranges that are available on a modbus server. This is used to group multiple registers together and
 reduce the amount of read commands. E.g. if you have two registers `0x200` and `0x202` and both registers have length 1, the client would perform
 two read commands since `0x201` is unused and separates the two registers. By adding the following entry to `contiguous_memory`, you specify that
 the range `[ 0x200, 0x202 ]` is provided by the modbus server and thus can be read using a single command without receiving a `Illigal Address`
