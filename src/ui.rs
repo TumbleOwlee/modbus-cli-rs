@@ -81,7 +81,7 @@ impl TableColors {
         Self {
             buffer: ColorPair::new(tailwind::SLATE.c200, tailwind::SLATE.c950),
             header: ColorPair::new(tailwind::SLATE.c200, color.c900),
-            selected_color: ColorPair::new(tailwind::SLATE.c200, color.c400),
+            selected_color: ColorPair::new(tailwind::SLATE.c950, color.c400),
             selected_color_error: ColorPair::new(tailwind::WHITE, tailwind::RED.c900),
             selected_color_success: ColorPair::new(tailwind::WHITE, tailwind::GREEN.c950),
             row_color: ColorPair::new(
@@ -420,6 +420,9 @@ fn render_register<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_S
     let selected_style = Style::default()
         .fg(app.colors.selected_color.fg)
         .bg(app.colors.selected_color.bg);
+    let bar_style = Style::default()
+        .fg(app.colors.header.bg)
+        .bg(app.colors.selected_color.bg);
 
     let cols = [
         "Access", "Name", "Address", "Type", "Length", "Value", "Raw Data",
@@ -507,7 +510,7 @@ fn render_register<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_S
     )
     .header(header)
     .highlight_style(selected_style)
-    .highlight_symbol(Text::from(vec!["".into(), bar.into(), "".into()]).style(header_style))
+    .highlight_symbol(Text::from(vec!["".into(), bar.into(), "".into()]).style(bar_style))
     .bg(app.colors.buffer.bg)
     .highlight_spacing(HighlightSpacing::Always);
 
