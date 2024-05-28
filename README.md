@@ -16,8 +16,8 @@ If you prefer a GUI application, check out [QModbus](https://github.com/ed-chemn
 
 - [x] Modbus server that allows clients to manipulate the registers.
 - [x] Modbus client to read and display all reigster contents of a modbus server.
-- [ ] Allow the manipulation of register contents in server and client mode.
-- [X] Support TCP modbus
+- [x] Allow the manipulation of register contents in server and client mode.
+- [x] Support TCP modbus
 - [ ] Support RTU modbus
 
 ## Quickstart
