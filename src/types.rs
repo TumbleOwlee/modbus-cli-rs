@@ -1,3 +1,4 @@
+use crate::memory::Range;
 use crate::util::str;
 use chrono::Local;
 
@@ -8,6 +9,7 @@ pub enum Status {
 pub enum Command {
     Connect,
     Disconnect,
+    WriteMultipleRegisters((u16, Vec<u16>)),
 }
 
 #[derive(Clone, Debug)]

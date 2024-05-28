@@ -350,7 +350,7 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
         self,
         mut status_recv: Receiver<Status>,
         mut log_recv: Receiver<LogMsg>,
-        command_send: Sender<Command>,
+        command_send: Option<Sender<Command>>,
     ) -> anyhow::Result<()> {
         enable_raw_mode()?;
         let mut terminal = App::<SLICE_SIZE>::create_terminal()?;
@@ -396,12 +396,16 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
                                 KeyCode::Char('f') | KeyCode::Tab => app.switch(),
                                 KeyCode::Char('t') => app.switch_color(),
                                 KeyCode::Char('d') => {
-                                    command_send.blocking_send(Command::Disconnect)?
+                                    if let Some(ref sender) = command_send {
+                                        sender.blocking_send(Command::Disconnect)?
+                                    }
                                 }
                                 KeyCode::Char('g') => app.move_top(),
                                 KeyCode::Char('G') => app.move_bottom(),
                                 KeyCode::Char('c') => {
-                                    command_send.blocking_send(Command::Connect)?
+                                    if let Some(ref sender) = command_send {
+                                        sender.blocking_send(Command::Connect)?
+                                    }
                                 }
                                 KeyCode::PageUp | KeyCode::Char('m') => app.log_move_up(),
                                 KeyCode::PageDown | KeyCode::Char('n') => app.log_move_down(),
@@ -461,6 +465,22 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
                                                             app.log_entries.push(LogMsg::err(
                                                                 "Provided input requires a longer register as available.",
                                                             ));
+                                                        } else if let Some(ref sender) =
+                                                            command_send
+                                                        {
+                                                            if let Err(e) = sender.blocking_send(
+                                                                Command::WriteMultipleRegisters((
+                                                                    register.address(),
+                                                                    v,
+                                                                )),
+                                                            ) {
+                                                                app.log_entries.push(LogMsg::err(
+                                                                    &format!("{}", e),
+                                                                ));
+                                                            } else {
+                                                                app.edit_dialog.value.clear_input();
+                                                                app.popup = Popup::None;
+                                                            }
                                                         } else if let Err(e) = app
                                                             .register_handler
                                                             .set_values(register.address(), &v)

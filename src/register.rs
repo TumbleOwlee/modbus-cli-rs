@@ -77,19 +77,35 @@ impl ValueType {
             }
             ValueType::LooseString => Ok(s.chars().map(|c| c as u16).collect()),
             ValueType::U8 => {
-                let val: u8 = s.parse()?;
+                let val: u8 = if let Some(s) = s.strip_prefix("0x") {
+                    u8::from_str_radix(s, 16)?
+                } else {
+                    s.parse()?
+                };
                 Ok(vec![val as u16])
             }
             ValueType::U16 => {
-                let val: u16 = s.parse()?;
+                let val: u16 = if let Some(s) = s.strip_prefix("0x") {
+                    u16::from_str_radix(s, 16)?
+                } else {
+                    s.parse()?
+                };
                 Ok(vec![val])
             }
             ValueType::U32 => {
-                let val: u32 = s.parse()?;
+                let val: u32 = if let Some(s) = s.strip_prefix("0x") {
+                    u32::from_str_radix(s, 16)?
+                } else {
+                    s.parse()?
+                };
                 Ok(vec![(val >> 16) as u16, (val & 0xFFFF) as u16])
             }
             ValueType::U64 => {
-                let val: u64 = s.parse()?;
+                let val: u64 = if let Some(s) = s.strip_prefix("0x") {
+                    u64::from_str_radix(s, 16)?
+                } else {
+                    s.parse()?
+                };
                 Ok(vec![
                     ((val >> 48) & 0xFFFF) as u16,
                     ((val >> 32) & 0xFFFF) as u16,

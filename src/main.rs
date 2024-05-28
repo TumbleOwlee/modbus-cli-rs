@@ -93,7 +93,6 @@ fn main() {
 
     let (status_send, status_recv) = channel::<Status>(10);
     let (log_send, log_recv) = channel::<LogMsg>(10);
-    let (command_send, command_recv) = channel::<Command>(10);
 
     // Initialize tokio runtime for modbus server
     let runtime = Runtime::new().panic(|e| format!("Failed to create runtime. [{}]", e));
@@ -103,7 +102,12 @@ fn main() {
         ip: args.ip,
         interval_ms: config.interval_ms,
     };
+
+    let mut command_send = None;
+
     if args.client {
+        let (cmd_send, cmd_recv) = channel::<Command>(10);
+        command_send = Some(cmd_send);
         let memory = memory.clone();
         let definitions = config.definitions.clone();
         let contiguous_memory = config.contiguous_memory.clone();
@@ -116,7 +120,7 @@ fn main() {
                     contiguous_memory,
                     definitions,
                     status_send,
-                    command_recv,
+                    cmd_recv,
                     log_send,
                 )
                 .await

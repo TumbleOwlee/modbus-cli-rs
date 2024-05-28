@@ -11,7 +11,7 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 use tokio::sync::mpsc::{Receiver, Sender};
-use tokio_modbus::prelude::Reader;
+use tokio_modbus::prelude::{Reader, Writer};
 use tokio_modbus::FunctionCode;
 
 /// Run modbus client
@@ -134,6 +134,9 @@ pub async fn run(
     let mut op_idx = 0;
     loop {
         if let Some(ref mut context) = connection {
+            let mut disconnect = false;
+
+            // Perform next read of registers
             let now = SystemTime::now();
             let res = now.duration_since(time_last_read);
             if res.is_ok_and(|d| d.as_millis() > tcp_config.interval_ms as u128) {
@@ -184,9 +187,11 @@ pub async fn run(
                     let _ = status_send
                         .send(Status::String(str!("Modbus TCP disconnected.")))
                         .await;
-                    connection = None;
+                    disconnect = true;
                 }
             }
+
+            // Execute next command if available
             if let Ok(cmd) = command_recv.try_recv() {
                 match cmd {
                     Command::Disconnect => {
@@ -199,10 +204,25 @@ pub async fn run(
                                 tcp_config.ip, tcp_config.port
                             )))
                             .await;
-                        connection = None;
+                        disconnect = true;
                     }
                     Command::Connect => {}
+                    Command::WriteMultipleRegisters((addr, vec)) => {
+                        if let Err(e) = context.write_multiple_registers(addr, &vec).await {
+                            let _ = log_send
+                                .send(LogMsg::err(&format!(
+                                    "Failed to write address {addr} with values {vec:?} [{e}]."
+                                )))
+                                .await;
+                            disconnect = true;
+                        }
+                    }
                 }
+            }
+
+            // Reset connection on error
+            if disconnect {
+                connection = None;
             }
         } else if let Ok(cmd) = command_recv.try_recv() {
             match cmd {
@@ -229,6 +249,7 @@ pub async fn run(
                     op_idx = 0;
                 }
                 Command::Disconnect => {}
+                Command::WriteMultipleRegisters(_) => {}
             }
         }
         tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
