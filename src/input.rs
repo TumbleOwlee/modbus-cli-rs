@@ -29,9 +29,9 @@ pub struct InputField {
 }
 
 pub struct InputStyle {
-    default: Style,
-    selected: Style,
-    cursor: Style,
+    pub default: Style,
+    pub selected: Style,
+    pub cursor: Style,
 }
 
 impl Default for InputStyle {
@@ -211,6 +211,10 @@ impl InputField {
 
     pub fn set_placeholder(&mut self, input: String) {
         self.placeholder = Some(input);
+    }
+
+    pub fn set_style(&mut self, style: InputStyle) {
+        self.style = style;
     }
 
     pub fn draw(&self, f: &mut Frame, area: Rect) {

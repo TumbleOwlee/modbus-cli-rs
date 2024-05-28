@@ -199,6 +199,15 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
                     .margins(Margin {
                         vertical: 0,
                         horizontal: 1,
+                    })
+                    .style(InputStyle {
+                        selected: Style::default()
+                            .fg(PALETTES[0].c400)
+                            .bg(tailwind::SLATE.c950),
+                        cursor: Style::default()
+                            .bg(PALETTES[0].c400)
+                            .fg(tailwind::SLATE.c950),
+                        ..InputStyle::default()
                     }),
             },
         }
@@ -340,6 +349,15 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
 
     pub fn set_colors(&mut self) {
         self.colors = TableColors::new(&PALETTES[self.color_index]);
+        self.edit_dialog.value.set_style(InputStyle {
+            selected: Style::default()
+                .fg(PALETTES[self.color_index].c400)
+                .bg(tailwind::SLATE.c950),
+            cursor: Style::default()
+                .bg(PALETTES[self.color_index].c400)
+                .fg(tailwind::SLATE.c950),
+            ..InputStyle::default()
+        })
     }
 
     pub fn switch(&mut self) {
