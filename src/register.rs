@@ -17,7 +17,7 @@ pub enum ValueType {
 }
 
 impl ValueType {
-    pub fn from(&self, bytes: &[u16]) -> anyhow::Result<String> {
+    pub fn as_str(&self, bytes: &[u16]) -> anyhow::Result<String> {
         match self {
             ValueType::PackedString => Ok(String::from_utf8(
                 bytes
@@ -48,6 +48,54 @@ impl ValueType {
                     + (((*bytes.get(2).unwrap()) as u64) << 16)
                     + (*bytes.get(3).unwrap()) as u64;
                 Ok(format!("0x{:02$X} ({})", val, val, 16))
+            }
+        }
+    }
+
+    pub fn from_str(&self, s: &str) -> anyhow::Result<Vec<u16>> {
+        match self {
+            ValueType::PackedString => {
+                let mut v = Vec::with_capacity(s.len() / 2 + 1);
+                let bytes = s.as_bytes();
+                let mut i = 0usize;
+                loop {
+                    let mut value: u16 = 0;
+                    if i < s.len() {
+                        value += (bytes[i] as u16) << 8;
+                    }
+                    if (i + 1) < s.len() {
+                        value += bytes[i + 1] as u16;
+                    }
+                    v.push(value);
+                    i += 2;
+
+                    if i >= s.len() {
+                        break;
+                    }
+                }
+                Ok(v)
+            }
+            ValueType::LooseString => Ok(s.chars().map(|c| c as u16).collect()),
+            ValueType::U8 => {
+                let val: u8 = s.parse()?;
+                Ok(vec![val as u16])
+            }
+            ValueType::U16 => {
+                let val: u16 = s.parse()?;
+                Ok(vec![val])
+            }
+            ValueType::U32 => {
+                let val: u32 = s.parse()?;
+                Ok(vec![(val >> 16) as u16, (val & 0xFFFF) as u16])
+            }
+            ValueType::U64 => {
+                let val: u64 = s.parse()?;
+                Ok(vec![
+                    ((val >> 48) & 0xFFFF) as u16,
+                    ((val >> 32) & 0xFFFF) as u16,
+                    ((val >> 16) & 0xFFFF) as u16,
+                    (val & 0xFFFF) as u16,
+                ])
             }
         }
     }
@@ -233,6 +281,13 @@ impl<'a, const SLICE_SIZE: usize> Handler<'a, SLICE_SIZE> {
         &self.values
     }
 
+    pub fn set_values(&mut self, addr: u16, values: &[u16]) -> anyhow::Result<()> {
+        let mut memory = self.memory.lock().unwrap();
+        memory
+            .write(Range::new(addr, addr + values.len() as u16), values)
+            .map(|_| ())
+    }
+
     pub fn update(&mut self) -> anyhow::Result<()> {
         let mut memory = self.memory.lock().unwrap();
         for (name, def) in self.definitions.iter() {
@@ -243,7 +298,7 @@ impl<'a, const SLICE_SIZE: usize> Handler<'a, SLICE_SIZE> {
                     .into_iter()
                     .copied()
                     .collect();
-                value.value = def.get_type().from(&bytes)?;
+                value.value = def.get_type().as_str(&bytes)?;
                 value.raw.copy_from_slice(&bytes);
             } else {
                 panic!("Name not found in value map in `update()`.");

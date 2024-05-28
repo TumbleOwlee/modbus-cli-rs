@@ -180,16 +180,14 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
                 register: InputField::new()
                     .title(str!("Register"))
                     .bordered(true)
-                    .placeholder(str!("Some placeholder"))
                     .margins(Margin {
                         vertical: 0,
                         horizontal: 1,
                     })
                     .disabled(),
                 value_type: InputField::new()
-                    .title(str!("Value Type"))
+                    .title(str!("Type"))
                     .bordered(true)
-                    .placeholder(str!("Some placeholder"))
                     .margins(Margin {
                         vertical: 0,
                         horizontal: 1,
@@ -198,7 +196,6 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
                 value: InputField::new()
                     .title(str!("Value"))
                     .bordered(true)
-                    .placeholder(str!("Some placeholder"))
                     .margins(Margin {
                         vertical: 0,
                         horizontal: 1,
@@ -454,8 +451,49 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
                                 _ => {}
                             },
                             Popup::Edit(_) => match key.code {
-                                KeyCode::Enter => break,
-                                KeyCode::Esc => break,
+                                KeyCode::Enter => {
+                                    match app.popup {
+                                        Popup::Edit(ref register) => {
+                                            if let Some(input) = app.edit_dialog.value.get_input() {
+                                                match register.r#type().from_str(&input) {
+                                                    Ok(v) => {
+                                                        if v.len() > register.raw().len() {
+                                                            app.log_entries.push(LogMsg::err(
+                                                                "Provided input requires a longer register as available.",
+                                                            ));
+                                                        } else if let Err(e) = app
+                                                            .register_handler
+                                                            .set_values(register.address(), &v)
+                                                        {
+                                                            app.log_entries.push(LogMsg::err(
+                                                                &format!("{}", e),
+                                                            ));
+                                                            if let Err(e) =
+                                                                app.register_handler.update()
+                                                            {
+                                                                app.log_entries.push(LogMsg::err(
+                                                                    &format!("{}", e),
+                                                                ));
+                                                            }
+                                                        } else {
+                                                            app.edit_dialog.value.clear_input();
+                                                            app.popup = Popup::None;
+                                                        }
+                                                    }
+                                                    Err(e) => {
+                                                        app.log_entries
+                                                            .push(LogMsg::err(&format!("{}", e)));
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        Popup::None => panic!("No popup value."),
+                                    };
+                                }
+                                KeyCode::Esc => {
+                                    app.edit_dialog.value.clear_input();
+                                    app.popup = Popup::None;
+                                }
                                 _ => {
                                     app.edit_dialog.value.handle_events(key.modifiers, key.code);
                                     app.edit_dialog.value.select();
@@ -513,7 +551,7 @@ fn ui<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_SIZE>, status:
 
 fn render_popup<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_SIZE>) {
     let width = std::cmp::min(f.size().width, 50);
-    let height = std::cmp::min(f.size().height, 18);
+    let height = std::cmp::min(f.size().height, 19);
     let layout = Layout::horizontal([
         Constraint::Min(1),
         Constraint::Length(width),
@@ -544,10 +582,13 @@ fn render_edit<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_SIZE>
     f.render_widget(block, area);
 
     let area = Layout::vertical([
-        Constraint::Length(4),
-        Constraint::Length(4),
-        Constraint::Length(4),
-        Constraint::Length(4),
+        Constraint::Length(3),
+        Constraint::Length(1),
+        Constraint::Length(3),
+        Constraint::Length(1),
+        Constraint::Length(3),
+        Constraint::Length(1),
+        Constraint::Length(3),
     ])
     .split(inner.inner(&Margin {
         vertical: 1,
@@ -555,9 +596,9 @@ fn render_edit<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_SIZE>
     }));
 
     app.edit_dialog.name.draw(f, area[0]);
-    app.edit_dialog.register.draw(f, area[1]);
-    app.edit_dialog.value_type.draw(f, area[2]);
-    app.edit_dialog.value.draw(f, area[3]);
+    app.edit_dialog.register.draw(f, area[2]);
+    app.edit_dialog.value_type.draw(f, area[4]);
+    app.edit_dialog.value.draw(f, area[6]);
 }
 
 fn vec_as_str(v: &[u16], hex: bool) -> String {

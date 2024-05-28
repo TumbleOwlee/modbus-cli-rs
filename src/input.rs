@@ -200,7 +200,13 @@ impl InputField {
     }
 
     pub fn set_input(&mut self, input: String) {
+        self.cursor_pos = input.len();
         self.input = Some(input);
+    }
+
+    pub fn clear_input(&mut self) {
+        self.input = None;
+        self.cursor_pos = 0;
     }
 
     pub fn set_placeholder(&mut self, input: String) {
@@ -237,7 +243,10 @@ impl InputField {
             }
             let inner = block.inner(area);
             f.render_widget(block, area);
-            area = inner.inner(&Margin { vertical: 0, horizontal: 1});
+            area = inner.inner(&Margin {
+                vertical: 0,
+                horizontal: 1,
+            });
         }
 
         let mut text = self
