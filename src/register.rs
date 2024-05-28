@@ -14,6 +14,10 @@ pub enum ValueType {
     U16,
     U32,
     U64,
+    I8,
+    I16,
+    I32,
+    I64,
 }
 
 impl ValueType {
@@ -47,6 +51,26 @@ impl ValueType {
                     + (((*bytes.get(1).unwrap()) as u64) << 32)
                     + (((*bytes.get(2).unwrap()) as u64) << 16)
                     + (*bytes.get(3).unwrap()) as u64;
+                Ok(format!("0x{:02$X} ({})", val, val, 16))
+            }
+            ValueType::I8 => {
+                let val: i8 = (*(bytes.first().unwrap()) & 0xFF) as i8;
+                Ok(format!("{:#04X} ({})", val, val))
+            }
+            ValueType::I16 => {
+                let val: i16 = *bytes.first().unwrap() as i16;
+                Ok(format!("{:#06X} ({})", val, val))
+            }
+            ValueType::I32 => {
+                let val: i32 =
+                    (((*bytes.first().unwrap()) as i32) << 16) + ((*bytes.get(1).unwrap()) as i32);
+                Ok(format!("0x{:02$X} ({})", val, val, 8))
+            }
+            ValueType::I64 => {
+                let val: i64 = (((*bytes.first().unwrap()) as i64) << 48)
+                    + (((*bytes.get(1).unwrap()) as i64) << 32)
+                    + (((*bytes.get(2).unwrap()) as i64) << 16)
+                    + (*bytes.get(3).unwrap()) as i64;
                 Ok(format!("0x{:02$X} ({})", val, val, 16))
             }
         }
@@ -103,6 +127,51 @@ impl ValueType {
             ValueType::U64 => {
                 let val: u64 = if let Some(s) = s.strip_prefix("0x") {
                     u64::from_str_radix(s, 16)?
+                } else {
+                    s.parse()?
+                };
+                Ok(vec![
+                    ((val >> 48) & 0xFFFF) as u16,
+                    ((val >> 32) & 0xFFFF) as u16,
+                    ((val >> 16) & 0xFFFF) as u16,
+                    (val & 0xFFFF) as u16,
+                ])
+            }
+            ValueType::I8 => {
+                let val: i8 = if let Some(s) = s.strip_prefix("-0x") {
+                    -i8::from_str_radix(s, 16)?
+                } else if let Some(s) = s.strip_prefix("0x") {
+                    u8::from_str_radix(s, 16)? as i8
+                } else {
+                    s.parse()?
+                };
+                Ok(vec![val as u16])
+            }
+            ValueType::I16 => {
+                let val: i16 = if let Some(s) = s.strip_prefix("-0x") {
+                    -i16::from_str_radix(s, 16)?
+                } else if let Some(s) = s.strip_prefix("0x") {
+                    u16::from_str_radix(s, 16)? as i16
+                } else {
+                    s.parse()?
+                };
+                Ok(vec![val as u16])
+            }
+            ValueType::I32 => {
+                let val: i32 = if let Some(s) = s.strip_prefix("-0x") {
+                    -i32::from_str_radix(s, 16)?
+                } else if let Some(s) = s.strip_prefix("0x") {
+                    u32::from_str_radix(s, 16)? as i32
+                } else {
+                    s.parse()?
+                };
+                Ok(vec![(val >> 16) as u16, (val & 0xFFFF) as u16])
+            }
+            ValueType::I64 => {
+                let val: i64 = if let Some(s) = s.strip_prefix("0x") {
+                    -i64::from_str_radix(s, 16)? 
+                } else if let Some(s) = s.strip_prefix("0x") {
+                    u64::from_str_radix(s, 16)? as i64
                 } else {
                     s.parse()?
                 };
