@@ -1,6 +1,6 @@
 # Modbus CLI
 
-Modbus CLI is Rust implementation of a simple and intuative commandline application to interact with or simulate a modbus server.
+Modbus CLI is a Rust implementation of a simple and intuative commandline application to interact with or simulate a modbus server.
 
 If you prefer a GUI application, check out [QModbus](https://github.com/ed-chemnitz/qmodbus/) or similar applications.
 
