@@ -147,6 +147,7 @@ impl Definition {
     }
 }
 
+#[derive(Clone)]
 pub struct Register {
     address: u16,
     value: String,

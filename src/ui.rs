@@ -1,4 +1,5 @@
-use crate::register::Handler;
+use crate::input::*;
+use crate::register::{Handler, Register};
 use crate::util::str;
 use crate::{Command, LogMsg, Status};
 
@@ -54,7 +55,7 @@ impl RowColorPair {
 }
 
 #[derive(Clone, Debug)]
-struct ColorPair<Forground: Clone, Background: Clone> {
+pub struct ColorPair<Forground: Clone, Background: Clone> {
     pub fg: Forground,
     pub bg: Background,
 }
@@ -122,6 +123,11 @@ impl UiTable {
     }
 }
 
+pub enum Popup {
+    None,
+    Edit(Register),
+}
+
 pub struct App<'a, const SLICE_SIZE: usize> {
     register_handler: Handler<'a, SLICE_SIZE>,
     register_table: UiTable,
@@ -131,6 +137,15 @@ pub struct App<'a, const SLICE_SIZE: usize> {
     color_index: usize,
     show_as_hex: bool,
     history_len: usize,
+    popup: Popup,
+    edit_dialog: EditDialog,
+}
+
+pub struct EditDialog {
+    pub name: InputField,
+    pub register: InputField,
+    pub value_type: InputField,
+    pub value: InputField,
 }
 
 impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
@@ -152,6 +167,43 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
             color_index: 0,
             show_as_hex: true,
             history_len,
+            popup: Popup::None,
+            edit_dialog: EditDialog {
+                name: InputField::new()
+                    .title(str!("Name"))
+                    .bordered(true)
+                    .margins(Margin {
+                        vertical: 0,
+                        horizontal: 1,
+                    })
+                    .disabled(),
+                register: InputField::new()
+                    .title(str!("Register"))
+                    .bordered(true)
+                    .placeholder(str!("Some placeholder"))
+                    .margins(Margin {
+                        vertical: 0,
+                        horizontal: 1,
+                    })
+                    .disabled(),
+                value_type: InputField::new()
+                    .title(str!("Value Type"))
+                    .bordered(true)
+                    .placeholder(str!("Some placeholder"))
+                    .margins(Margin {
+                        vertical: 0,
+                        horizontal: 1,
+                    })
+                    .disabled(),
+                value: InputField::new()
+                    .title(str!("Value"))
+                    .bordered(true)
+                    .placeholder(str!("Some placeholder"))
+                    .margins(Margin {
+                        vertical: 0,
+                        horizontal: 1,
+                    }),
+            },
         }
     }
 
@@ -337,27 +389,78 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
             if event::poll(Duration::from_millis(50))? {
                 if let Event::Key(key) = event::read()? {
                     if key.kind == KeyEventKind::Press {
-                        match key.code {
-                            KeyCode::Char('q') | KeyCode::Esc => break,
-                            KeyCode::Char('j') | KeyCode::Down => app.move_down(),
-                            KeyCode::Char('k') | KeyCode::Up => app.move_up(),
-                            KeyCode::Char('h') | KeyCode::Left => app.move_left(),
-                            KeyCode::Char('l') | KeyCode::Right => app.move_right(),
-                            KeyCode::Char('f') | KeyCode::Tab => app.switch(),
-                            KeyCode::Char('t') => app.switch_color(),
-                            KeyCode::Char('d') => {
-                                command_send.blocking_send(Command::Disconnect)?
-                            }
-                            KeyCode::Char('g') => app.move_top(),
-                            KeyCode::Char('G') => app.move_bottom(),
-                            KeyCode::Char('c') => command_send.blocking_send(Command::Connect)?,
-                            KeyCode::PageUp | KeyCode::Char('m') => app.log_move_up(),
-                            KeyCode::PageDown | KeyCode::Char('n') => app.log_move_down(),
-                            KeyCode::Home | KeyCode::Char('b') => app.log_move_left(),
-                            KeyCode::End | KeyCode::Char(',') => app.log_move_right(),
-                            KeyCode::Char('v') => app.log_move_top(),
-                            KeyCode::Char('V') => app.log_move_bottom(),
-                            _ => {}
+                        match app.popup {
+                            Popup::None => match key.code {
+                                KeyCode::Char('q') | KeyCode::Esc => break,
+                                KeyCode::Char('j') | KeyCode::Down => app.move_down(),
+                                KeyCode::Char('k') | KeyCode::Up => app.move_up(),
+                                KeyCode::Char('h') | KeyCode::Left => app.move_left(),
+                                KeyCode::Char('l') | KeyCode::Right => app.move_right(),
+                                KeyCode::Char('f') | KeyCode::Tab => app.switch(),
+                                KeyCode::Char('t') => app.switch_color(),
+                                KeyCode::Char('d') => {
+                                    command_send.blocking_send(Command::Disconnect)?
+                                }
+                                KeyCode::Char('g') => app.move_top(),
+                                KeyCode::Char('G') => app.move_bottom(),
+                                KeyCode::Char('c') => {
+                                    command_send.blocking_send(Command::Connect)?
+                                }
+                                KeyCode::PageUp | KeyCode::Char('m') => app.log_move_up(),
+                                KeyCode::PageDown | KeyCode::Char('n') => app.log_move_down(),
+                                KeyCode::Home | KeyCode::Char('b') => app.log_move_left(),
+                                KeyCode::End | KeyCode::Char(',') => app.log_move_right(),
+                                KeyCode::Char('v') => app.log_move_top(),
+                                KeyCode::Char('V') => app.log_move_bottom(),
+                                KeyCode::Enter => {
+                                    if let Some(i) = app.register_table.table_state.selected() {
+                                        let entry = app
+                                            .register_handler
+                                            .values()
+                                            .iter()
+                                            .filter(|(n, _)| !n.starts_with("hide_"))
+                                            .sorted_by(|a, b| {
+                                                Ord::cmp(&a.1.address(), &b.1.address())
+                                            })
+                                            .enumerate()
+                                            .filter_map(|(j, (name, r))| {
+                                                if j == i {
+                                                    Some((name.clone(), (*r).clone()))
+                                                } else {
+                                                    None
+                                                }
+                                            })
+                                            .collect::<Vec<(String, Register)>>();
+                                        let entry = entry.first().unwrap();
+                                        app.log_entries.push(LogMsg::info(&format!(
+                                            "Start edit of register {entry:#06X} ({entry})",
+                                            entry = entry.1.address()
+                                        )));
+                                        app.edit_dialog.name.set_input(entry.0.clone());
+                                        app.edit_dialog.register.set_input(format!(
+                                            "{a:#06X} ({a})",
+                                            a = entry.1.address()
+                                        ));
+                                        app.edit_dialog
+                                            .value_type
+                                            .set_input(format!("{:?}", entry.1.r#type()));
+                                        app.edit_dialog
+                                            .value
+                                            .set_placeholder(entry.1.value().clone());
+                                        app.edit_dialog.value.select();
+                                        app.popup = Popup::Edit(entry.1.clone());
+                                    }
+                                }
+                                _ => {}
+                            },
+                            Popup::Edit(_) => match key.code {
+                                KeyCode::Enter => break,
+                                KeyCode::Esc => break,
+                                _ => {
+                                    app.edit_dialog.value.handle_events(key.modifiers, key.code);
+                                    app.edit_dialog.value.select();
+                                }
+                            },
                         }
                     }
                 }
@@ -403,6 +506,58 @@ fn ui<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_SIZE>, status:
     render_log::<SLICE_SIZE>(f, app, rects[2]);
     render_scrollbar::<SLICE_SIZE>(f, &mut app.log_table.vertical_scroll, rects[2]);
     render_log_footer::<SLICE_SIZE>(f, app, rects[3]);
+
+    // Render popup
+    render_popup::<SLICE_SIZE>(f, app)
+}
+
+fn render_popup<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_SIZE>) {
+    let width = std::cmp::min(f.size().width, 50);
+    let height = std::cmp::min(f.size().height, 18);
+    let layout = Layout::horizontal([
+        Constraint::Min(1),
+        Constraint::Length(width),
+        Constraint::Min(1),
+    ])
+    .split(f.size());
+    let area = Layout::vertical([
+        Constraint::Min(1),
+        Constraint::Length(height),
+        Constraint::Min(1),
+    ])
+    .split(layout[1])[1];
+
+    if let Popup::None = app.popup {
+        return;
+    }
+
+    f.render_widget(Clear, area);
+    render_edit(f, app, area);
+}
+
+fn render_edit<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_SIZE>, area: Rect) {
+    let block = Block::bordered()
+        .title("Edit Register")
+        .title_alignment(Alignment::Center)
+        .bg(app.colors.buffer.bg);
+    let inner = block.inner(area);
+    f.render_widget(block, area);
+
+    let area = Layout::vertical([
+        Constraint::Length(4),
+        Constraint::Length(4),
+        Constraint::Length(4),
+        Constraint::Length(4),
+    ])
+    .split(inner.inner(&Margin {
+        vertical: 1,
+        horizontal: 1,
+    }));
+
+    app.edit_dialog.name.draw(f, area[0]);
+    app.edit_dialog.register.draw(f, area[1]);
+    app.edit_dialog.value_type.draw(f, area[2]);
+    app.edit_dialog.value.draw(f, area[3]);
 }
 
 fn vec_as_str(v: &[u16], hex: bool) -> String {

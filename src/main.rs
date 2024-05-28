@@ -1,3 +1,4 @@
+mod input;
 mod memory;
 mod register;
 mod tcp;
