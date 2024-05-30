@@ -7,6 +7,7 @@ mod tokio;
 mod types;
 mod ui;
 mod util;
+mod value;
 
 use crate::memory::{Memory, Range};
 use crate::register::{Address, Definition, Handler};

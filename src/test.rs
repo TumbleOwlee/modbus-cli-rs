@@ -1,7 +1,8 @@
 #[cfg(test)]
 mod tests {
     use crate::memory::{Memory, Range};
-    use crate::register::{AccessType, Definition, Handler, ValueType};
+    use crate::register::{AccessType, Definition, Handler};
+    use crate::value::ValueType;
     use std::collections::HashMap;
     use std::sync::{Arc, Mutex};
 

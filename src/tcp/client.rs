@@ -1,8 +1,9 @@
 use crate::memory::{Memory, Range};
-use crate::register::{AccessType, Definition, ValueType};
+use crate::register::{AccessType, Definition};
 use crate::tcp::TcpConfig;
 use crate::types::LogMsg;
 use crate::util::{str, Expect};
+use crate::value::ValueType;
 use crate::{Command, ContiguousMemory, Status};
 
 use itertools::Itertools;
