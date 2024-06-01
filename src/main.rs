@@ -1,38 +1,36 @@
-mod input;
-mod memory;
-mod register;
+mod mem;
+mod msg;
 mod tcp;
 mod test;
-mod tokio;
-mod types;
 mod ui;
 mod util;
-mod value;
+mod widgets;
 
-use crate::memory::{Memory, Range};
-use crate::register::{Address, Definition, Handler};
+use crate::mem::memory::{Memory, Range};
+use crate::msg::{Command, LogMsg, Status};
+use crate::mem::register::{Address, Definition, Handler};
 use crate::tcp::client::run as run_client;
 use crate::tcp::server::run as run_server;
 use crate::tcp::TcpConfig;
-use crate::types::{Command, LogMsg, Status};
 use crate::ui::App;
+use crate::util::tokio::spawn_detach;
 use crate::util::{str, Expect};
 
 use clap::Parser;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::default::Default;
 use std::fs::File;
 use std::io::BufReader;
 use std::sync::{Arc, Mutex};
 use tokio::runtime::Runtime;
-use tokio::spawn_detach;
 use tokio::sync::mpsc::channel;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 struct Args {
     /// Path to the JSON configuration file providing the register definitions.
-    config: String,
+    config: Option<String>,
 
     /// Switch on verbose output.
     #[arg(short, long, default_value_t = false)]
@@ -65,6 +63,17 @@ pub struct Config {
     definitions: HashMap<String, Definition>,
 }
 
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            history_length: 50,
+            interval_ms: 500,
+            contiguous_memory: Vec::new(),
+            definitions: HashMap::new(),
+        }
+    }
+}
+
 impl Config {
     /// Read register configuration from file
     pub fn read(path: &str) -> anyhow::Result<Self> {
@@ -78,8 +87,11 @@ fn main() {
     let args = Args::parse();
 
     // Read register definitions
-    let config =
-        Config::read(&args.config).panic(|e| format!("Failed to read configuration file. [{}]", e));
+    let config = if let Some(config) = &args.config {
+        Config::read(config).panic(|e| format!("Failed to read configuration file. [{}]", e))
+    } else {
+        Config::default()
+    };
 
     // Initialize memory storage for all registers
     let mut memory = Memory::<1024, u16>::new();
@@ -137,11 +149,13 @@ fn main() {
         });
     };
 
+    let config = Arc::new(Mutex::new(config));
+
     // Initialize register handler
-    let register_handler = Handler::new(&config.definitions, memory.clone());
+    let register_handler = Handler::new(config.clone(), memory.clone());
 
     // Run UI
-    let app = App::new(register_handler, config.history_length);
+    let app = App::new(register_handler, config);
     app.run(status_recv, log_recv, command_send)
         .panic(|e| format!("Run app failed [{}]", e));
     //runtime.block_on(async { tokio::join_all().await });

@@ -1,6 +1,8 @@
-use crate::memory::{Memory, Range};
+use crate::mem::memory::{Memory, Range};
+use crate::mem::value::ValueType;
+use crate::util::str;
 use crate::util::Expect;
-use crate::value::ValueType;
+use crate::Config;
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -111,7 +113,10 @@ pub struct Register {
 }
 
 impl Register {
-    pub fn new(definition: &Definition) -> Self {
+    pub fn new<const SLICE_SIZE: usize>(
+        definition: &Definition,
+        memory: &Arc<Mutex<Memory<SLICE_SIZE, u16>>>,
+    ) -> Self {
         let read_code = FunctionCode::new(definition.read_code);
         match read_code {
             FunctionCode::WriteSingleCoil
@@ -127,10 +132,24 @@ impl Register {
             }
             _ => {}
         };
+
+        let bytes: Vec<u16> = memory
+            .lock()
+            .unwrap()
+            .read(&definition.get_range())
+            .panic(|e| format!("{}", e))
+            .into_iter()
+            .copied()
+            .collect();
+        let value = definition
+            .get_type()
+            .as_str(&bytes)
+            .unwrap_or(str!("Undefined"));
+
         Self {
             address: definition.address.as_u16(),
-            value: String::new(),
-            raw: vec![0; definition.get_range().length()],
+            value,
+            raw: bytes,
             r#type: definition.get_type().clone(),
             access: definition.access_type(),
         }
@@ -157,34 +176,29 @@ impl Register {
     }
 }
 
-pub struct Handler<'a, const SLICE_SIZE: usize> {
-    definitions: &'a HashMap<String, Definition>,
-    values: HashMap<String, Register>,
+pub struct Handler<const SLICE_SIZE: usize> {
+    config: Arc<Mutex<Config>>,
     memory: Arc<Mutex<Memory<SLICE_SIZE, u16>>>,
 }
 
-impl<'a, const SLICE_SIZE: usize> Handler<'a, SLICE_SIZE> {
+impl<const SLICE_SIZE: usize> Handler<SLICE_SIZE> {
     #[allow(dead_code)]
-    pub fn new(
-        definitions: &'a HashMap<String, Definition>,
-        memory: Arc<Mutex<Memory<SLICE_SIZE, u16>>>,
-    ) -> Self {
-        Self {
-            definitions,
-            values: definitions
-                .iter()
-                .map(|(name, def)| (name.clone(), Register::new(def)))
-                .collect(),
-            memory,
-        }
+    pub fn new(config: Arc<Mutex<Config>>, memory: Arc<Mutex<Memory<SLICE_SIZE, u16>>>) -> Self {
+        Self { config, memory }
     }
 
     pub fn len(&self) -> usize {
-        self.definitions.len()
+        self.config.lock().unwrap().definitions.len()
     }
 
-    pub fn values(&self) -> &HashMap<String, Register> {
-        &self.values
+    pub fn values(&self) -> HashMap<String, Register> {
+        self.config
+            .lock()
+            .unwrap()
+            .definitions
+            .iter()
+            .map(|(name, def)| (name.clone(), Register::new(def, &self.memory)))
+            .collect()
     }
 
     pub fn set_values(&mut self, addr: u16, values: &[u16]) -> anyhow::Result<()> {
@@ -192,24 +206,5 @@ impl<'a, const SLICE_SIZE: usize> Handler<'a, SLICE_SIZE> {
         memory
             .write(Range::new(addr, addr + values.len() as u16), values)
             .map(|_| ())
-    }
-
-    pub fn update(&mut self) -> anyhow::Result<()> {
-        let mut memory = self.memory.lock().unwrap();
-        for (name, def) in self.definitions.iter() {
-            if let Some(value) = self.values.get_mut(name) {
-                let bytes: Vec<u16> = memory
-                    .read(&def.get_range())
-                    .panic(|e| format!("{}", e))
-                    .into_iter()
-                    .copied()
-                    .collect();
-                value.value = def.get_type().as_str(&bytes)?;
-                value.raw.copy_from_slice(&bytes);
-            } else {
-                panic!("Name not found in value map in `update()`.");
-            }
-        }
-        Ok(())
     }
 }

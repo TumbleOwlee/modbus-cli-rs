@@ -1,3 +1,5 @@
+pub mod tokio;
+
 /// Simple macro to prevent boilerplate of `.to_owned()`
 ///
 /// The macro returns a `String` from the given `&str` value. It removes the boilerplate

@@ -1,10 +1,14 @@
-use crate::input::*;
-use crate::register::{Handler, Register};
+use crate::mem::register::{AccessType, Definition};
+use crate::mem::register::{Handler, Register};
 use crate::util::str;
-use crate::{Command, LogMsg, Status};
+use crate::mem::value::ValueType;
+use crate::widgets::{EditDialog, EditFieldType};
+use crate::{Command, Config, LogMsg, Status};
 
 use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind},
+    event::{
+        self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyEventKind,
+    },
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -13,6 +17,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::{prelude::*, widgets::*};
 use std::io::stdout;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use style::palette::tailwind;
 use tokio::sync::mpsc::{Receiver, Sender};
@@ -26,13 +31,17 @@ const PALETTES: [tailwind::Palette; 4] = [
 ];
 
 const REGISTER_INFO_TEXT: &str =
-    "(q) quit | (k) up | (j) down | (h) left | (l) right | (g) move top | (G) move bottom | (t) color | (f) hex/dec | (d) disconnect | (c) connect";
-const LOGGER_INFO_TEXT: &str =
-    "(q) quit | (PageUp | m) log up | (PageDown | n) log down | (Home | b) log left | (End | ,) log right | (v) log move top | (V) log move bottom";
+    "(q)uit | (k) up | (j) down | (h) left | (l) right | (g) top | (G) bottom | (t)heme | (f)ormat | (d)isconnect | (c)onnect | (e)dit | (s)ave";
+const LOGGER_INFO_TEXT: &str = "(m) up | (n) down | (b) left | (,) right | (v) top | (V) bottom";
 
 const LOG_HEADER: &str = " Modbus Log";
 
 const ITEM_HEIGHT: usize = 3;
+
+enum LoopAction {
+    Break,
+    Continue,
+}
 
 #[derive(Clone, Debug)]
 struct RowColorPair {
@@ -128,28 +137,21 @@ pub enum Popup {
     Edit(Register),
 }
 
-pub struct App<'a, const SLICE_SIZE: usize> {
-    register_handler: Handler<'a, SLICE_SIZE>,
+pub struct App<const SLICE_SIZE: usize> {
+    register_handler: Handler<SLICE_SIZE>,
     register_table: UiTable,
     log_entries: Vec<LogMsg>,
     log_table: UiTable,
     colors: TableColors,
     color_index: usize,
     show_as_hex: bool,
-    history_len: usize,
+    config: Arc<Mutex<Config>>,
     popup: Popup,
     edit_dialog: EditDialog,
 }
 
-pub struct EditDialog {
-    pub name: InputField,
-    pub register: InputField,
-    pub value_type: InputField,
-    pub value: InputField,
-}
-
-impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
-    pub fn new(register_handler: Handler<'a, SLICE_SIZE>, history_len: usize) -> Self {
+impl<const SLICE_SIZE: usize> App<SLICE_SIZE> {
+    pub fn new(register_handler: Handler<SLICE_SIZE>, config: Arc<Mutex<Config>>) -> Self {
         let original_hook = std::panic::take_hook();
         std::panic::set_hook(Box::new(move |panic| {
             disable_raw_mode().unwrap();
@@ -157,59 +159,22 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
             original_hook(panic);
         }));
 
+        let history_len = config.lock().unwrap().history_length;
+
         let len = register_handler.len();
+        let colors = TableColors::new(&PALETTES[0]);
+        let bg_color = colors.buffer.bg;
         Self {
             register_handler,
             register_table: UiTable::new(len, ITEM_HEIGHT),
             log_entries: Vec::new(),
             log_table: UiTable::new(history_len, 1),
-            colors: TableColors::new(&PALETTES[0]),
+            colors,
             color_index: 0,
             show_as_hex: true,
-            history_len,
+            config,
             popup: Popup::None,
-            edit_dialog: EditDialog {
-                name: InputField::new()
-                    .title(str!("Name"))
-                    .bordered(true)
-                    .margins(Margin {
-                        vertical: 0,
-                        horizontal: 1,
-                    })
-                    .disabled(),
-                register: InputField::new()
-                    .title(str!("Register"))
-                    .bordered(true)
-                    .margins(Margin {
-                        vertical: 0,
-                        horizontal: 1,
-                    })
-                    .disabled(),
-                value_type: InputField::new()
-                    .title(str!("Type"))
-                    .bordered(true)
-                    .margins(Margin {
-                        vertical: 0,
-                        horizontal: 1,
-                    })
-                    .disabled(),
-                value: InputField::new()
-                    .title(str!("Value"))
-                    .bordered(true)
-                    .margins(Margin {
-                        vertical: 0,
-                        horizontal: 1,
-                    })
-                    .style(InputStyle {
-                        selected: Style::default()
-                            .fg(PALETTES[0].c400)
-                            .bg(tailwind::SLATE.c950),
-                        cursor: Style::default()
-                            .bg(PALETTES[0].c400)
-                            .fg(tailwind::SLATE.c950),
-                        ..InputStyle::default()
-                    }),
-            },
+            edit_dialog: EditDialog::new(PALETTES[0].c400, bg_color),
         }
     }
 
@@ -349,36 +314,173 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
 
     pub fn set_colors(&mut self) {
         self.colors = TableColors::new(&PALETTES[self.color_index]);
-        self.edit_dialog.value.set_style(InputStyle {
-            selected: Style::default()
-                .fg(PALETTES[self.color_index].c400)
-                .bg(tailwind::SLATE.c950),
-            cursor: Style::default()
-                .bg(PALETTES[self.color_index].c400)
-                .fg(tailwind::SLATE.c950),
-            ..InputStyle::default()
-        })
+        self.edit_dialog
+            .set_highlight_color(PALETTES[self.color_index].c400);
     }
 
     pub fn switch(&mut self) {
         self.show_as_hex = !self.show_as_hex;
     }
 
+    fn handle_event(
+        &mut self,
+        key: KeyEvent,
+        cmd_sender: &Option<Sender<Command>>,
+    ) -> anyhow::Result<LoopAction> {
+        match key.code {
+            KeyCode::Char('w') => {
+                // TODO: Dialog to add new definition
+                self.config.lock().unwrap().definitions.insert(
+                    format!("Def{}", self.log_entries.len()),
+                    Definition::new(0x4000u16, 2, ValueType::U8, 4, AccessType::ReadWrite),
+                );
+            }
+            KeyCode::Char('s') => {
+                // TODO: Dialog to specify output path
+                let config = self.config.lock().unwrap();
+                let f = std::fs::File::create_new("./test.json")?;
+                let writer = std::io::BufWriter::new(f);
+                let _ = serde_json::to_writer_pretty::<_, Config>(writer, &config);
+            }
+            KeyCode::Char('q') | KeyCode::Esc => return Ok(LoopAction::Break),
+            KeyCode::Char('j') | KeyCode::Down => self.move_down(),
+            KeyCode::Char('k') | KeyCode::Up => self.move_up(),
+            KeyCode::Char('h') | KeyCode::Left => self.move_left(),
+            KeyCode::Char('l') | KeyCode::Right => self.move_right(),
+            KeyCode::Char('f') | KeyCode::Tab => self.switch(),
+            KeyCode::Char('t') => self.switch_color(),
+            KeyCode::Char('d') => {
+                if let Some(ref sender) = cmd_sender {
+                    sender.blocking_send(Command::Disconnect)?
+                }
+            }
+            KeyCode::Char('g') => self.move_top(),
+            KeyCode::Char('G') => self.move_bottom(),
+            KeyCode::Char('c') => {
+                if let Some(ref sender) = cmd_sender {
+                    sender.blocking_send(Command::Connect)?
+                }
+            }
+            KeyCode::PageUp | KeyCode::Char('m') => self.log_move_up(),
+            KeyCode::PageDown | KeyCode::Char('n') => self.log_move_down(),
+            KeyCode::Home | KeyCode::Char('b') => self.log_move_left(),
+            KeyCode::End | KeyCode::Char(',') => self.log_move_right(),
+            KeyCode::Char('v') => self.log_move_top(),
+            KeyCode::Char('V') => self.log_move_bottom(),
+            KeyCode::Enter | KeyCode::Char('e') => {
+                if let Some(i) = self.register_table.table_state.selected() {
+                    let entry = self
+                        .register_handler
+                        .values()
+                        .iter()
+                        .filter(|(n, _)| !n.starts_with("hide_"))
+                        .sorted_by(|a, b| {
+                            Ord::cmp(&a.1.address(), &b.1.address()).then(a.0.cmp(b.0))
+                        })
+                        .enumerate()
+                        .filter_map(|(j, (name, r))| {
+                            if j == i {
+                                Some((name.clone(), (*r).clone()))
+                            } else {
+                                None
+                            }
+                        })
+                        .collect::<Vec<(String, Register)>>();
+                    if !entry.is_empty() {
+                        let entry = entry.first().unwrap();
+                        self.log_entries.push(LogMsg::info(&format!(
+                            "Start edit of register {entry:#06X} ({entry})",
+                            entry = entry.1.address()
+                        )));
+                        self.edit_dialog
+                            .set(EditFieldType::Name, Some(entry.0.clone()), None);
+                        self.edit_dialog.set(
+                            EditFieldType::Register,
+                            Some(format!("{a:#06X} ({a})", a = entry.1.address())),
+                            None,
+                        );
+                        self.edit_dialog.set(
+                            EditFieldType::ValueType,
+                            Some(format!("{:?}", entry.1.r#type())),
+                            None,
+                        );
+                        self.edit_dialog.set(
+                            EditFieldType::Value,
+                            None,
+                            Some(entry.1.value().clone()),
+                        );
+                        self.edit_dialog.focus();
+                        self.popup = Popup::Edit(entry.1.clone());
+                    }
+                }
+            }
+            _ => {}
+        };
+        Ok(LoopAction::Continue)
+    }
+
+    fn handle_event_edit_dialog(&mut self, key: KeyEvent, cmd_sender: &Option<Sender<Command>>) {
+        match key.code {
+            KeyCode::Enter => {
+                match self.popup {
+                    Popup::Edit(ref register) => {
+                        if let Some(input) = self.edit_dialog.get_input(EditFieldType::Value) {
+                            match register.r#type().from_str(&input) {
+                                Ok(v) => {
+                                    if v.len() > register.raw().len() {
+                                        self.log_entries.push(LogMsg::err(
+                                                                "Provided input requires a longer register as available.",
+                                                            ));
+                                    } else if let Some(ref sender) = cmd_sender {
+                                        if let Err(e) =
+                                            sender.blocking_send(Command::WriteMultipleRegisters((
+                                                register.address(),
+                                                v,
+                                            )))
+                                        {
+                                            self.log_entries.push(LogMsg::err(&format!("{}", e)));
+                                        } else {
+                                            self.popup = Popup::None;
+                                        }
+                                    } else if let Err(e) =
+                                        self.register_handler.set_values(register.address(), &v)
+                                    {
+                                        self.log_entries.push(LogMsg::err(&format!("{}", e)));
+                                    } else {
+                                        self.popup = Popup::None;
+                                    }
+                                }
+                                Err(e) => {
+                                    self.log_entries.push(LogMsg::err(&format!("{}", e)));
+                                }
+                            }
+                        }
+                    }
+                    Popup::None => panic!("No popup value."),
+                };
+            }
+            KeyCode::Esc => {
+                self.popup = Popup::None;
+            }
+            _ => {
+                self.edit_dialog.handle_events(key.modifiers, key.code);
+                self.edit_dialog.focus();
+            }
+        }
+    }
+
     pub fn run(
-        self,
+        mut self,
         mut status_recv: Receiver<Status>,
         mut log_recv: Receiver<LogMsg>,
-        command_send: Option<Sender<Command>>,
+        cmd_sender: Option<Sender<Command>>,
     ) -> anyhow::Result<()> {
         enable_raw_mode()?;
         let mut terminal = App::<SLICE_SIZE>::create_terminal()?;
         execute!(terminal.backend_mut(), DisableMouseCapture)?;
 
         let mut status = str!("");
-        let mut app = self;
         loop {
-            let _ = app.register_handler.update();
-
             // Update status
             if let Ok(v) = status_recv.try_recv() {
                 match v {
@@ -391,152 +493,26 @@ impl<'a, const SLICE_SIZE: usize> App<'a, SLICE_SIZE> {
             // Update log
             for _ in 0..5 {
                 if let Ok(v) = log_recv.try_recv() {
-                    app.log_entries.push(v);
+                    self.log_entries.push(v);
                 } else {
                     break;
                 }
             }
 
-            //app.register_handler.update()?;
-            terminal.draw(|f| ui(f, &mut app, status.clone()))?;
+            //self.register_handler.update()?;
+            terminal.draw(|f| ui(f, &mut self, status.clone()))?;
 
             // Handle inputs
             if event::poll(Duration::from_millis(50))? {
                 if let Event::Key(key) = event::read()? {
                     if key.kind == KeyEventKind::Press {
-                        match app.popup {
-                            Popup::None => match key.code {
-                                KeyCode::Char('q') | KeyCode::Esc => break,
-                                KeyCode::Char('j') | KeyCode::Down => app.move_down(),
-                                KeyCode::Char('k') | KeyCode::Up => app.move_up(),
-                                KeyCode::Char('h') | KeyCode::Left => app.move_left(),
-                                KeyCode::Char('l') | KeyCode::Right => app.move_right(),
-                                KeyCode::Char('f') | KeyCode::Tab => app.switch(),
-                                KeyCode::Char('t') => app.switch_color(),
-                                KeyCode::Char('d') => {
-                                    if let Some(ref sender) = command_send {
-                                        sender.blocking_send(Command::Disconnect)?
-                                    }
-                                }
-                                KeyCode::Char('g') => app.move_top(),
-                                KeyCode::Char('G') => app.move_bottom(),
-                                KeyCode::Char('c') => {
-                                    if let Some(ref sender) = command_send {
-                                        sender.blocking_send(Command::Connect)?
-                                    }
-                                }
-                                KeyCode::PageUp | KeyCode::Char('m') => app.log_move_up(),
-                                KeyCode::PageDown | KeyCode::Char('n') => app.log_move_down(),
-                                KeyCode::Home | KeyCode::Char('b') => app.log_move_left(),
-                                KeyCode::End | KeyCode::Char(',') => app.log_move_right(),
-                                KeyCode::Char('v') => app.log_move_top(),
-                                KeyCode::Char('V') => app.log_move_bottom(),
-                                KeyCode::Enter => {
-                                    if let Some(i) = app.register_table.table_state.selected() {
-                                        let entry = app
-                                            .register_handler
-                                            .values()
-                                            .iter()
-                                            .filter(|(n, _)| !n.starts_with("hide_"))
-                                            .sorted_by(|a, b| {
-                                                Ord::cmp(&a.1.address(), &b.1.address())
-                                            })
-                                            .enumerate()
-                                            .filter_map(|(j, (name, r))| {
-                                                if j == i {
-                                                    Some((name.clone(), (*r).clone()))
-                                                } else {
-                                                    None
-                                                }
-                                            })
-                                            .collect::<Vec<(String, Register)>>();
-                                        let entry = entry.first().unwrap();
-                                        app.log_entries.push(LogMsg::info(&format!(
-                                            "Start edit of register {entry:#06X} ({entry})",
-                                            entry = entry.1.address()
-                                        )));
-                                        app.edit_dialog.name.set_input(entry.0.clone());
-                                        app.edit_dialog.register.set_input(format!(
-                                            "{a:#06X} ({a})",
-                                            a = entry.1.address()
-                                        ));
-                                        app.edit_dialog
-                                            .value_type
-                                            .set_input(format!("{:?}", entry.1.r#type()));
-                                        app.edit_dialog
-                                            .value
-                                            .set_placeholder(entry.1.value().clone());
-                                        app.edit_dialog.value.select();
-                                        app.popup = Popup::Edit(entry.1.clone());
-                                    }
-                                }
-                                _ => {}
+                        match self.popup {
+                            Popup::None => match self.handle_event(key, &cmd_sender) {
+                                Ok(LoopAction::Continue) => {}
+                                Ok(LoopAction::Break) => break,
+                                Err(e) => return Err(e),
                             },
-                            Popup::Edit(_) => match key.code {
-                                KeyCode::Enter => {
-                                    match app.popup {
-                                        Popup::Edit(ref register) => {
-                                            if let Some(input) = app.edit_dialog.value.get_input() {
-                                                match register.r#type().from_str(&input) {
-                                                    Ok(v) => {
-                                                        if v.len() > register.raw().len() {
-                                                            app.log_entries.push(LogMsg::err(
-                                                                "Provided input requires a longer register as available.",
-                                                            ));
-                                                        } else if let Some(ref sender) =
-                                                            command_send
-                                                        {
-                                                            if let Err(e) = sender.blocking_send(
-                                                                Command::WriteMultipleRegisters((
-                                                                    register.address(),
-                                                                    v,
-                                                                )),
-                                                            ) {
-                                                                app.log_entries.push(LogMsg::err(
-                                                                    &format!("{}", e),
-                                                                ));
-                                                            } else {
-                                                                app.edit_dialog.value.clear_input();
-                                                                app.popup = Popup::None;
-                                                            }
-                                                        } else if let Err(e) = app
-                                                            .register_handler
-                                                            .set_values(register.address(), &v)
-                                                        {
-                                                            app.log_entries.push(LogMsg::err(
-                                                                &format!("{}", e),
-                                                            ));
-                                                            if let Err(e) =
-                                                                app.register_handler.update()
-                                                            {
-                                                                app.log_entries.push(LogMsg::err(
-                                                                    &format!("{}", e),
-                                                                ));
-                                                            }
-                                                        } else {
-                                                            app.edit_dialog.value.clear_input();
-                                                            app.popup = Popup::None;
-                                                        }
-                                                    }
-                                                    Err(e) => {
-                                                        app.log_entries
-                                                            .push(LogMsg::err(&format!("{}", e)));
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        Popup::None => panic!("No popup value."),
-                                    };
-                                }
-                                KeyCode::Esc => {
-                                    app.edit_dialog.value.clear_input();
-                                    app.popup = Popup::None;
-                                }
-                                _ => {
-                                    app.edit_dialog.value.handle_events(key.modifiers, key.code);
-                                    app.edit_dialog.value.select();
-                                }
-                            },
+                            Popup::Edit(_) => self.handle_event_edit_dialog(key, &cmd_sender),
                         }
                     }
                 }
@@ -584,66 +560,8 @@ fn ui<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_SIZE>, status:
     render_log_footer::<SLICE_SIZE>(f, app, rects[3]);
 
     // Render popup
-    render_popup::<SLICE_SIZE>(f, app)
-}
-
-fn render_popup<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_SIZE>) {
-    let width = std::cmp::min(f.size().width, 50);
-    let height = std::cmp::min(f.size().height, 19);
-    let layout = Layout::horizontal([
-        Constraint::Min(1),
-        Constraint::Length(width),
-        Constraint::Min(1),
-    ])
-    .split(f.size());
-    let area = Layout::vertical([
-        Constraint::Min(1),
-        Constraint::Length(height),
-        Constraint::Min(1),
-    ])
-    .split(layout[1])[1];
-
-    if let Popup::None = app.popup {
-        return;
-    }
-
-    f.render_widget(Clear, area);
-    render_edit(f, app, area);
-}
-
-fn render_edit<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_SIZE>, area: Rect) {
-    let block = Block::bordered()
-        .title("Edit Register")
-        .title_alignment(Alignment::Center)
-        .bg(app.colors.buffer.bg);
-    let inner = block.inner(area);
-    f.render_widget(block, area);
-
-    let area = Layout::vertical([
-        Constraint::Length(3),
-        Constraint::Length(1),
-        Constraint::Length(3),
-        Constraint::Length(1),
-        Constraint::Length(3),
-        Constraint::Length(1),
-        Constraint::Length(3),
-    ])
-    .split(inner.inner(&Margin {
-        vertical: 1,
-        horizontal: 1,
-    }));
-
-    app.edit_dialog.name.draw(f, area[0]);
-    app.edit_dialog.register.draw(f, area[2]);
-    app.edit_dialog.value_type.draw(f, area[4]);
-    app.edit_dialog.value.draw(f, area[6]);
-}
-
-fn vec_as_str(v: &[u16], hex: bool) -> String {
-    if hex {
-        format!("[ {:#06X} ]", v.iter().format(", "))
-    } else {
-        format!("{:?}", v)
+    if let Popup::Edit(_) = app.popup {
+        app.edit_dialog.render_ref(f.size(), f.buffer_mut())
     }
 }
 
@@ -672,7 +590,7 @@ fn render_register<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_S
         .values()
         .iter()
         .filter(|(n, _)| !n.starts_with("hide_"))
-        .sorted_by(|a, b| Ord::cmp(&a.1.address(), &b.1.address()))
+        .sorted_by(|a, b| Ord::cmp(&a.1.address(), &b.1.address()).then(a.0.cmp(b.0)))
         .map(|(n, r)| {
             [
                 format!("{}", r.access_type()),
@@ -690,7 +608,11 @@ fn render_register<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_S
                         }
                     })
                     .collect(),
-                vec_as_str(r.raw(), app.show_as_hex),
+                if app.show_as_hex {
+                    format!("[ {:#06X} ]", r.raw().iter().format(", "))
+                } else {
+                    format!("{:?}", r.raw())
+                },
             ]
         })
         .collect::<Vec<_>>();
@@ -857,8 +779,9 @@ fn render_log<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_SIZE>,
         .style(header_style)
         .height(1);
 
-    if app.log_entries.len() > app.history_len {
-        let len_to_remove = app.log_entries.len() - app.history_len;
+    let history_len = app.config.lock().unwrap().history_length;
+    if app.log_entries.len() > history_len {
+        let len_to_remove = app.log_entries.len() - history_len;
         app.log_entries = app.log_entries[len_to_remove..].to_vec();
         if !app.log_table.reached_end_of_table {
             if let Some(i) = app.log_table.table_state.selected() {

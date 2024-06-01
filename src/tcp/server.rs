@@ -1,4 +1,4 @@
-use crate::memory::{Memory, Range};
+use crate::mem::memory::{Memory, Range};
 use crate::tcp::TcpConfig;
 use crate::util::str;
 use crate::util::Expect;

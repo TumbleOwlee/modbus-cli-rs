@@ -7,7 +7,6 @@ use std::future::IntoFuture;
 use tokio::spawn as tokio_spawn;
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
-pub use tokio::*;
 
 #[async_trait]
 trait Joinable: Sync + Send {

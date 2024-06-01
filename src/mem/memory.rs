@@ -95,24 +95,23 @@ impl<const SLICE_SIZE: usize, Value: Default + Copy + Debug> Memory<SLICE_SIZE, 
         Ok(values)
     }
 
-    pub fn read<Key: Into<usize> + Clone>(
+    pub fn read<Key: Into<usize> + Clone + Debug>(
         &mut self,
         range: &Range<Key>,
     ) -> anyhow::Result<Vec<&Value>> {
-        let range = (range.start.clone().into(), range.end.clone().into());
-        if self.bounds.start() > range.0 || self.bounds.end() < range.1 {
-            return Err(anyhow!("Range not available in memory"));
-        }
-        if !((range.0 / SLICE_SIZE)..(range.1 / SLICE_SIZE + 1))
-            .all(|v| self.slices.contains_key(&v))
+        if self.bounds.start() > range.end()
+            || self.bounds.end() < range.end()
+            || !((range.start() / SLICE_SIZE)..(range.end() / SLICE_SIZE + 1))
+                .all(|v| self.slices.contains_key(&v))
         {
-            return Err(anyhow!("Range not available in memory"));
+            let r = range.clone();
+            self.init(&[r]);
         }
 
-        let mut len = range.1 - range.0;
+        let mut len = range.end() - range.start();
         let mut vec = Vec::with_capacity(len);
-        let mut start = std::cmp::min(range.0 % SLICE_SIZE, SLICE_SIZE);
-        for idx in (range.0 / SLICE_SIZE)..(range.1 / SLICE_SIZE + 1) {
+        let mut start = std::cmp::min(range.start() % SLICE_SIZE, SLICE_SIZE);
+        for idx in (range.start() / SLICE_SIZE)..(range.end() / SLICE_SIZE + 1) {
             let slice = self.slices.get(&idx).expect("Slice does not exist.");
             let bound = std::cmp::min(len, SLICE_SIZE - start);
             slice[start..(start + bound)]

@@ -1,12 +1,12 @@
 use crate::util::str;
-
 use crossterm::event::{KeyCode, KeyModifiers};
+use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Margin, Rect};
 use ratatui::style::palette::tailwind;
-use ratatui::style::Style;
+use ratatui::style::Style as UiStyle;
 use ratatui::text::Text;
 use ratatui::widgets::{Block, Paragraph};
-use ratatui::Frame;
+use ratatui::widgets::{Widget, WidgetRef};
 
 pub enum Action {
     InputTaken,
@@ -16,36 +16,115 @@ pub enum Action {
     InputIgnored,
 }
 
+pub struct Style {
+    pub default: UiStyle,
+    pub focused: UiStyle,
+    pub cursor: UiStyle,
+}
+
+impl Default for Style {
+    fn default() -> Self {
+        Style {
+            default: UiStyle::default()
+                .fg(tailwind::WHITE)
+                .bg(tailwind::SLATE.c950),
+            focused: UiStyle::default()
+                .fg(tailwind::INDIGO.c400)
+                .bg(tailwind::SLATE.c950),
+            cursor: UiStyle::default()
+                .fg(tailwind::WHITE)
+                .bg(tailwind::INDIGO.c600),
+        }
+    }
+}
+
 pub struct InputField {
     input: Option<String>,
     placeholder: Option<String>,
     bordered: bool,
-    style: InputStyle,
+    style: Style,
     title: Option<String>,
     margins: Margin,
     cursor_pos: usize,
-    selected: bool,
+    focused: bool,
     disabled: bool,
 }
 
-pub struct InputStyle {
-    pub default: Style,
-    pub selected: Style,
-    pub cursor: Style,
-}
+impl WidgetRef for InputField {
+    fn render_ref(&self, area: Rect, buf: &mut Buffer) {
+        let height = if self.bordered { 3 } else { 1 };
 
-impl Default for InputStyle {
-    fn default() -> Self {
-        InputStyle {
-            default: Style::default()
-                .fg(tailwind::WHITE)
-                .bg(tailwind::SLATE.c950),
-            selected: Style::default()
-                .fg(tailwind::INDIGO.c400)
-                .bg(tailwind::SLATE.c950),
-            cursor: Style::default()
-                .fg(tailwind::WHITE)
-                .bg(tailwind::INDIGO.c600),
+        let area = Layout::vertical([
+            Constraint::Length(self.margins.vertical),
+            Constraint::Length(height),
+            Constraint::Length(self.margins.vertical),
+        ])
+        .split(area)[1];
+
+        let mut area = Layout::horizontal([
+            Constraint::Length(self.margins.horizontal),
+            Constraint::Min(1),
+            Constraint::Length(self.margins.horizontal),
+        ])
+        .split(area)[1];
+
+        // Create block if border is required
+        if self.bordered {
+            let style = if self.focused && !self.disabled {
+                self.style.focused
+            } else {
+                self.style.default
+            };
+            let mut block = Block::bordered().style(style);
+            if let Some(title) = self.title.as_ref() {
+                block = block.title(title.clone());
+            }
+            let inner = block.inner(area);
+            block.render(area, buf);
+            area = inner.inner(&Margin {
+                vertical: 0,
+                horizontal: 1,
+            });
+        }
+
+        let mut text = self
+            .input
+            .as_ref()
+            .map(|i| format!("{} ", i))
+            .unwrap_or(self.placeholder.clone().unwrap_or(str!(" ")).clone());
+
+        let mut x_start = 0;
+
+        // Calculate range of text to display
+        if (area.width as usize) < text.len() {
+            let width = (area.width / 2) as usize;
+            // Display width characters left of cursor
+            x_start = std::cmp::max(self.cursor_pos, width) - width;
+            // Display width characters right of cursor
+            let mut x_end = std::cmp::min(self.cursor_pos + width, text.len());
+            // Add more characters to the left, if right of cursor are not enough
+            if (x_end - self.cursor_pos) < (area.width as usize - width) {
+                let remaining = (area.width as usize - width) - (x_end - self.cursor_pos);
+                x_start = std::cmp::max(x_start, remaining) - remaining;
+            }
+            // Add more characters to the right, if left of cursor are not enough
+            if (self.cursor_pos - x_start) < width {
+                let remaining = width - (self.cursor_pos - x_start);
+                x_end = std::cmp::min(text.len(), x_end + remaining);
+            }
+            // Get displayable text area
+            text = text[x_start..x_end].to_owned();
+        }
+
+        // Display text
+        let input = Paragraph::new(Text::from(text).style(self.style.default));
+        input.render(area, buf);
+        if !self.disabled {
+            // Display cursor
+            if self.focused {
+                buf.get_mut(area.x + (self.cursor_pos - x_start) as u16, area.y)
+                    .set_style(self.style.cursor);
+            }
         }
     }
 }
@@ -56,23 +135,30 @@ impl InputField {
             input: None,
             placeholder: None,
             bordered: false,
-            style: InputStyle::default(),
+            style: Style::default(),
             title: None,
             margins: Margin {
                 vertical: 0,
                 horizontal: 0,
             },
             cursor_pos: 0,
-            selected: false,
+            focused: false,
             disabled: false,
         }
     }
 
-    pub fn select(&mut self) {
+    pub fn focus(&mut self) {
         if self.disabled {
             panic!("Tried to select disabled input field.");
         }
-        self.selected = true;
+        self.focused = true;
+    }
+
+    pub fn clear_focus(&mut self) {
+        if self.disabled {
+            panic!("Tried to select disabled input field.");
+        }
+        self.focused = false;
     }
 
     pub fn disabled(self) -> Self {
@@ -115,7 +201,7 @@ impl InputField {
         Self { bordered, ..self }
     }
 
-    pub fn style(self, style: InputStyle) -> Self {
+    pub fn style(self, style: Style) -> Self {
         Self { style, ..self }
     }
 
@@ -183,11 +269,11 @@ impl InputField {
                 Some(Action::InputTaken)
             }
             (KeyModifiers::SHIFT, KeyCode::Tab) => {
-                self.selected = false;
+                self.focused = false;
                 Some(Action::FocusPrevious)
             }
             (_, KeyCode::Tab) => {
-                self.selected = false;
+                self.focused = false;
                 Some(Action::FocusNext)
             }
             (_, KeyCode::Enter) => Some(Action::InputConfirm),
@@ -213,85 +299,11 @@ impl InputField {
         self.placeholder = Some(input);
     }
 
-    pub fn set_style(&mut self, style: InputStyle) {
-        self.style = style;
+    pub fn clear_placeholder(&mut self) {
+        self.placeholder = None;
     }
 
-    pub fn draw(&self, f: &mut Frame, area: Rect) {
-        let height = if self.bordered { 3 } else { 1 };
-
-        let area = Layout::vertical([
-            Constraint::Length(self.margins.vertical),
-            Constraint::Length(height),
-            Constraint::Length(self.margins.vertical),
-        ])
-        .split(area)[1];
-
-        let mut area = Layout::horizontal([
-            Constraint::Length(self.margins.horizontal),
-            Constraint::Min(1),
-            Constraint::Length(self.margins.horizontal),
-        ])
-        .split(area)[1];
-
-        // Create block if border is required
-        if self.bordered {
-            let style = if self.selected && !self.disabled {
-                self.style.selected
-            } else {
-                self.style.default
-            };
-            let mut block = Block::bordered().style(style);
-            if let Some(title) = self.title.as_ref() {
-                block = block.title(title.clone());
-            }
-            let inner = block.inner(area);
-            f.render_widget(block, area);
-            area = inner.inner(&Margin {
-                vertical: 0,
-                horizontal: 1,
-            });
-        }
-
-        let mut text = self
-            .input
-            .as_ref()
-            .map(|i| format!("{} ", i))
-            .unwrap_or(self.placeholder.clone().unwrap_or(str!(" ")).clone());
-
-        let mut x_start = 0;
-
-        // Calculate range of text to display
-        if (area.width as usize) < text.len() {
-            let width = (area.width / 2) as usize;
-            // Display width characters left of cursor
-            x_start = std::cmp::max(self.cursor_pos, width) - width;
-            // Display width characters right of cursor
-            let mut x_end = std::cmp::min(self.cursor_pos + width, text.len());
-            // Add more characters to the left, if right of cursor are not enough
-            if (x_end - self.cursor_pos) < (area.width as usize - width) {
-                let remaining = (area.width as usize - width) - (x_end - self.cursor_pos);
-                x_start = std::cmp::max(x_start, remaining) - remaining;
-            }
-            // Add more characters to the right, if left of cursor are not enough
-            if (self.cursor_pos - x_start) < width {
-                let remaining = width - (self.cursor_pos - x_start);
-                x_end = std::cmp::min(text.len(), x_end + remaining);
-            }
-            // Get displayable text area
-            text = text[x_start..x_end].to_owned();
-        }
-
-        // Display text
-        let input = Paragraph::new(Text::from(text).style(self.style.default));
-        f.render_widget(input, area);
-        if !self.disabled {
-            // Display cursor
-            if self.selected {
-                f.buffer_mut()
-                    .get_mut(area.x + (self.cursor_pos - x_start) as u16, area.y)
-                    .set_style(self.style.cursor);
-            }
-        }
+    pub fn set_style(&mut self, style: Style) {
+        self.style = style;
     }
 }
