@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -24,20 +25,41 @@ pub enum ValueType {
     I32le,
     I64le,
     I128le,
+    F32,
+    F32le,
 }
 
 impl ValueType {
     pub fn as_str(&self, bytes: &[u16]) -> anyhow::Result<String> {
         match self {
-            ValueType::PackedString => Ok(String::from_utf8(
+            ValueType::F32 => {
+                if let (Some(b1), Some(b2)) = (bytes.first(), bytes.get(1)) {
+                    let uval: u32 = ((*b1 as u32) << 16) + (*b2 as u32);
+                    let val = f32::from_bits(uval);
+                    Ok(format!("0x{:02$X} ({})", uval, val, 8))
+                } else {
+                    Err(anyhow!("Not enough bytes"))
+                }
+            }
+            ValueType::F32le => {
+                if let (Some(b1), Some(b2)) = (bytes.first(), bytes.get(1)) {
+                    let uval: u32 = ((*b2 as u32) << 16) + (*b1 as u32);
+                    let val = f32::from_bits(uval);
+                    Ok(format!("0x{:02$X} ({})", uval, val, 8))
+                } else {
+                    Err(anyhow!("Not enough bytes"))
+                }
+            }
+            ValueType::PackedString => String::from_utf8(
                 bytes
                     .iter()
-                    .flat_map(|v| vec![(*v >> 8) as u8, (*v & 0xFF) as u8])
+                    .flat_map(|v| vec![((*v >> 8) & 0xFF) as u8, (*v & 0xFF) as u8])
                     .collect(),
             )
-            .unwrap()),
+            .map_err(|e| e.into()),
             ValueType::LooseString => {
-                Ok(String::from_utf8(bytes.iter().map(|v| (*v & 0xFF) as u8).collect()).unwrap())
+                String::from_utf8(bytes.iter().map(|v| (*v & 0xFF) as u8).collect())
+                    .map_err(|e| e.into())
             }
             ValueType::U8 => {
                 let val: u8 = (*(bytes.first().unwrap()) & 0xFF) as u8;
@@ -166,8 +188,32 @@ impl ValueType {
         }
     }
 
-    pub fn from_str(&self, s: &str) -> anyhow::Result<Vec<u16>> {
+    pub fn encode(&self, s: &str) -> anyhow::Result<Vec<u16>> {
         match self {
+            ValueType::F32 => {
+                let val: f32 = if let Some(s) = s.strip_prefix("0x") {
+                    u32::from_str_radix(s, 16).map(f32::from_bits)?
+                } else {
+                    s.parse()?
+                };
+                let val = val.to_bits();
+                Ok(vec![
+                    ((val & 0xFFFF0000) >> 16) as u16,
+                    (val & 0x0000FFFF) as u16,
+                ])
+            }
+            ValueType::F32le => {
+                let val: f32 = if let Some(s) = s.strip_prefix("0x") {
+                    u32::from_str_radix(s, 16).map(f32::from_bits)?
+                } else {
+                    s.parse()?
+                };
+                let val = val.to_bits();
+                Ok(vec![
+                    (val & 0x0000FFFF) as u16,
+                    ((val & 0xFFFF0000) >> 16) as u16,
+                ])
+            }
             ValueType::PackedString => {
                 let mut v = Vec::with_capacity(s.len() / 2 + 1);
                 let bytes = s.as_bytes();

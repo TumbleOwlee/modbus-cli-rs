@@ -1,7 +1,7 @@
 use crate::mem::register::{AccessType, Definition};
 use crate::mem::register::{Handler, Register};
-use crate::util::str;
 use crate::mem::value::ValueType;
+use crate::util::str;
 use crate::widgets::{EditDialog, EditFieldType};
 use crate::{Command, Config, LogMsg, Status};
 
@@ -425,7 +425,7 @@ impl<const SLICE_SIZE: usize> App<SLICE_SIZE> {
                 match self.popup {
                     Popup::Edit(ref register) => {
                         if let Some(input) = self.edit_dialog.get_input(EditFieldType::Value) {
-                            match register.r#type().from_str(&input) {
+                            match register.r#type().encode(&input) {
                                 Ok(v) => {
                                     if v.len() > register.raw().len() {
                                         self.log_entries.push(LogMsg::err(
