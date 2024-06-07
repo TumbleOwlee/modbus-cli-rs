@@ -11,7 +11,7 @@ use ratatui::widgets::{Block, Clear, Widget, WidgetRef};
 pub enum FieldType {
     Name,
     Register,
-    ValueType,
+    DataType,
     Value,
 }
 
@@ -78,7 +78,7 @@ impl EditDialog {
         let field = match ty {
             FieldType::Name => &mut self.name,
             FieldType::Register => &mut self.register,
-            FieldType::ValueType => &mut self.value_type,
+            FieldType::DataType => &mut self.value_type,
             FieldType::Value => &mut self.value,
         };
         if let Some(v) = input {
@@ -101,7 +101,7 @@ impl EditDialog {
         match ty {
             FieldType::Name => &self.name,
             FieldType::Register => &self.register,
-            FieldType::ValueType => &self.value_type,
+            FieldType::DataType => &self.value_type,
             FieldType::Value => &self.value,
         }
         .get_input()

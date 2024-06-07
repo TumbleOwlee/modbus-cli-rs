@@ -1,8 +1,9 @@
 #[cfg(test)]
 mod tests {
+    use crate::mem::data::DataType;
     use crate::mem::memory::{Memory, Range};
     use crate::mem::register::{AccessType, Definition, Handler};
-    use crate::mem::value::ValueType;
+    use crate::Config;
     use std::collections::HashMap;
     use std::sync::{Arc, Mutex};
 
@@ -42,8 +43,12 @@ mod tests {
         let mut definitions: HashMap<String, Definition> = HashMap::new();
         definitions.insert(
             "Name".to_owned(),
-            Definition::new(0, 2, ValueType::PackedString, 0x04u8, AccessType::ReadOnly),
+            Definition::new(0, 2, DataType::PackedAscii, 0x04u8, AccessType::ReadOnly),
         );
-        //let mut register = Handler::<1024>::new(&definitions, memory);
+        let config = Arc::new(Mutex::new(Config::default()));
+        let mut register = Handler::<1024>::new(config, memory);
+        register
+            .set_values(1234, &[0x1234, 0x2345])
+            .expect("Set values failed");
     }
 }

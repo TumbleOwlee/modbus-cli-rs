@@ -3,7 +3,7 @@ use crate::msg::LogMsg;
 use crate::mem::register::{AccessType, Definition};
 use crate::tcp::TcpConfig;
 use crate::util::{str, Expect};
-use crate::mem::value::ValueType;
+use crate::mem::data::DataType;
 use crate::{Command, ContiguousMemory, Status};
 
 use itertools::Itertools;
@@ -59,7 +59,7 @@ pub async fn run(
         .collect::<Vec<_>>();
     let marker = (
         str!(""),
-        Definition::new(0, 0, ValueType::U8, 0, AccessType::ReadOnly),
+        Definition::new(0, 0, DataType::U8, 0, AccessType::ReadOnly),
     );
     sorted_defs.push((&marker.0, &marker.1));
 

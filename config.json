@@ -16,14 +16,14 @@
             "address": "0x4000",
             "length": 4,
             "access": "ReadOnly",
-            "type": "PackedString"
+            "type": "PackedAscii"
         },
         "Firmware Version": {
             "read_code": 4,
             "address": "0x4004",
             "length": 2,
             "access": "ReadOnly",
-            "type": "PackedString"
+            "type": "PackedAscii"
         },
         "User Settable Max Current": {
             "read_code": 4,

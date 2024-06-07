@@ -1,6 +1,6 @@
+use crate::mem::data::DataType;
 use crate::mem::register::{AccessType, Definition};
 use crate::mem::register::{Handler, Register};
-use crate::mem::value::ValueType;
 use crate::util::str;
 use crate::widgets::{EditDialog, EditFieldType};
 use crate::{Command, Config, LogMsg, Status};
@@ -332,7 +332,7 @@ impl<const SLICE_SIZE: usize> App<SLICE_SIZE> {
                 // TODO: Dialog to add new definition
                 self.config.lock().unwrap().definitions.insert(
                     format!("Def{}", self.log_entries.len()),
-                    Definition::new(0x4000u16, 2, ValueType::U8, 4, AccessType::ReadWrite),
+                    Definition::new(0x4000u16, 2, DataType::U8, 4, AccessType::ReadWrite),
                 );
             }
             KeyCode::Char('s') => {
@@ -400,7 +400,7 @@ impl<const SLICE_SIZE: usize> App<SLICE_SIZE> {
                             None,
                         );
                         self.edit_dialog.set(
-                            EditFieldType::ValueType,
+                            EditFieldType::DataType,
                             Some(format!("{:?}", entry.1.r#type())),
                             None,
                         );

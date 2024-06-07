@@ -1,5 +1,5 @@
+use crate::mem::data::DataType;
 use crate::mem::memory::{Memory, Range};
-use crate::mem::value::ValueType;
 use crate::util::str;
 use crate::util::Expect;
 use crate::Config;
@@ -59,7 +59,7 @@ impl std::fmt::Display for AccessType {
 pub struct Definition {
     address: Address,
     length: u16,
-    r#type: ValueType,
+    r#type: DataType,
     read_code: u8,
     access: AccessType,
 }
@@ -69,7 +69,7 @@ impl Definition {
     pub fn new(
         address: u16,
         length: u16,
-        r#type: ValueType,
+        r#type: DataType,
         read_code: u8,
         access: AccessType,
     ) -> Self {
@@ -90,7 +90,7 @@ impl Definition {
         self.address.as_u16()
     }
 
-    pub fn get_type(&self) -> ValueType {
+    pub fn get_type(&self) -> DataType {
         self.r#type.clone()
     }
 
@@ -108,7 +108,7 @@ pub struct Register {
     address: u16,
     value: String,
     raw: Vec<u16>,
-    r#type: ValueType,
+    r#type: DataType,
     access: AccessType,
 }
 
@@ -144,7 +144,7 @@ impl Register {
         let value = definition
             .get_type()
             .as_str(&bytes)
-            .unwrap_or(str!("Undefined"));
+            .unwrap_or(str!("Invalid data"));
 
         Self {
             address: definition.address.as_u16(),
@@ -167,7 +167,7 @@ impl Register {
         &self.raw
     }
 
-    pub fn r#type(&self) -> ValueType {
+    pub fn r#type(&self) -> DataType {
         self.r#type.clone()
     }
 
