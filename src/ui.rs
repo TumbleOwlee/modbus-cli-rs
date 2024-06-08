@@ -3,7 +3,7 @@ use crate::mem::register::{AccessType, Definition};
 use crate::mem::register::{Handler, Register};
 use crate::util::str;
 use crate::widgets::{EditDialog, EditFieldType};
-use crate::{Command, Config, LogMsg, Status};
+use crate::{AppConfig, Command, LogMsg, Status};
 
 use crossterm::{
     event::{
@@ -137,21 +137,21 @@ pub enum Popup {
     Edit(Register),
 }
 
-pub struct App<const SLICE_SIZE: usize> {
-    register_handler: Handler<SLICE_SIZE>,
+pub struct App {
+    register_handler: Handler,
     register_table: UiTable,
     log_entries: Vec<LogMsg>,
     log_table: UiTable,
     colors: TableColors,
     color_index: usize,
     show_as_hex: bool,
-    config: Arc<Mutex<Config>>,
+    config: Arc<Mutex<AppConfig>>,
     popup: Popup,
     edit_dialog: EditDialog,
 }
 
-impl<const SLICE_SIZE: usize> App<SLICE_SIZE> {
-    pub fn new(register_handler: Handler<SLICE_SIZE>, config: Arc<Mutex<Config>>) -> Self {
+impl App {
+    pub fn new(register_handler: Handler, config: Arc<Mutex<AppConfig>>) -> Self {
         let original_hook = std::panic::take_hook();
         std::panic::set_hook(Box::new(move |panic| {
             disable_raw_mode().unwrap();
@@ -340,7 +340,7 @@ impl<const SLICE_SIZE: usize> App<SLICE_SIZE> {
                 let config = self.config.lock().unwrap();
                 let f = std::fs::File::create_new("./test.json")?;
                 let writer = std::io::BufWriter::new(f);
-                let _ = serde_json::to_writer_pretty::<_, Config>(writer, &config);
+                let _ = serde_json::to_writer_pretty::<_, AppConfig>(writer, &config);
             }
             KeyCode::Char('q') | KeyCode::Esc => return Ok(LoopAction::Break),
             KeyCode::Char('j') | KeyCode::Down => self.move_down(),
@@ -476,7 +476,7 @@ impl<const SLICE_SIZE: usize> App<SLICE_SIZE> {
         cmd_sender: Option<Sender<Command>>,
     ) -> anyhow::Result<()> {
         enable_raw_mode()?;
-        let mut terminal = App::<SLICE_SIZE>::create_terminal()?;
+        let mut terminal = App::create_terminal()?;
         execute!(terminal.backend_mut(), DisableMouseCapture)?;
 
         let mut status = str!("");
@@ -541,7 +541,7 @@ impl<const SLICE_SIZE: usize> App<SLICE_SIZE> {
     }
 }
 
-fn ui<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_SIZE>, status: String) {
+fn ui(f: &mut Frame, app: &mut App, status: String) {
     let rects = Layout::vertical([
         Constraint::Min(5),
         Constraint::Length(2),
@@ -551,13 +551,13 @@ fn ui<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_SIZE>, status:
     .split(f.size());
     app.set_colors();
     // Draw register table
-    render_register::<SLICE_SIZE>(f, app, rects[0]);
-    render_scrollbar::<SLICE_SIZE>(f, &mut app.register_table.vertical_scroll, rects[0]);
-    render_register_footer::<SLICE_SIZE>(f, app, rects[1], status);
+    render_register(f, app, rects[0]);
+    render_scrollbar(f, &mut app.register_table.vertical_scroll, rects[0]);
+    render_register_footer(f, app, rects[1], status);
     // Draw log table
-    render_log::<SLICE_SIZE>(f, app, rects[2]);
-    render_scrollbar::<SLICE_SIZE>(f, &mut app.log_table.vertical_scroll, rects[2]);
-    render_log_footer::<SLICE_SIZE>(f, app, rects[3]);
+    render_log(f, app, rects[2]);
+    render_scrollbar(f, &mut app.log_table.vertical_scroll, rects[2]);
+    render_log_footer(f, app, rects[3]);
 
     // Render popup
     if let Popup::Edit(_) = app.popup {
@@ -565,7 +565,7 @@ fn ui<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_SIZE>, status:
     }
 }
 
-fn render_register<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_SIZE>, area: Rect) {
+fn render_register(f: &mut Frame, app: &mut App, area: Rect) {
     let header_style = Style::default()
         .fg(app.colors.header.fg)
         .bg(app.colors.header.bg);
@@ -701,11 +701,7 @@ fn render_register<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_S
     }
 }
 
-fn render_scrollbar<const SLICE_SIZE: usize>(
-    f: &mut Frame,
-    state: &mut ScrollbarState,
-    area: Rect,
-) {
+fn render_scrollbar(f: &mut Frame, state: &mut ScrollbarState, area: Rect) {
     f.render_stateful_widget(
         Scrollbar::default()
             .orientation(ScrollbarOrientation::VerticalRight)
@@ -719,12 +715,7 @@ fn render_scrollbar<const SLICE_SIZE: usize>(
     );
 }
 
-fn render_register_footer<const SLICE_SIZE: usize>(
-    f: &mut Frame,
-    app: &App<SLICE_SIZE>,
-    area: Rect,
-    status: String,
-) {
+fn render_register_footer(f: &mut Frame, app: &App, area: Rect, status: String) {
     let rects = Layout::vertical([Constraint::Length(1), Constraint::Length(2)]).split(area);
     let status_footer = Paragraph::new(Line::from(str!(" ") + &status))
         .style(
@@ -740,7 +731,7 @@ fn render_register_footer<const SLICE_SIZE: usize>(
     f.render_widget(info_footer, rects[1]);
 }
 
-fn render_log_footer<const SLICE_SIZE: usize>(f: &mut Frame, app: &App<SLICE_SIZE>, area: Rect) {
+fn render_log_footer(f: &mut Frame, app: &App, area: Rect) {
     let rects = Layout::vertical([Constraint::Length(1), Constraint::Length(1)]).split(area);
     let status_footer = Paragraph::new(Line::from(LOG_HEADER))
         .style(
@@ -757,7 +748,7 @@ fn render_log_footer<const SLICE_SIZE: usize>(f: &mut Frame, app: &App<SLICE_SIZ
     f.render_widget(info_footer, rects[1]);
 }
 
-fn render_log<const SLICE_SIZE: usize>(f: &mut Frame, app: &mut App<SLICE_SIZE>, area: Rect) {
+fn render_log(f: &mut Frame, app: &mut App, area: Rect) {
     let header_style = Style::default()
         .fg(app.colors.header.fg)
         .bg(app.colors.header.bg);

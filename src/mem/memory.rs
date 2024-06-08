@@ -1,8 +1,9 @@
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::default::Default;
 use std::fmt::Debug;
+
+const SLICE_SIZE: usize = 1024;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct Range<Key: Into<usize> + Clone> {
@@ -31,12 +32,12 @@ impl<Key: Into<usize> + Clone + Debug> Range<Key> {
     }
 }
 
-pub struct Memory<const SLICE_SIZE: usize, Value: Default + Copy + Debug> {
-    slices: HashMap<usize, [Value; SLICE_SIZE]>,
+pub struct Memory {
+    slices: HashMap<usize, [u16; SLICE_SIZE]>,
     bounds: Range<usize>,
 }
 
-impl<const SLICE_SIZE: usize, Value: Default + Copy + Debug> Memory<SLICE_SIZE, Value> {
+impl Memory {
     pub fn new() -> Self {
         Self {
             slices: HashMap::new(),
@@ -57,9 +58,7 @@ impl<const SLICE_SIZE: usize, Value: Default + Copy + Debug> Memory<SLICE_SIZE, 
             );
             let range = (range.start() / SLICE_SIZE, range.end() / SLICE_SIZE + 1);
             for i in range.0..range.1 {
-                self.slices
-                    .entry(i)
-                    .or_insert_with(|| [Value::default(); SLICE_SIZE]);
+                self.slices.entry(i).or_insert_with(|| [0; SLICE_SIZE]);
             }
         }
     }
@@ -67,8 +66,8 @@ impl<const SLICE_SIZE: usize, Value: Default + Copy + Debug> Memory<SLICE_SIZE, 
     pub fn write<'a, Key: Into<usize> + Clone + Debug>(
         &mut self,
         range: Range<Key>,
-        mut values: &'a [Value],
-    ) -> anyhow::Result<&'a [Value]> {
+        mut values: &'a [u16],
+    ) -> anyhow::Result<&'a [u16]> {
         let range = (range.start(), range.end());
         if self.bounds.start() > range.0 || self.bounds.end() < range.1 {
             return Err(anyhow!("Range not available in memory"));
@@ -98,7 +97,7 @@ impl<const SLICE_SIZE: usize, Value: Default + Copy + Debug> Memory<SLICE_SIZE, 
     pub fn read<Key: Into<usize> + Clone + Debug>(
         &mut self,
         range: &Range<Key>,
-    ) -> anyhow::Result<Vec<&Value>> {
+    ) -> anyhow::Result<Vec<&u16>> {
         if self.bounds.start() > range.end()
             || self.bounds.end() < range.end()
             || !((range.start() / SLICE_SIZE)..(range.end() / SLICE_SIZE + 1))

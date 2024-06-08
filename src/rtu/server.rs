@@ -1,19 +1,18 @@
 use crate::mem::memory::{Memory, Range};
-use crate::tcp::TcpConfig;
+use crate::rtu::RtuConfig;
 use crate::util::str;
 use crate::util::Expect;
 use crate::LogMsg;
 use crate::Status;
 
-use std::net::SocketAddr;
 use std::{
     future,
     sync::{Arc, Mutex},
 };
-use tokio::net::TcpListener;
 use tokio::sync::mpsc::Sender;
 use tokio_modbus::prelude::{Exception, Request, Response};
-use tokio_modbus::server::tcp::{accept_tcp_connection, Server as TcpServer};
+use tokio_modbus::server::rtu::Server as RtuServer;
+use tokio_serial::SerialStream;
 
 struct Service {
     memory: Arc<Mutex<Memory>>,
@@ -158,7 +157,7 @@ impl Service {
 }
 
 pub struct Server {
-    config: TcpConfig,
+    config: RtuConfig,
     memory: Arc<Mutex<Memory>>,
     status_sender: Sender<Status>,
     log_sender: Sender<LogMsg>,
@@ -166,7 +165,7 @@ pub struct Server {
 
 impl Server {
     pub fn new(
-        config: TcpConfig,
+        config: RtuConfig,
         memory: Arc<Mutex<Memory>>,
         status_sender: Sender<Status>,
         log_sender: Sender<LogMsg>,
@@ -180,41 +179,33 @@ impl Server {
     }
 
     pub async fn run(&self) {
-        let addr: SocketAddr = format!("{}:{}", self.config.ip, self.config.port)
-            .parse()
-            .panic(|e| format!("Failed to create SocketAddr ({e})"));
-        if let Ok(listener) = TcpListener::bind(addr).await {
-            let server = TcpServer::new(listener);
-            let new_request_handler = |_socket_addr| {
-                Ok(Some(Service::new(
-                    self.memory.clone(),
-                    self.log_sender.clone(),
-                )))
-            };
-            let on_connected = |stream, socket_addr| async move {
-                accept_tcp_connection(stream, socket_addr, new_request_handler)
-            };
-            let on_process_log = self.log_sender.clone();
-            let on_process_error = move |err| {
-                let _ = on_process_log
-                    .try_send(LogMsg::err(&format!("Server processing failed. [{}]", err)));
-            };
-            server
-                .serve(&on_connected, on_process_error)
-                .await
-                .panic(|e| format!("Serve server failed [{}]", e));
-        } else {
-            let _ = self
-                .status_sender
-                .send(Status::String(str!("Server not running.")))
-                .await;
-            let _ = self
-                .log_sender
-                .send(LogMsg::err(&format!(
-                    "Failed to bind to address {}:{}. Please restart.",
-                    self.config.ip, self.config.port
-                )))
-                .await;
+        let builder = tokio_serial::new(self.config.path.clone(), self.config.baud_rate);
+        match SerialStream::open(&builder) {
+            Ok(serial_stream) => {
+                let server = RtuServer::new(serial_stream);
+                let service = Service::new(self.memory.clone(), self.log_sender.clone());
+
+                if let Err(e) = server.serve_forever(service).await {
+                    let _ = self
+                        .status_sender
+                        .send(Status::String(str!("Server not running.")))
+                        .await;
+                    let _ = self
+                        .log_sender
+                        .send(LogMsg::err(&format!("Server shut down unexpectedly ({e})")))
+                        .await;
+                }
+            }
+            Err(e) => {
+                let _ = self
+                    .status_sender
+                    .send(Status::String(str!("Server not running.")))
+                    .await;
+                let _ = self
+                    .log_sender
+                    .send(LogMsg::err(&format!("Failed to open SerialStream ({e})")))
+                    .await;
+            }
         }
     }
 }

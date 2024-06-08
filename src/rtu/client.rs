@@ -2,20 +2,20 @@ use crate::mem::data::DataType;
 use crate::mem::memory::{Memory, Range};
 use crate::mem::register::{AccessType, Definition};
 use crate::msg::LogMsg;
-use crate::tcp::TcpConfig;
+use crate::rtu::RtuConfig;
 use crate::util::{str, Expect};
 use crate::{AppConfig, Command, Status};
 
 use itertools::Itertools;
-use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 use tokio::sync::mpsc::{Receiver, Sender};
-use tokio_modbus::prelude::{Reader, Writer};
+use tokio_modbus::prelude::{rtu, Reader, Slave, Writer};
 use tokio_modbus::FunctionCode;
+use tokio_serial::SerialStream;
 
 pub struct Client {
-    tcp_config: TcpConfig,
+    rtu_config: RtuConfig,
     memory: Arc<Mutex<Memory>>,
     operations: Vec<(FunctionCode, Range<usize>)>,
     status_sender: Sender<Status>,
@@ -26,7 +26,7 @@ pub struct Client {
 impl Client {
     pub fn new(
         app_config: Arc<Mutex<AppConfig>>,
-        tcp_config: TcpConfig,
+        rtu_config: RtuConfig,
         memory: Arc<Mutex<Memory>>,
         status_sender: Sender<Status>,
         cmd_receiver: Receiver<Command>,
@@ -34,7 +34,7 @@ impl Client {
     ) -> Self {
         let operations = Self::init(app_config);
         Self {
-            tcp_config,
+            rtu_config,
             memory,
             operations,
             status_sender,
@@ -131,10 +131,11 @@ impl Client {
     }
 
     pub async fn run(&mut self, interval_ms: u64) {
-        let addr: SocketAddr = format!("{}:{}", self.tcp_config.ip, self.tcp_config.port)
-            .parse()
-            .panic(|e| format!("Failed to create SocketAddr ({e})"));
-        let mut connection = tokio_modbus::client::tcp::connect(addr).await.ok();
+        let builder = tokio_serial::new(self.rtu_config.path.clone(), self.rtu_config.baud_rate);
+        let port =
+            SerialStream::open(&builder).panic(|e| format!("Failed to open SerialStream ({e})"));
+        let slave = Slave(self.rtu_config.slave);
+        let mut connection = Some(rtu::attach_slave(port, slave));
         if connection.is_some() {
             let _ = self
                 .status_sender
@@ -143,8 +144,8 @@ impl Client {
             let _ = self
                 .log_sender
                 .send(LogMsg::ok(&format!(
-                    "Modbus TCP connected to {}:{}",
-                    self.tcp_config.ip, self.tcp_config.port
+                    "Modbus RTU connected to {} with rate {}",
+                    self.rtu_config.path, self.rtu_config.baud_rate
                 )))
                 .await;
         } else {
@@ -155,8 +156,8 @@ impl Client {
             let _ = self
                 .log_sender
                 .send(LogMsg::err(&format!(
-                    "Modbus TCP failed to connect to {}:{}",
-                    self.tcp_config.ip, self.tcp_config.port
+                    "Modbus TCP failed to connect to {} with baud rate {}",
+                    self.rtu_config.path, self.rtu_config.baud_rate
                 )))
                 .await;
         };
@@ -222,7 +223,7 @@ impl Client {
                             .await;
                         let _ = self
                             .status_sender
-                            .send(Status::String(str!("Modbus TCP disconnected.")))
+                            .send(Status::String(str!("Modbus RTU disconnected.")))
                             .await;
                         disconnect = true;
                     }
@@ -234,13 +235,13 @@ impl Client {
                         Command::Disconnect => {
                             let _ = self
                                 .status_sender
-                                .send(Status::String(str!("Modbus TCP disconnected.")))
+                                .send(Status::String(str!("Modbus RTU disconnected.")))
                                 .await;
                             let _ = self
                                 .log_sender
                                 .send(LogMsg::ok(&format!(
-                                    "Modbus TCP disconnected from {}:{}",
-                                    self.tcp_config.ip, self.tcp_config.port
+                                    "Modbus RTU disconnected from {} with baud rate {}",
+                                    self.rtu_config.path, self.rtu_config.baud_rate
                                 )))
                                 .await;
                             disconnect = true;
@@ -267,7 +268,14 @@ impl Client {
             } else if let Ok(cmd) = self.cmd_receiver.try_recv() {
                 match cmd {
                     Command::Connect => {
-                        connection = tokio_modbus::client::tcp::connect(addr).await.ok();
+                        let builder = tokio_serial::new(
+                            self.rtu_config.path.clone(),
+                            self.rtu_config.baud_rate,
+                        );
+                        let port = SerialStream::open(&builder)
+                            .panic(|e| format!("Failed to open SerialStream ({e})"));
+                        let slave = Slave(self.rtu_config.slave);
+                        connection = Some(rtu::attach_slave(port, slave));
                         if connection.is_some() {
                             let _ = self
                                 .status_sender
@@ -276,16 +284,16 @@ impl Client {
                             let _ = self
                                 .log_sender
                                 .send(LogMsg::ok(&format!(
-                                    "Modbus TCP connected successfully to {}:{}",
-                                    self.tcp_config.ip, self.tcp_config.port
+                                    "Modbus RTU connected successfully to {} with baud rate {}",
+                                    self.rtu_config.path, self.rtu_config.baud_rate
                                 )))
                                 .await;
                         } else {
                             let _ = self
                                 .log_sender
                                 .send(LogMsg::err(&format!(
-                                    "Modbus TCP failed to connect to {}:{}",
-                                    self.tcp_config.ip, self.tcp_config.port
+                                    "Modbus RTU failed to connect to {} with baud rate {}",
+                                    self.rtu_config.path, self.rtu_config.baud_rate
                                 )))
                                 .await;
                         }

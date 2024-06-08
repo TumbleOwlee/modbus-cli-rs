@@ -3,13 +3,13 @@ mod tests {
     use crate::mem::data::DataType;
     use crate::mem::memory::{Memory, Range};
     use crate::mem::register::{AccessType, Definition, Handler};
-    use crate::Config;
+    use crate::AppConfig;
     use std::collections::HashMap;
     use std::sync::{Arc, Mutex};
 
     #[test]
     fn overlap() {
-        let mut memory: Memory<10, _> = Memory::new();
+        let mut memory = Memory::new();
         memory.init(&[Range::new(0u16, 40u16)]);
         let values: Vec<u16> = (17..34).map(|x| x as u16).collect();
         let _ = memory.write(Range::new(17u16, 34u16), &values);
@@ -23,7 +23,7 @@ mod tests {
 
     #[test]
     fn no_overlap() {
-        let mut memory: Memory<1024, _> = Memory::new();
+        let mut memory = Memory::new();
         memory.init(&[Range::new(0u16, 40u16)]);
         let values: Vec<u16> = (17..34).map(|x| x as u16).collect();
         let _ = memory.write(Range::new(17u16, 34u16), &values);
@@ -37,7 +37,7 @@ mod tests {
 
     #[test]
     fn register() {
-        let mut memory: Memory<1024, u16> = Memory::new();
+        let mut memory = Memory::new();
         memory.init(&[Range::new(0u16, 4096u16)]);
         let memory = Arc::new(Mutex::new(memory));
         let mut definitions: HashMap<String, Definition> = HashMap::new();
@@ -45,8 +45,8 @@ mod tests {
             "Name".to_owned(),
             Definition::new(0, 2, DataType::PackedAscii, 0x04u8, AccessType::ReadOnly),
         );
-        let config = Arc::new(Mutex::new(Config::default()));
-        let mut register = Handler::<1024>::new(config, memory);
+        let config = Arc::new(Mutex::new(AppConfig::default()));
+        let mut register = Handler::new(config, memory);
         register
             .set_values(1234, &[0x1234, 0x2345])
             .expect("Set values failed");

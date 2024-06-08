@@ -50,3 +50,14 @@ impl<T, E, F: FnOnce(E) -> String> Expect<F> for Result<T, E> {
         }
     }
 }
+
+macro_rules! async_cloned {
+    ($($n:ident),+; $body:block) => (
+        {
+            $( let $n = $n.clone(); )+
+            async move { $body }
+        }
+    );
+}
+
+pub(crate) use async_cloned;

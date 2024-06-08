@@ -630,6 +630,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "tokio-modbus",
+ "tokio-serial",
  "unicode-width",
 ]
 

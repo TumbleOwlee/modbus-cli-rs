@@ -22,7 +22,7 @@ Provide a CLI application that can interact with a modbus server and modbus clie
 - [x] Modbus client to read and display all reigster contents of a modbus server.
 - [x] Allow the manipulation of register contents in server and client mode.
 - [x] Support TCP modbus
-- [ ] Support RTU modbus
+- [x] Support RTU modbus
 
 ## Quickstart
 

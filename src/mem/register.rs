@@ -2,7 +2,7 @@ use crate::mem::data::DataType;
 use crate::mem::memory::{Memory, Range};
 use crate::util::str;
 use crate::util::Expect;
-use crate::Config;
+use crate::AppConfig;
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -113,10 +113,7 @@ pub struct Register {
 }
 
 impl Register {
-    pub fn new<const SLICE_SIZE: usize>(
-        definition: &Definition,
-        memory: &Arc<Mutex<Memory<SLICE_SIZE, u16>>>,
-    ) -> Self {
+    pub fn new(definition: &Definition, memory: &Arc<Mutex<Memory>>) -> Self {
         let read_code = FunctionCode::new(definition.read_code);
         match read_code {
             FunctionCode::WriteSingleCoil
@@ -176,14 +173,14 @@ impl Register {
     }
 }
 
-pub struct Handler<const SLICE_SIZE: usize> {
-    config: Arc<Mutex<Config>>,
-    memory: Arc<Mutex<Memory<SLICE_SIZE, u16>>>,
+pub struct Handler {
+    config: Arc<Mutex<AppConfig>>,
+    memory: Arc<Mutex<Memory>>,
 }
 
-impl<const SLICE_SIZE: usize> Handler<SLICE_SIZE> {
+impl Handler {
     #[allow(dead_code)]
-    pub fn new(config: Arc<Mutex<Config>>, memory: Arc<Mutex<Memory<SLICE_SIZE, u16>>>) -> Self {
+    pub fn new(config: Arc<Mutex<AppConfig>>, memory: Arc<Mutex<Memory>>) -> Self {
         Self { config, memory }
     }
 
