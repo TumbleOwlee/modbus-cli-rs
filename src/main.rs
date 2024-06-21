@@ -43,7 +43,7 @@ enum Commands {
 #[command(version, about, long_about = None)]
 struct Args {
     /// Path to the JSON configuration file providing the register definitions.
-    #[arg(short, long)]
+    #[arg(long)]
     config: Option<String>,
 
     /// Switch on verbose output.
@@ -51,7 +51,7 @@ struct Args {
     verbose: bool,
 
     /// Start as client instead of service.
-    #[arg(short, long, default_value_t = false)]
+    #[arg(long, default_value_t = false)]
     client: bool,
 
     #[command(subcommand)]
@@ -175,5 +175,5 @@ fn main() {
     let cmd_sender = if args.client { Some(cmd_sender) } else { None };
     app.run(status_receiver, log_receiver, cmd_sender)
         .panic(|e| format!("Run app failed [{}]", e));
-    //runtime.block_on(async { tokio::join_all().await });
+    //runtime.block_on(async { crate::util::tokio::join_all().await });
 }

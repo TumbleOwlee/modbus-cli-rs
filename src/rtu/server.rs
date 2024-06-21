@@ -10,7 +10,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 use tokio::sync::mpsc::Sender;
-use tokio_modbus::prelude::{Exception, Request, Response};
+use tokio_modbus::prelude::{Exception, Request, Response, Slave};
 use tokio_modbus::server::rtu::Server as RtuServer;
 use tokio_serial::SerialStream;
 
@@ -47,7 +47,7 @@ impl tokio_modbus::server::Service for Service {
     type Request = Request<'static>;
     type Future = future::Ready<Result<Response, Exception>>;
 
-    fn call(&self, req: Self::Request) -> Self::Future {
+    fn call(&self, slave: Slave, req: Self::Request) -> Self::Future {
         match req {
             Request::ReadInputRegisters(addr, cnt) => future::ready(
                 self.memory
@@ -56,7 +56,8 @@ impl tokio_modbus::server::Service for Service {
                     .read(&Range::new(addr, addr + cnt))
                     .map_err(|e| {
                         let _ = self.log_sender.try_send(LogMsg::err(&format!(
-                            "ReadInputRegisters: [{:#06X}, {:#06X}) ({})",
+                            "Slave: {}, ReadInputRegisters: [{:#06X}, {:#06X}) ({})",
+                            slave.0,
                             addr,
                             addr + cnt,
                             e
@@ -65,7 +66,8 @@ impl tokio_modbus::server::Service for Service {
                     })
                     .map(|v| {
                         let _ = self.log_sender.try_send(LogMsg::info(&format!(
-                            "ReadInputRegisters: [{:#06X}, {:#06X}) = {}",
+                            "Slave: {}, ReadInputRegisters: [{:#06X}, {:#06X}) = {}",
+                            slave.0,
                             addr,
                             addr + cnt,
                             refs_to_str(&v)
@@ -80,7 +82,8 @@ impl tokio_modbus::server::Service for Service {
                     .read(&Range::new(addr, addr + cnt))
                     .map_err(|e| {
                         let _ = self.log_sender.try_send(LogMsg::err(&format!(
-                            "ReadHoldingRegisters: [{:#06X}, {:#06X}) ({})",
+                            "Slave: {}, ReadHoldingRegisters: [{:#06X}, {:#06X}) ({})",
+                            slave.0,
                             addr,
                             addr + cnt,
                             e
@@ -89,7 +92,8 @@ impl tokio_modbus::server::Service for Service {
                     })
                     .map(|v| {
                         let _ = self.log_sender.try_send(LogMsg::info(&format!(
-                            "ReadHoldingRegisters: [{:#06X}, {:#06X}) = {}",
+                            "Slave: {}, ReadHoldingRegisters: [{:#06X}, {:#06X}) = {}",
+                            slave.0,
                             addr,
                             addr + cnt,
                             refs_to_str(&v)
@@ -104,7 +108,8 @@ impl tokio_modbus::server::Service for Service {
                     .write(Range::new(addr, addr + (values.len() as u16)), &values)
                     .map_err(|e| {
                         let _ = self.log_sender.try_send(LogMsg::err(&format!(
-                            "WriteMultipleRegisters: [{:#06X}, {:#06X}) ({})",
+                            "Slave: {}, WriteMultipleRegisters: [{:#06X}, {:#06X}) ({})",
+                            slave.0,
                             addr,
                             addr as usize + values.len(),
                             e
@@ -113,7 +118,8 @@ impl tokio_modbus::server::Service for Service {
                     })
                     .map(|_| {
                         let _ = self.log_sender.try_send(LogMsg::info(&format!(
-                            "WriteMultipleRegisters: [{:#06X}, {:#06X}) = {}",
+                            "Slave: {}, WriteMultipleRegisters: [{:#06X}, {:#06X}) = {}",
+                            slave.0,
                             addr,
                             addr as usize + values.len(),
                             to_str(&values)
@@ -128,7 +134,8 @@ impl tokio_modbus::server::Service for Service {
                     .write(Range::new(addr, addr + 1), &[value])
                     .map_err(|e| {
                         let _ = self.log_sender.try_send(LogMsg::err(&format!(
-                            "WriteSingleRegister: [{:#06X}, {:#06X}) ({})",
+                            "Slave: {}, WriteSingleRegister: [{:#06X}, {:#06X}) ({})",
+                            slave.0,
                             addr,
                             addr + 1,
                             e
@@ -137,7 +144,8 @@ impl tokio_modbus::server::Service for Service {
                     })
                     .map(|_| {
                         let _ = self.log_sender.try_send(LogMsg::info(&format!(
-                            "WriteSingleRegister: [{:#06X}, {:#06X}) = {}",
+                            "Slave: {}, WriteSingleRegister: [{:#06X}, {:#06X}) = {}",
+                            slave.0,
                             addr,
                             addr + 1,
                             value

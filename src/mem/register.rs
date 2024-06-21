@@ -57,6 +57,7 @@ impl std::fmt::Display for AccessType {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Definition {
+    slave_id: u8,
     address: Address,
     length: u16,
     r#type: DataType,
@@ -67,6 +68,7 @@ pub struct Definition {
 impl Definition {
     #[allow(dead_code)]
     pub fn new(
+        slave_id: u8,
         address: u16,
         length: u16,
         r#type: DataType,
@@ -74,12 +76,17 @@ impl Definition {
         access: AccessType,
     ) -> Self {
         Self {
+            slave_id,
             address: Address::Decimal(address),
             length,
             r#type,
             read_code,
             access,
         }
+    }
+
+    pub fn get_slave_id(&self) -> u8 {
+        self.slave_id
     }
 
     pub fn get_range(&self) -> Range<u16> {

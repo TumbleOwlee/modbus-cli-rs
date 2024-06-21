@@ -43,7 +43,7 @@ mod tests {
         let mut definitions: HashMap<String, Definition> = HashMap::new();
         definitions.insert(
             "Name".to_owned(),
-            Definition::new(0, 2, DataType::PackedAscii, 0x04u8, AccessType::ReadOnly),
+            Definition::new(0, 0, 2, DataType::PackedAscii, 0x04u8, AccessType::ReadOnly),
         );
         let config = Arc::new(Mutex::new(AppConfig::default()));
         let mut register = Handler::new(config, memory);

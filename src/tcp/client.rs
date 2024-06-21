@@ -11,13 +11,13 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 use tokio::sync::mpsc::{Receiver, Sender};
-use tokio_modbus::prelude::{Reader, Writer};
-use tokio_modbus::FunctionCode;
+use tokio_modbus::prelude::{Reader, SlaveContext, Writer};
+use tokio_modbus::{FunctionCode, Slave};
 
 pub struct Client {
     tcp_config: TcpConfig,
     memory: Arc<Mutex<Memory>>,
-    operations: Vec<(FunctionCode, Range<usize>)>,
+    operations: Vec<(u8, FunctionCode, Range<usize>)>,
     status_sender: Sender<Status>,
     cmd_receiver: Receiver<Command>,
     log_sender: Sender<LogMsg>,
@@ -43,7 +43,7 @@ impl Client {
         }
     }
 
-    fn init(app_config: Arc<Mutex<AppConfig>>) -> Vec<(FunctionCode, Range<usize>)> {
+    fn init(app_config: Arc<Mutex<AppConfig>>) -> Vec<(u8, FunctionCode, Range<usize>)> {
         let config = app_config.lock().unwrap();
         let mut sorted_defs = config
             .definitions
@@ -57,7 +57,7 @@ impl Client {
 
         let marker = (
             str!(""),
-            Definition::new(0, 0, DataType::U8, 0, AccessType::ReadOnly),
+            Definition::new(4, 0, 0, DataType::U8, 0, AccessType::ReadOnly),
         );
         sorted_defs.push((&marker.0, &marker.1));
 
@@ -82,7 +82,8 @@ impl Client {
             if let Some(ref mut range) = range {
                 let (def_addr, def_fc, def_range) =
                     (def.get_address(), def.read_code(), def.get_range());
-                if (range.length() + def_addr as usize - range.start() + def_range.length()) > 127
+                if ((range.length() + def_addr as usize + def_range.length())
+                    > (range.start() + 127))
                     || (fc != def_fc
                         || (def_addr >= range.end() as u16
                             && !is_allowed(fc, def_addr, range.end())))
@@ -101,14 +102,10 @@ impl Client {
                                 let mut addr = range.start();
                                 loop {
                                     operations.push((
+                                        def.get_slave_id(),
                                         fc,
                                         Range::new(addr, std::cmp::min(addr + 127, range.end())),
                                     ));
-                                    eprintln!(
-                                        "Push {:#06X?}, {:#06X?}",
-                                        addr,
-                                        std::cmp::min(addr + 127, range.end())
-                                    );
                                     addr = std::cmp::min(addr + 127, range.end());
                                     if addr == range.end() {
                                         break;
@@ -174,9 +171,10 @@ impl Client {
                 let res = now.duration_since(time_last_read);
                 if res.is_ok_and(|d| d.as_millis() > interval_ms as u128) {
                     time_last_read = now;
-                    let (fc, op) = self.operations.get(op_idx).unwrap();
+                    let (slave, fc, op) = self.operations.get(op_idx).unwrap();
                     let modbus_result = match fc {
                         FunctionCode::ReadInputRegisters => {
+                            context.set_slave(Slave(*slave));
                             context
                                 .read_input_registers(
                                     op.start() as u16,
@@ -185,6 +183,7 @@ impl Client {
                                 .await
                         }
                         FunctionCode::ReadHoldingRegisters => {
+                            context.set_slave(Slave(*slave));
                             context
                                 .read_holding_registers(
                                     op.start() as u16,
@@ -194,7 +193,7 @@ impl Client {
                         }
                         _ => panic!("Invalid function code in operation."),
                     };
-                    if let Ok(vec) = modbus_result {
+                    if let Ok(Ok(vec)) = modbus_result {
                         let _ = self.log_sender
                             .send(LogMsg::info(&format!(
                                 "Read address space [ {start:#06X} ({start}), {end:#06X} ({end}) ) successful.",
@@ -255,6 +254,13 @@ impl Client {
                                     )))
                                     .await;
                                 disconnect = true;
+                            } else {
+                                let _ = self
+                                    .log_sender
+                                    .send(LogMsg::err(&format!(
+                                        "Successfuly written address {addr} with values {vec:?}."
+                                    )))
+                                    .await;
                             }
                         }
                     }

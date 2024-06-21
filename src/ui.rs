@@ -328,13 +328,6 @@ impl App {
         cmd_sender: &Option<Sender<Command>>,
     ) -> anyhow::Result<LoopAction> {
         match key.code {
-            KeyCode::Char('w') => {
-                // TODO: Dialog to add new definition
-                self.config.lock().unwrap().definitions.insert(
-                    format!("Def{}", self.log_entries.len()),
-                    Definition::new(0x4000u16, 2, DataType::U8, 4, AccessType::ReadWrite),
-                );
-            }
             KeyCode::Char('s') => {
                 // TODO: Dialog to specify output path
                 let config = self.config.lock().unwrap();

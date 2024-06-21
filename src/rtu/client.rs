@@ -57,7 +57,7 @@ impl Client {
 
         let marker = (
             str!(""),
-            Definition::new(0, 0, DataType::U8, 0, AccessType::ReadOnly),
+            Definition::new(0, 0, 0, DataType::U8, 0, AccessType::ReadOnly),
         );
         sorted_defs.push((&marker.0, &marker.1));
 
@@ -104,11 +104,6 @@ impl Client {
                                         fc,
                                         Range::new(addr, std::cmp::min(addr + 127, range.end())),
                                     ));
-                                    eprintln!(
-                                        "Push {:#06X?}, {:#06X?}",
-                                        addr,
-                                        std::cmp::min(addr + 127, range.end())
-                                    );
                                     addr = std::cmp::min(addr + 127, range.end());
                                     if addr == range.end() {
                                         break;
@@ -195,7 +190,7 @@ impl Client {
                         }
                         _ => panic!("Invalid function code in operation."),
                     };
-                    if let Ok(vec) = modbus_result {
+                    if let Ok(Ok(vec)) = modbus_result {
                         let _ = self.log_sender
                             .send(LogMsg::info(&format!(
                                 "Read address space [ {start:#06X} ({start}), {end:#06X} ({end}) ) successful.",
