@@ -36,7 +36,7 @@ cargo build --release
 Alternatively, you can also run it directly using the following command.
 
 ```sh
-cargo run --release -- -i <ip> -p <port> ./path/to/config.json
+cargo run --release -- --config ./path/to/config.json tcp -i <ip> -p <port>
 ```
 
 Please refer to `--help` for all available options.
@@ -58,18 +58,20 @@ The configuraation has to contain the following entries.
 ```
 
 The `history_length` defines the scroll back limit of the displayed log messages. The parameter `interval_ms` specifies the frequency of read operations
-and is only used if the `modbus-cli-rs` application is executed in client mode using the `-c` flag. Based on the modbus server it may be necessary to
+and is only used if the `modbus-cli-rs` application is executed in client mode using the `--client` flag. Based on the modbus server it may be necessary to
 increase the duration if it can only handle a limited amount of commands per second.
 
 In `contiguous_memory` you can define address ranges that are available on a modbus server. This is used to group multiple registers together and
 reduce the amount of read commands. E.g. if you have two registers `0x200` and `0x202` and both registers have length 1, the client would perform
 two read commands since `0x201` is unused and separates the two registers. By adding the following entry to `contiguous_memory`, you specify that
 the range `[ 0x200, 0x202 ]` is provided by the modbus server and thus can be read using a single command without receiving a `Illigal Address`
-exception because of `0x201`.
+exception. By default the `slave_id = 0` is used, if the modbus server has specific registers that are only available for a specific `slave_id`, you
+can specify the specific `slave_id` for the memory range.
 
 ```json
 "contiguous_memory": [
     {
+        "slave_id": 1,
         "read_code": 4,
         "range": {
             "start": "0x200",
@@ -79,10 +81,12 @@ exception because of `0x201`.
 ]
 ```
 
-You can define all registers by adding the entries for each register to the `definitions` map. A definition entry looks like this.
+You can define all registers by adding the entries for each register to the `definitions` map. A definition entry looks like this. The `slave_id` is
+here optional, too. If none is provided, `slave_id = 0` is used.
 
 ```json
 "Serial Number": {
+    "slave_id": 2,
     "read_code": 4,
     "address": "0x4000",
     "length": 4,
