@@ -29,6 +29,7 @@ use std::io::BufReader;
 use std::sync::{Arc, Mutex};
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc::channel;
+use tokio_modbus::prelude::SlaveId;
 
 #[derive(Subcommand)]
 enum Commands {
@@ -60,6 +61,7 @@ struct Args {
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct ContiguousMemory {
+    slave_id: Option<SlaveId>,
     read_code: u8,
     range: Range<Address>,
 }
@@ -106,13 +108,18 @@ fn main() {
 
     // Initialize memory storage for all registers
     let mut memory = Memory::new();
-    memory.init(
-        &app_config
-            .definitions
-            .values()
-            .map(|d| d.get_range())
-            .collect::<Vec<_>>(),
+    let map = app_config.definitions.values().fold(
+        HashMap::new(),
+        |mut f: HashMap<SlaveId, Vec<Range<_>>>, d| {
+            f.entry(d.get_slave_id().unwrap_or(0))
+                .or_default()
+                .push(d.get_range());
+            f
+        },
     );
+    for (slave, ranges) in map.into_iter() {
+        memory.init(slave, &ranges);
+    }
     let memory = Arc::new(Mutex::new(memory));
     let app_config = Arc::new(Mutex::new(app_config));
 

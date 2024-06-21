@@ -1,5 +1,6 @@
 use crate::util::str;
 use chrono::Local;
+use tokio_modbus::prelude::SlaveId;
 
 pub enum Status {
     String(String),
@@ -8,7 +9,7 @@ pub enum Status {
 pub enum Command {
     Connect,
     Disconnect,
-    WriteMultipleRegisters((u16, Vec<u16>)),
+    WriteMultipleRegisters((SlaveId, u16, Vec<u16>)),
 }
 
 #[derive(Clone, Debug)]

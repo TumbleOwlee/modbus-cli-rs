@@ -11,13 +11,13 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 use tokio::sync::mpsc::{Receiver, Sender};
-use tokio_modbus::prelude::{Reader, SlaveContext, Writer};
+use tokio_modbus::prelude::{Reader, SlaveContext, SlaveId, Writer};
 use tokio_modbus::{FunctionCode, Slave};
 
 pub struct Client {
     tcp_config: TcpConfig,
     memory: Arc<Mutex<Memory>>,
-    operations: Vec<(u8, FunctionCode, Range<usize>)>,
+    operations: Vec<(SlaveId, FunctionCode, Range<usize>)>,
     status_sender: Sender<Status>,
     cmd_receiver: Receiver<Command>,
     log_sender: Sender<LogMsg>,
@@ -43,27 +43,33 @@ impl Client {
         }
     }
 
-    fn init(app_config: Arc<Mutex<AppConfig>>) -> Vec<(u8, FunctionCode, Range<usize>)> {
+    fn init(app_config: Arc<Mutex<AppConfig>>) -> Vec<(SlaveId, FunctionCode, Range<usize>)> {
         let config = app_config.lock().unwrap();
         let mut sorted_defs = config
             .definitions
             .iter()
             .sorted_by(|a, b| {
-                a.1.read_code()
-                    .cmp(&b.1.read_code())
-                    .then(a.1.get_address().cmp(&b.1.get_address()))
+                a.1.get_slave_id()
+                    .unwrap_or(0)
+                    .cmp(&b.1.get_slave_id().unwrap_or(0))
+                    .then(
+                        a.1.read_code()
+                            .cmp(&b.1.read_code())
+                            .then(a.1.get_address().cmp(&b.1.get_address())),
+                    )
             })
             .collect::<Vec<_>>();
 
         let marker = (
             str!(""),
-            Definition::new(4, 0, 0, DataType::U8, 0, AccessType::ReadOnly),
+            Definition::new(None, 0, 0, DataType::U8, 0, AccessType::ReadOnly),
         );
         sorted_defs.push((&marker.0, &marker.1));
 
-        let is_allowed = |fc: u8, addr: u16, end: usize| {
+        let is_allowed = |slave: SlaveId, fc: u8, addr: u16, end: usize| {
             for mem in config.contiguous_memory.iter() {
-                if mem.read_code == fc
+                if mem.slave_id.unwrap_or(0) == slave
+                    && mem.read_code == fc
                     && addr as usize >= mem.range.start()
                     && addr as usize <= mem.range.end()
                     && end >= mem.range.start()
@@ -75,20 +81,27 @@ impl Client {
             false
         };
 
-        let mut fc: u8 = 0;
+        let mut fc: i16 = -1;
+        let mut slave: i16 = -1;
         let mut operations = Vec::new();
         let mut range: Option<Range<u16>> = None;
         for (name, def) in sorted_defs.into_iter() {
             if let Some(ref mut range) = range {
-                let (def_addr, def_fc, def_range) =
-                    (def.get_address(), def.read_code(), def.get_range());
-                if ((range.length() + def_addr as usize + def_range.length())
-                    > (range.start() + 127))
-                    || (fc != def_fc
-                        || (def_addr >= range.end() as u16
-                            && !is_allowed(fc, def_addr, range.end())))
+                let (def_slave, def_addr, def_fc, def_range) = (
+                    def.get_slave_id().unwrap_or(0),
+                    def.get_address(),
+                    def.read_code(),
+                    def.get_range(),
+                );
+                if (fc != -1
+                    && slave != -1
+                    && ((fc != (def_fc as i16)) || (slave != (def_slave as i16))))
+                    || ((range.length() + def_addr as usize + def_range.length())
+                        > (range.start() + 127))
+                    || (def_addr >= range.end() as u16
+                        && !is_allowed(slave as SlaveId, fc as u8, def_addr, range.end()))
                 {
-                    let fc = FunctionCode::new(fc);
+                    let fc = FunctionCode::new(fc as u8);
                     match fc {
                         FunctionCode::ReadCoils => {
                             unimplemented!("Read Coils")
@@ -102,7 +115,7 @@ impl Client {
                                 let mut addr = range.start();
                                 loop {
                                     operations.push((
-                                        def.get_slave_id(),
+                                        slave as SlaveId,
                                         fc,
                                         Range::new(addr, std::cmp::min(addr + 127, range.end())),
                                     ));
@@ -118,7 +131,8 @@ impl Client {
                     Range::new(def_addr, def_addr).clone_into(range);
                 }
             }
-            fc = def.read_code();
+            fc = def.read_code() as i16;
+            slave = def.get_slave_id().unwrap_or(0) as i16;
             range = match range {
                 None => Some(def.get_range()),
                 Some(v) => Some(Range::new(v.start() as u16, def.get_range().end() as u16)),
@@ -203,7 +217,7 @@ impl Client {
                             .await;
                         let mut memory = self.memory.lock().unwrap();
                         memory
-                            .write(Range::new(op.start(), op.start() + vec.len()), &vec)
+                            .write(*slave, Range::new(op.start(), op.start() + vec.len()), &vec)
                             .panic(|e| format!("Failed to write to memory ({})", e));
                         drop(memory);
                         op_idx = if op_idx + 1 == self.operations.len() {
@@ -245,7 +259,8 @@ impl Client {
                             disconnect = true;
                         }
                         Command::Connect => {}
-                        Command::WriteMultipleRegisters((addr, vec)) => {
+                        Command::WriteMultipleRegisters((slave, addr, vec)) => {
+                            context.set_slave(Slave(slave));
                             if let Err(e) = context.write_multiple_registers(addr, &vec).await {
                                 let _ = self
                                     .log_sender

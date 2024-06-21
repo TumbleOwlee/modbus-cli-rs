@@ -7,6 +7,7 @@ use crate::AppConfig;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use tokio_modbus::prelude::SlaveId;
 use tokio_modbus::FunctionCode;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -57,7 +58,7 @@ impl std::fmt::Display for AccessType {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Definition {
-    slave_id: u8,
+    slave_id: Option<SlaveId>,
     address: Address,
     length: u16,
     r#type: DataType,
@@ -68,7 +69,7 @@ pub struct Definition {
 impl Definition {
     #[allow(dead_code)]
     pub fn new(
-        slave_id: u8,
+        slave_id: Option<SlaveId>,
         address: u16,
         length: u16,
         r#type: DataType,
@@ -85,8 +86,8 @@ impl Definition {
         }
     }
 
-    pub fn get_slave_id(&self) -> u8 {
-        self.slave_id
+    pub fn get_slave_id(&self) -> &Option<SlaveId> {
+        &self.slave_id
     }
 
     pub fn get_range(&self) -> Range<u16> {
@@ -112,6 +113,7 @@ impl Definition {
 
 #[derive(Clone)]
 pub struct Register {
+    slave: SlaveId,
     address: u16,
     value: String,
     raw: Vec<u16>,
@@ -140,7 +142,10 @@ impl Register {
         let bytes: Vec<u16> = memory
             .lock()
             .unwrap()
-            .read(&definition.get_range())
+            .read(
+                definition.get_slave_id().unwrap_or(0),
+                &definition.get_range(),
+            )
             .panic(|e| format!("{}", e))
             .into_iter()
             .copied()
@@ -151,12 +156,17 @@ impl Register {
             .unwrap_or(str!("Invalid data"));
 
         Self {
+            slave: definition.get_slave_id().unwrap_or(0),
             address: definition.address.as_u16(),
             value,
             raw: bytes,
             r#type: definition.get_type().clone(),
             access: definition.access_type(),
         }
+    }
+
+    pub fn slave_id(&self) -> SlaveId {
+        self.slave
     }
 
     pub fn address(&self) -> u16 {
@@ -205,10 +215,10 @@ impl Handler {
             .collect()
     }
 
-    pub fn set_values(&mut self, addr: u16, values: &[u16]) -> anyhow::Result<()> {
+    pub fn set_values(&mut self, slave: SlaveId, addr: u16, values: &[u16]) -> anyhow::Result<()> {
         let mut memory = self.memory.lock().unwrap();
         memory
-            .write(Range::new(addr, addr + values.len() as u16), values)
+            .write(slave, Range::new(addr, addr + values.len() as u16), values)
             .map(|_| ())
     }
 }

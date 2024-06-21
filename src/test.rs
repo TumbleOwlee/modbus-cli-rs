@@ -10,10 +10,10 @@ mod tests {
     #[test]
     fn overlap() {
         let mut memory = Memory::new();
-        memory.init(&[Range::new(0u16, 40u16)]);
+        memory.init(0, &[Range::new(0u16, 40u16)]);
         let values: Vec<u16> = (17..34).map(|x| x as u16).collect();
-        let _ = memory.write(Range::new(17u16, 34u16), &values);
-        let vals = memory.read(&Range::new(16u16, 35u16)).unwrap();
+        let _ = memory.write(0, Range::new(17u16, 34u16), &values);
+        let vals = memory.read(0, &Range::new(16u16, 35u16)).unwrap();
 
         assert_eq!(
             vals.into_iter().copied().collect::<Vec<_>>(),
@@ -24,10 +24,10 @@ mod tests {
     #[test]
     fn no_overlap() {
         let mut memory = Memory::new();
-        memory.init(&[Range::new(0u16, 40u16)]);
+        memory.init(0, &[Range::new(0u16, 40u16)]);
         let values: Vec<u16> = (17..34).map(|x| x as u16).collect();
-        let _ = memory.write(Range::new(17u16, 34u16), &values);
-        let vals = memory.read(&Range::new(16u16, 35u16)).unwrap();
+        let _ = memory.write(0, Range::new(17u16, 34u16), &values);
+        let vals = memory.read(0, &Range::new(16u16, 35u16)).unwrap();
 
         assert_eq!(
             vals.into_iter().copied().collect::<Vec<_>>(),
@@ -38,17 +38,24 @@ mod tests {
     #[test]
     fn register() {
         let mut memory = Memory::new();
-        memory.init(&[Range::new(0u16, 4096u16)]);
+        memory.init(0, &[Range::new(0u16, 4096u16)]);
         let memory = Arc::new(Mutex::new(memory));
         let mut definitions: HashMap<String, Definition> = HashMap::new();
         definitions.insert(
             "Name".to_owned(),
-            Definition::new(0, 0, 2, DataType::PackedAscii, 0x04u8, AccessType::ReadOnly),
+            Definition::new(
+                None,
+                0,
+                2,
+                DataType::PackedAscii,
+                0x04u8,
+                AccessType::ReadOnly,
+            ),
         );
         let config = Arc::new(Mutex::new(AppConfig::default()));
         let mut register = Handler::new(config, memory);
         register
-            .set_values(1234, &[0x1234, 0x2345])
+            .set_values(0, 1234, &[0x1234, 0x2345])
             .expect("Set values failed");
     }
 }

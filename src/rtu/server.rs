@@ -1,7 +1,6 @@
 use crate::mem::memory::{Memory, Range};
 use crate::rtu::RtuConfig;
 use crate::util::str;
-use crate::util::Expect;
 use crate::LogMsg;
 use crate::Status;
 
@@ -53,7 +52,7 @@ impl tokio_modbus::server::Service for Service {
                 self.memory
                     .lock()
                     .unwrap()
-                    .read(&Range::new(addr, addr + cnt))
+                    .read(slave.0, &Range::new(addr, addr + cnt))
                     .map_err(|e| {
                         let _ = self.log_sender.try_send(LogMsg::err(&format!(
                             "Slave: {}, ReadInputRegisters: [{:#06X}, {:#06X}) ({})",
@@ -79,7 +78,7 @@ impl tokio_modbus::server::Service for Service {
                 self.memory
                     .lock()
                     .unwrap()
-                    .read(&Range::new(addr, addr + cnt))
+                    .read(slave.0, &Range::new(addr, addr + cnt))
                     .map_err(|e| {
                         let _ = self.log_sender.try_send(LogMsg::err(&format!(
                             "Slave: {}, ReadHoldingRegisters: [{:#06X}, {:#06X}) ({})",
@@ -105,7 +104,11 @@ impl tokio_modbus::server::Service for Service {
                 self.memory
                     .lock()
                     .unwrap()
-                    .write(Range::new(addr, addr + (values.len() as u16)), &values)
+                    .write(
+                        slave.0,
+                        Range::new(addr, addr + (values.len() as u16)),
+                        &values,
+                    )
                     .map_err(|e| {
                         let _ = self.log_sender.try_send(LogMsg::err(&format!(
                             "Slave: {}, WriteMultipleRegisters: [{:#06X}, {:#06X}) ({})",
@@ -131,7 +134,7 @@ impl tokio_modbus::server::Service for Service {
                 self.memory
                     .lock()
                     .unwrap()
-                    .write(Range::new(addr, addr + 1), &[value])
+                    .write(slave.0, Range::new(addr, addr + 1), &[value])
                     .map_err(|e| {
                         let _ = self.log_sender.try_send(LogMsg::err(&format!(
                             "Slave: {}, WriteSingleRegister: [{:#06X}, {:#06X}) ({})",

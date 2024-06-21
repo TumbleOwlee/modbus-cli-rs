@@ -1,5 +1,3 @@
-use crate::mem::data::DataType;
-use crate::mem::register::{AccessType, Definition};
 use crate::mem::register::{Handler, Register};
 use crate::util::str;
 use crate::widgets::{EditDialog, EditFieldType};
@@ -368,7 +366,9 @@ impl App {
                         .iter()
                         .filter(|(n, _)| !n.starts_with("hide_"))
                         .sorted_by(|a, b| {
-                            Ord::cmp(&a.1.address(), &b.1.address()).then(a.0.cmp(b.0))
+                            Ord::cmp(&a.1.slave_id(), &b.1.slave_id())
+                                .then(a.1.address().cmp(&b.1.address()))
+                                .then(a.0.cmp(b.0))
                         })
                         .enumerate()
                         .filter_map(|(j, (name, r))| {
@@ -427,6 +427,7 @@ impl App {
                                     } else if let Some(ref sender) = cmd_sender {
                                         if let Err(e) =
                                             sender.blocking_send(Command::WriteMultipleRegisters((
+                                                register.slave_id(),
                                                 register.address(),
                                                 v,
                                             )))
@@ -435,9 +436,11 @@ impl App {
                                         } else {
                                             self.popup = Popup::None;
                                         }
-                                    } else if let Err(e) =
-                                        self.register_handler.set_values(register.address(), &v)
-                                    {
+                                    } else if let Err(e) = self.register_handler.set_values(
+                                        register.slave_id(),
+                                        register.address(),
+                                        &v,
+                                    ) {
                                         self.log_entries.push(LogMsg::err(&format!("{}", e)));
                                     } else {
                                         self.popup = Popup::None;
@@ -570,7 +573,7 @@ fn render_register(f: &mut Frame, app: &mut App, area: Rect) {
         .bg(app.colors.selected_color.bg);
 
     let cols = [
-        "Access", "Name", "Address", "Type", "Length", "Value", "Raw Data",
+        "Access", "SlaveId", "Name", "Address", "Type", "Length", "Value", "Raw Data",
     ];
     let header = cols
         .into_iter()
@@ -583,10 +586,15 @@ fn render_register(f: &mut Frame, app: &mut App, area: Rect) {
         .values()
         .iter()
         .filter(|(n, _)| !n.starts_with("hide_"))
-        .sorted_by(|a, b| Ord::cmp(&a.1.address(), &b.1.address()).then(a.0.cmp(b.0)))
+        .sorted_by(|a, b| {
+            Ord::cmp(&a.1.slave_id(), &b.1.slave_id())
+                .then(a.1.address().cmp(&b.1.address()))
+                .then(a.0.cmp(b.0))
+        })
         .map(|(n, r)| {
             [
                 format!("{}", r.access_type()),
+                format!("{}", r.slave_id()),
                 str!(n),
                 format!("{:#06X} ({})", r.address(), r.address()),
                 format!("{:?}", r.r#type()),
@@ -618,6 +626,7 @@ fn render_register(f: &mut Frame, app: &mut App, area: Rect) {
             cols[4].width() as u16,
             cols[5].width() as u16,
             cols[6].width() as u16,
+            cols[7].width() as u16,
         ),
         |acc, item| {
             (
@@ -628,12 +637,13 @@ fn render_register(f: &mut Frame, app: &mut App, area: Rect) {
                 std::cmp::max(acc.4, item[4].width() as u16),
                 std::cmp::max(acc.5, item[5].width() as u16),
                 std::cmp::max(acc.6, item[6].width() as u16),
+                std::cmp::max(acc.7, item[7].width() as u16),
             )
         },
     );
 
     app.register_table.table_max_width =
-        limits.0 + limits.1 + limits.2 + limits.3 + limits.4 + limits.5 + limits.6 + 25;
+        limits.0 + limits.1 + limits.2 + limits.3 + limits.4 + limits.5 + limits.6 + limits.7 + 25;
 
     let rows = items.iter().enumerate().map(|(i, item)| {
         let color = app.colors.row_color.bg.get(i % 2);
@@ -654,7 +664,8 @@ fn render_register(f: &mut Frame, app: &mut App, area: Rect) {
             Constraint::Min(limits.3 + 1),
             Constraint::Min(limits.4 + 1),
             Constraint::Min(limits.5 + 1),
-            Constraint::Min(limits.6 + 3),
+            Constraint::Min(limits.6 + 1),
+            Constraint::Min(limits.7 + 3),
         ],
     )
     .header(header)
