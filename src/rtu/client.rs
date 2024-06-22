@@ -269,6 +269,13 @@ impl Client {
                                     )))
                                     .await;
                                 disconnect = true;
+                            } else {
+                                let _ = self
+                                    .log_sender
+                                    .send(LogMsg::ok(&format!(
+                                        "Successfully written to address {addr} with values {vec:?}."
+                                    )))
+                                    .await;
                             }
                         }
                     }

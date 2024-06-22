@@ -272,8 +272,8 @@ impl Client {
                             } else {
                                 let _ = self
                                     .log_sender
-                                    .send(LogMsg::err(&format!(
-                                        "Successfuly written address {addr} with values {vec:?}."
+                                    .send(LogMsg::ok(&format!(
+                                        "Successfully written address {addr} with values {vec:?}."
                                     )))
                                     .await;
                             }
