@@ -70,7 +70,6 @@ impl Memory {
                     .or_insert_with(|| [0; SLICE_SIZE]);
             }
         }
-        eprintln!("{slave} Bounds: {bounds:?}");
     }
 
     pub fn write<'a, Key: Into<usize> + Clone + Debug>(

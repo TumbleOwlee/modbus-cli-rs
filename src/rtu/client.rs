@@ -114,7 +114,7 @@ impl Client {
                                 let mut addr = range.start();
                                 loop {
                                     operations.push((
-                                        def.get_slave_id().unwrap_or(0),
+                                        slave as SlaveId,
                                         fc,
                                         Range::new(addr, std::cmp::min(addr + 127, range.end())),
                                     ));
