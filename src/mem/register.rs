@@ -57,6 +57,13 @@ impl std::fmt::Display for AccessType {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(untagged)]
+pub enum Value {
+    Str(String),
+    Num(i64),
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Definition {
     slave_id: Option<SlaveId>,
     address: Address,
@@ -64,6 +71,7 @@ pub struct Definition {
     r#type: DataType,
     read_code: u8,
     access: AccessType,
+    default: Option<Value>,
 }
 
 impl Definition {
@@ -75,6 +83,7 @@ impl Definition {
         r#type: DataType,
         read_code: u8,
         access: AccessType,
+        default: Option<Value>,
     ) -> Self {
         Self {
             slave_id,
@@ -83,7 +92,12 @@ impl Definition {
             r#type,
             read_code,
             access,
+            default,
         }
+    }
+
+    pub fn get_default(&self) -> &Option<Value> {
+        &self.default
     }
 
     pub fn get_slave_id(&self) -> &Option<SlaveId> {

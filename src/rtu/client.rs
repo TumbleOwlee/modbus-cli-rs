@@ -63,7 +63,7 @@ impl Client {
 
         let marker = (
             str!(""),
-            Definition::new(None, 0, 0, DataType::U8, 0, AccessType::ReadOnly),
+            Definition::new(None, 0, 0, DataType::U8, 0, AccessType::ReadOnly, None),
         );
         sorted_defs.push((&marker.0, &marker.1));
 

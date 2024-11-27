@@ -158,7 +158,13 @@ impl tokio_modbus::server::Service for Service {
                         Response::WriteSingleRegister(addr, value)
                     }),
             ),
-            _ => future::ready(Err(Exception::IllegalFunction)),
+            _ => {
+                let _ = self.log_sender.try_send(LogMsg::err(&format!(
+                    "Slave: {} (Illegal Function)",
+                    slave.0,
+                )));
+                future::ready(Err(Exception::IllegalFunction))
+            }
         }
     }
 }

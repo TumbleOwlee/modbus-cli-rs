@@ -8,7 +8,7 @@ mod util;
 mod widgets;
 
 use crate::mem::memory::{Memory, Range};
-use crate::mem::register::{Address, Definition, Handler};
+use crate::mem::register::{Address, Definition, Handler, Value};
 use crate::msg::{Command, LogMsg, Status};
 use crate::rtu::client::Client as RtuClient;
 use crate::rtu::server::Server as RtuServer;
@@ -176,6 +176,20 @@ fn main() {
 
     // Initialize register handler
     let register_handler = Handler::new(app_config.clone(), memory.clone());
+    for def in app_config.lock().unwrap().definitions.values() {
+        if let Some(value) = def.get_default() {
+            let s: String = match value {
+                Value::Str(v) => v.to_string(),
+                Value::Num(v) => format!("{}", v),
+            };
+            if let Ok(v) = def.get_type().encode(&s) {
+                memory
+                    .lock()
+                    .unwrap()
+                    .write(def.get_slave_id().unwrap_or(0), def.get_range(), &v);
+            }
+        }
+    }
 
     // Run UI
     let app = App::new(register_handler, app_config);
