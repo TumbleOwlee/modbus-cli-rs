@@ -367,8 +367,8 @@ impl App {
                         .filter(|(n, _)| !n.starts_with("hide_"))
                         .sorted_by(|a, b| {
                             Ord::cmp(&a.1.slave_id(), &b.1.slave_id())
-                                .then(a.1.address().cmp(&b.1.address()))
                                 .then(a.0.cmp(b.0))
+                                .then(a.1.address().cmp(&b.1.address()))
                         })
                         .enumerate()
                         .filter_map(|(j, (name, r))| {
@@ -588,8 +588,8 @@ fn render_register(f: &mut Frame, app: &mut App, area: Rect) {
         .filter(|(n, _)| !n.starts_with("hide_"))
         .sorted_by(|a, b| {
             Ord::cmp(&a.1.slave_id(), &b.1.slave_id())
-                .then(a.1.address().cmp(&b.1.address()))
                 .then(a.0.cmp(b.0))
+                .then(a.1.address().cmp(&b.1.address()))
         })
         .map(|(n, r)| {
             [

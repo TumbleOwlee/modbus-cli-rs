@@ -28,6 +28,8 @@ pub enum DataType {
     I128le,
     F32,
     F32le,
+    F64,
+    F64le,
 }
 
 impl DataType {
@@ -47,6 +49,34 @@ impl DataType {
                     let uval: u32 = ((*b2 as u32) << 16) + (*b1 as u32);
                     let val = f32::from_bits(uval);
                     Ok(format!("0x{:02$X} ({})", uval, val, 8))
+                } else {
+                    Err(anyhow!("Not enough bytes"))
+                }
+            }
+            DataType::F64 => {
+                if let (Some(b1), Some(b2), Some(b3), Some(b4)) =
+                    (bytes.first(), bytes.get(1), bytes.get(2), bytes.get(3))
+                {
+                    let uval: u64 = ((*b1 as u64) << 48)
+                        + ((*b2 as u64) << 32)
+                        + ((*b3 as u64) << 16)
+                        + (*b4 as u64);
+                    let val = f64::from_bits(uval);
+                    Ok(format!("0x{:02$X} ({})", uval, val, 16))
+                } else {
+                    Err(anyhow!("Not enough bytes"))
+                }
+            }
+            DataType::F64le => {
+                if let (Some(b1), Some(b2), Some(b3), Some(b4)) =
+                    (bytes.first(), bytes.get(1), bytes.get(2), bytes.get(3))
+                {
+                    let uval: u64 = ((*b4 as u64) << 48)
+                        + ((*b3 as u64) << 32)
+                        + ((*b2 as u64) << 16)
+                        + (*b1 as u64);
+                    let val = f64::from_bits(uval);
+                    Ok(format!("0x{:02$X} ({})", uval, val, 16))
                 } else {
                     Err(anyhow!("Not enough bytes"))
                 }
@@ -238,6 +268,34 @@ impl DataType {
                 Ok(vec![
                     (val & 0x0000FFFF) as u16,
                     ((val & 0xFFFF0000) >> 16) as u16,
+                ])
+            }
+            DataType::F64 => {
+                let val: f64 = if let Some(s) = s.strip_prefix("0x") {
+                    u64::from_str_radix(s, 16).map(f64::from_bits)?
+                } else {
+                    s.parse()?
+                };
+                let val = val.to_bits();
+                Ok(vec![
+                    ((val & 0xFFFF000000000000) >> 48) as u16,
+                    ((val & 0x0000FFFF00000000) >> 32) as u16,
+                    ((val & 0x00000000FFFF0000) >> 16) as u16,
+                    (val & 0x000000000000FFFF) as u16,
+                ])
+            }
+            DataType::F64le => {
+                let val: f64 = if let Some(s) = s.strip_prefix("0x") {
+                    u64::from_str_radix(s, 16).map(f64::from_bits)?
+                } else {
+                    s.parse()?
+                };
+                let val = val.to_bits();
+                Ok(vec![
+                    (val & 0x000000000000FFFF) as u16,
+                    ((val & 0x00000000FFFF0000) >> 16) as u16,
+                    ((val & 0x0000FFFF00000000) >> 32) as u16,
+                    ((val & 0xFFFF000000000000) >> 48) as u16,
                 ])
             }
             DataType::PackedAscii => {
