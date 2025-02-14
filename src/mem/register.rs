@@ -68,6 +68,7 @@ pub struct Definition {
     slave_id: Option<SlaveId>,
     address: Address,
     length: u16,
+    #[serde(flatten)]
     r#type: DataType,
     read_code: u8,
     access: AccessType,
@@ -195,8 +196,8 @@ impl Register {
         &self.raw
     }
 
-    pub fn r#type(&self) -> DataType {
-        self.r#type.clone()
+    pub fn r#type(&self) -> &DataType {
+        &self.r#type
     }
 
     pub fn access_type(&self) -> AccessType {

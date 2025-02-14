@@ -597,7 +597,7 @@ fn render_register(f: &mut Frame, app: &mut App, area: Rect) {
                 format!("{}", r.slave_id()),
                 str!(n),
                 format!("{:#06X} ({})", r.address(), r.address()),
-                format!("{:?}", r.r#type()),
+                format!("{:?}", r.r#type().label()),
                 r.raw().len().to_string(),
                 r.value()
                     .chars()
