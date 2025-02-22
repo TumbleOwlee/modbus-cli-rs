@@ -1,0 +1,10 @@
+steps:
+  check:
+    image: rust:latest
+    commands:
+      cargo check
+    when:
+      - event: push
+      - event: manual
+
+
