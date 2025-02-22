@@ -359,7 +359,7 @@ impl DataType {
                     let mut value: u16 = 0;
                     if i < s.len() {
                         if self.reverse {
-                            value += (bytes[i] as u16);
+                            value += bytes[i] as u16;
                         } else {
                             value += (bytes[i] as u16) << 8;
                         }
@@ -390,7 +390,7 @@ impl DataType {
                     let mut value: u16 = 0;
                     if i < s.len() {
                         if self.reverse {
-                            value += (bytes[i] as u16);
+                            value += bytes[i] as u16;
                         } else {
                             value += (bytes[i] as u16) << 8;
                         }
@@ -399,7 +399,7 @@ impl DataType {
                         if self.reverse {
                             value += (bytes[i + 1] as u16) << 8;
                         } else {
-                            value += (bytes[i + 1] as u16);
+                            value += bytes[i + 1] as u16;
                         }
                     }
                     v.push(value);

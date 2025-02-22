@@ -154,13 +154,6 @@ impl InputField {
         self.focused = true;
     }
 
-    pub fn clear_focus(&mut self) {
-        if self.disabled {
-            panic!("Tried to select disabled input field.");
-        }
-        self.focused = false;
-    }
-
     pub fn disabled(self) -> Self {
         Self {
             disabled: true,
@@ -168,31 +161,9 @@ impl InputField {
         }
     }
 
-    pub fn disable(&mut self) {
-        self.disabled = true;
-    }
-
-    pub fn enable(&mut self) {
-        self.disabled = false;
-    }
-
-    pub fn input(self, input: String) -> Self {
-        Self {
-            input: Some(input),
-            ..self
-        }
-    }
-
     pub fn title(self, title: String) -> Self {
         Self {
             title: Some(title),
-            ..self
-        }
-    }
-
-    pub fn placeholder(self, placeholder: String) -> Self {
-        Self {
-            placeholder: Some(placeholder),
             ..self
         }
     }

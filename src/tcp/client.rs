@@ -1,4 +1,4 @@
-use crate::mem::data::{DataType, Format};
+use crate::mem::data::DataType;
 use crate::mem::memory::{Memory, Range};
 use crate::mem::register::{AccessType, Definition};
 use crate::msg::LogMsg;

@@ -47,9 +47,10 @@ mod tests {
                 None,
                 0,
                 2,
-                DataType::PackedAscii,
+                DataType::default(),
                 0x04u8,
                 AccessType::ReadOnly,
+                None,
             ),
         );
         let config = Arc::new(Mutex::new(AppConfig::default()));

@@ -183,10 +183,12 @@ fn main() {
                 Value::Num(v) => format!("{}", v),
             };
             if let Ok(v) = def.get_type().encode(&s) {
-                memory
+                if memory
                     .lock()
                     .unwrap()
-                    .write(def.get_slave_id().unwrap_or(0), def.get_range(), &v);
+                    .write(def.get_slave_id().unwrap_or(0), def.get_range(), &v)
+                    .is_err()
+                {}
             }
         }
     }

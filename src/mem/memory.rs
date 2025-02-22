@@ -1,4 +1,3 @@
-use crate::mem::register::AccessType;
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -55,9 +54,9 @@ impl Memory {
         let bounds = self
             .bounds
             .entry(slave)
-            .or_insert(Range::new(usize::max_value(), usize::max_value()));
+            .or_insert(Range::new(usize::MAX, usize::MAX));
         for range in ranges.iter() {
-            let upper = if bounds.end() == usize::max_value() {
+            let upper = if bounds.end() == usize::MAX {
                 0
             } else {
                 bounds.end()
@@ -79,7 +78,7 @@ impl Memory {
         range: Range<Key>,
         mut values: &'a [u16],
     ) -> anyhow::Result<&'a [u16]> {
-        let mut range = (range.start(), range.end());
+        let range = (range.start(), range.end());
         let bounds = self.bounds.get(&slave);
         if bounds.is_none() {
             return Err(anyhow!("Invalid memory address ({slave}, {range:?})"));
@@ -92,14 +91,12 @@ impl Memory {
         }
         if (range.1 - range.0) < values.len() {
             return Err(anyhow!("Range too large for given value slice."));
-        } else {
-            if !((range.0 / SLICE_SIZE)..(range.1 / SLICE_SIZE + 1))
-                .all(|v| self.slices.contains_key(&(slave, v)))
-            {
-                return Err(anyhow!(
-                    "Range not available in memory ({slave}, {range:?})"
-                ));
-            }
+        } else if !((range.0 / SLICE_SIZE)..(range.1 / SLICE_SIZE + 1))
+            .all(|v| self.slices.contains_key(&(slave, v)))
+        {
+            return Err(anyhow!(
+                "Range not available in memory ({slave}, {range:?})"
+            ));
         }
 
         let mut len = values.len();
