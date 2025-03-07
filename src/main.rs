@@ -181,6 +181,7 @@ fn main() {
             let s: String = match value {
                 Value::Str(v) => v.to_string(),
                 Value::Num(v) => format!("{}", v),
+                Value::Float(v) => format!("{}", v),
             };
             if let Ok(v) = def.get_type().encode(&s) {
                 if memory

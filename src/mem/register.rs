@@ -61,6 +61,7 @@ impl std::fmt::Display for AccessType {
 pub enum Value {
     Str(String),
     Num(i64),
+    Float(f64),
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
