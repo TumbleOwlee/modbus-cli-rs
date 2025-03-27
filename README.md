@@ -97,7 +97,7 @@ here optional, too. If none is provided, `slave_id = 0` is used.
 }
 ```
 
-Explanation:
+### Explanation:
 
 - `slave_id`: The modbus slave identifier
 - `read_code`: The modbus function code for read operation
