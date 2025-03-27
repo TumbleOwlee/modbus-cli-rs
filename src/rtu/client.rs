@@ -110,13 +110,10 @@ impl Client {
                 {
                     let fc = FunctionCode::new(fc as u8);
                     match fc {
-                        FunctionCode::ReadCoils => {
-                            unimplemented!("Read Coils")
-                        }
-                        FunctionCode::ReadDiscreteInputs => {
-                            unimplemented!("Read Discrete Inputs")
-                        }
-                        FunctionCode::ReadInputRegisters | FunctionCode::ReadHoldingRegisters => {
+                        FunctionCode::ReadCoils
+                        | FunctionCode::ReadDiscreteInputs
+                        | FunctionCode::ReadInputRegisters
+                        | FunctionCode::ReadHoldingRegisters => {
                             let len = range.length();
                             if len > 0 {
                                 let mut addr = range.start();
@@ -148,7 +145,7 @@ impl Client {
         operations
     }
 
-    pub async fn run(&mut self, interval_ms: u64) {
+    pub async fn run(&mut self, delay_after_connect: u64, interval_ms: u64) {
         let builder = tokio_serial::new(self.rtu_config.path.clone(), self.rtu_config.baud_rate);
         let port =
             SerialStream::open(&builder).panic(|e| format!("Failed to open SerialStream ({e})"));
@@ -180,6 +177,8 @@ impl Client {
                 .await;
         };
 
+        tokio::time::sleep(tokio::time::Duration::from_millis(delay_after_connect)).await;
+
         let mut time_last_read = SystemTime::now()
             .checked_sub(Duration::from_millis(interval_ms + 1))
             .unwrap();
@@ -195,6 +194,31 @@ impl Client {
                     time_last_read = now;
                     let (slave, fc, op) = self.operations.get(op_idx).unwrap();
                     let modbus_result = match fc {
+                        FunctionCode::ReadCoils => {
+                            context.set_slave(Slave(*slave));
+                            context
+                                .read_coils(op.start() as u16, (op.end() - op.start()) as u16)
+                                .await
+                                .map(|v| {
+                                    v.map(|b| {
+                                        b.into_iter().map(|e| if e { 1 } else { 0 }).collect()
+                                    })
+                                })
+                        }
+                        FunctionCode::ReadDiscreteInputs => {
+                            context.set_slave(Slave(*slave));
+                            context
+                                .read_discrete_inputs(
+                                    op.start() as u16,
+                                    (op.end() - op.start()) as u16,
+                                )
+                                .await
+                                .map(|v| {
+                                    v.map(|b| {
+                                        b.into_iter().map(|e| if e { 1 } else { 0 }).collect()
+                                    })
+                                })
+                        }
                         FunctionCode::ReadInputRegisters => {
                             context.set_slave(Slave(*slave));
                             context
@@ -267,6 +291,63 @@ impl Client {
                             disconnect = true;
                         }
                         Command::Connect => {}
+                        Command::WriteSingleCoil((slave, addr, coil)) => {
+                            context.set_slave(Slave(slave));
+                            if let Err(e) = context.write_single_coil(addr, coil).await {
+                                let _ = self
+                                    .log_sender
+                                    .send(LogMsg::err(&format!(
+                                        "Failed to write address {addr} with values {coil:?} [{e}]."
+                                    )))
+                                    .await;
+                                disconnect = true;
+                            } else {
+                                let _ = self
+                                    .log_sender
+                                    .send(LogMsg::ok(&format!(
+                                        "Successfully written address {addr} with values {coil:?}."
+                                    )))
+                                    .await;
+                            }
+                        }
+                        Command::WriteMultipleCoils((slave, addr, coils)) => {
+                            context.set_slave(Slave(slave));
+                            if let Err(e) = context.write_multiple_coils(addr, &coils).await {
+                                let _ = self
+                                    .log_sender
+                                    .send(LogMsg::err(&format!(
+                                        "Failed to write address {addr} with values {coils:?} [{e}]."
+                                    )))
+                                    .await;
+                                disconnect = true;
+                            } else {
+                                let _ = self
+                                    .log_sender
+                                    .send(LogMsg::ok(&format!(
+                                        "Successfully written address {addr} with values {coils:?}."
+                                    )))
+                                    .await;
+                            }
+                        }
+                        Command::WriteSingleRegister((slave, addr, value)) => {
+                            context.set_slave(Slave(slave));
+                            if let Err(e) = context.write_single_register(addr, value).await {
+                                let _ = self
+                                    .log_sender
+                                    .send(LogMsg::err(&format!(
+                                        "Failed to write address {addr} with values {value:?} [{e}]."
+                                    )))
+                                    .await;
+                                disconnect = true;
+                            } else {
+                                let _ = self
+                                    .log_sender
+                                    .send(LogMsg::ok(&format!(
+                                        "Successfully written address {addr} with values {value:?}."
+                                    )))
+                                    .await;
+                            }
+                        }
                         Command::WriteMultipleRegisters((slave, addr, vec)) => {
                             context.set_slave(Slave(slave));
                             if let Err(e) = context.write_multiple_registers(addr, &vec).await {
@@ -281,7 +362,7 @@ impl Client {
                                 let _ = self
                                     .log_sender
                                     .send(LogMsg::ok(&format!(
-                                        "Successfully written to address {addr} with values {vec:?}."
+                                        "Successfully written address {addr} with values {vec:?}."
                                     )))
                                     .await;
                             }
@@ -327,8 +408,7 @@ impl Client {
                         }
                         op_idx = 0;
                     }
-                    Command::Disconnect => {}
-                    Command::WriteMultipleRegisters(_) => {}
+                    _ => {}
                 }
             }
             tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;

@@ -122,6 +122,10 @@ impl Definition {
         self.read_code
     }
 
+    pub fn length(&self) -> u16 {
+        self.length
+    }
+
     pub fn access_type(&self) -> AccessType {
         self.access.clone()
     }
@@ -132,6 +136,8 @@ pub struct Register {
     slave: SlaveId,
     address: u16,
     value: String,
+    length: u16,
+    function_code: FunctionCode,
     raw: Vec<u16>,
     r#type: DataType,
     access: AccessType,
@@ -175,6 +181,8 @@ impl Register {
             slave: definition.get_slave_id().unwrap_or(0),
             address: definition.address.as_u16(),
             value,
+            function_code: read_code,
+            length: definition.length(),
             raw: bytes,
             r#type: definition.get_type().clone(),
             access: definition.access_type(),
@@ -193,12 +201,20 @@ impl Register {
         &self.value
     }
 
+    pub fn length(&self) -> u16 {
+        self.length
+    }
+
     pub fn raw(&self) -> &Vec<u16> {
         &self.raw
     }
 
     pub fn r#type(&self) -> &DataType {
         &self.r#type
+    }
+
+    pub fn function_code(&self) -> FunctionCode {
+        self.function_code
     }
 
     pub fn access_type(&self) -> AccessType {

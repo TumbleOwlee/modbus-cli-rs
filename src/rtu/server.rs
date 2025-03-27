@@ -48,6 +48,58 @@ impl tokio_modbus::server::Service for Service {
 
     fn call(&self, slave: Slave, req: Self::Request) -> Self::Future {
         match req {
+            Request::ReadCoils(addr, cnt) => future::ready(
+                self.memory
+                    .lock()
+                    .unwrap()
+                    .read(slave.0, &Range::new(addr, addr + cnt))
+                    .map_err(|e| {
+                        let _ = self.log_sender.try_send(LogMsg::err(&format!(
+                            "Slave: {}, ReadCoils: [{:#06X}, {:#06X}) ({})",
+                            slave.0,
+                            addr,
+                            addr + cnt,
+                            e
+                        )));
+                        Exception::IllegalDataAddress
+                    })
+                    .map(|v| {
+                        let _ = self.log_sender.try_send(LogMsg::info(&format!(
+                            "Slave: {}, ReadCoils: [{:#06X}, {:#06X}) = {}",
+                            slave.0,
+                            addr,
+                            addr + cnt,
+                            refs_to_str(&v)
+                        )));
+                        Response::ReadCoils(v.into_iter().map(|b| *b != 0).collect())
+                    }),
+            ),
+            Request::ReadDiscreteInputs(addr, cnt) => future::ready(
+                self.memory
+                    .lock()
+                    .unwrap()
+                    .read(slave.0, &Range::new(addr, addr + cnt))
+                    .map_err(|e| {
+                        let _ = self.log_sender.try_send(LogMsg::err(&format!(
+                            "Slave: {}, ReadDiscreteInputs: [{:#06X}, {:#06X}) ({})",
+                            slave.0,
+                            addr,
+                            addr + cnt,
+                            e
+                        )));
+                        Exception::IllegalDataAddress
+                    })
+                    .map(|v| {
+                        let _ = self.log_sender.try_send(LogMsg::info(&format!(
+                            "Slave: {}, ReadDiscreteInputs: [{:#06X}, {:#06X}) = {}",
+                            slave.0,
+                            addr,
+                            addr + cnt,
+                            refs_to_str(&v)
+                        )));
+                        Response::ReadDiscreteInputs(v.into_iter().map(|b| *b != 0).collect())
+                    }),
+            ),
             Request::ReadInputRegisters(addr, cnt) => future::ready(
                 self.memory
                     .lock()
@@ -156,6 +208,64 @@ impl tokio_modbus::server::Service for Service {
                         Response::WriteSingleRegister(addr, value)
                     }),
             ),
+            Request::WriteMultipleCoils(addr, coils) => {
+                let values: Vec<u16> = coils.iter().map(|v| if *v { 1 } else { 0 }).collect();
+                future::ready(
+                    self.memory
+                        .lock()
+                        .unwrap()
+                        .write(slave.0, Range::new(addr, addr + 1), &values)
+                        .map_err(|e| {
+                            let _ = self.log_sender.try_send(LogMsg::err(&format!(
+                                "Slave: {}, WriteMultipleCoils: [{:#06X}, {:#06X}) ({})",
+                                slave.0,
+                                addr,
+                                addr + 1,
+                                e
+                            )));
+                            Exception::IllegalDataAddress
+                        })
+                        .map(|_| {
+                            let _ = self.log_sender.try_send(LogMsg::info(&format!(
+                                "Slave: {}, WriteMultipleCoils: [{:#06X}, {:#06X}) = {}",
+                                slave.0,
+                                addr,
+                                addr + 1,
+                                to_str(&values)
+                            )));
+                            Response::WriteMultipleCoils(addr, values.len() as u16)
+                        }),
+                )
+            }
+            Request::WriteSingleCoil(addr, coil) => {
+                let value = if coil { 1 } else { 0 };
+                future::ready(
+                    self.memory
+                        .lock()
+                        .unwrap()
+                        .write(slave.0, Range::new(addr, addr + 1), &[value])
+                        .map_err(|e| {
+                            let _ = self.log_sender.try_send(LogMsg::err(&format!(
+                                "Slave: {}, WriteSingleCoil: [{:#06X}, {:#06X}) ({})",
+                                slave.0,
+                                addr,
+                                addr + 1,
+                                e
+                            )));
+                            Exception::IllegalDataAddress
+                        })
+                        .map(|_| {
+                            let _ = self.log_sender.try_send(LogMsg::info(&format!(
+                                "Slave: {}, WriteSingleCoil: [{:#06X}, {:#06X}) = {}",
+                                slave.0,
+                                addr,
+                                addr + 1,
+                                value
+                            )));
+                            Response::WriteSingleCoil(addr, coil)
+                        }),
+                )
+            }
             _ => future::ready(Err(Exception::IllegalFunction)),
         }
     }

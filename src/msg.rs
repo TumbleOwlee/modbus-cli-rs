@@ -9,6 +9,9 @@ pub enum Status {
 pub enum Command {
     Connect,
     Disconnect,
+    WriteSingleCoil((SlaveId, u16, bool)),
+    WriteMultipleCoils((SlaveId, u16, Vec<bool>)),
+    WriteSingleRegister((SlaveId, u16, u16)),
     WriteMultipleRegisters((SlaveId, u16, Vec<u16>)),
 }
 

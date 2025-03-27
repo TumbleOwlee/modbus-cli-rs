@@ -1,182 +1,39 @@
 {
     "history_length": 30,
+    "delay_afer_connect": 500,
     "interval_ms": 500,
-    "contiguous_memory": [
-        {
-            "read_code": 4,
-            "range": {
-                "start": "0x4000",
-                "end": "0x4109"
-            }
-        }
-    ],
+    "contiguous_memory": [],
     "definitions": {
-        "Serial Number": {
+        "coil": {
             "slave_id": 1,
-            "read_code": 4,
-            "address": "0x4000",
-            "length": 4,
-            "access": "ReadOnly",
-            "type": "PackedAscii"
-        },
-        "Firmware Version": {
-            "slave_id": 1,
-            "read_code": 4,
-            "address": "0x4004",
-            "length": 2,
-            "access": "ReadOnly",
-            "type": "PackedAscii"
-        },
-        "User Settable Max Current": {
-            "slave_id": 1,
-            "read_code": 4,
-            "address": "0x4006",
-            "length": 2,
-            "access": "ReadOnly",
-            "type": "U32"
-        },
-        "Error Code": {
-            "slave_id": 1,
-            "read_code": 4,
-            "address": "0x4008",
-            "length": 2,
-            "access": "ReadOnly",
-            "type": "U32"
-        },
-        "Socket Lock State": {
-            "slave_id": 1,
-            "read_code": 4,
-            "address": "0x400A",
-            "length": 2,
-            "access": "ReadOnly",
-            "type": "U32"
-        },
-        "Charging State": {
-            "slave_id": 1,
-            "read_code": 4,
-            "address": "0x400C",
-            "length": 2,
-            "access": "ReadOnly",
-            "type": "U32"
-        },
-        "Charging Current Limit": {
-            "slave_id": 1,
-            "read_code": 4,
-            "address": "0x400E",
-            "length": 2,
-            "access": "ReadOnly",
-            "type": "U32"
-        },
-        "Charging Current L1": {
-            "slave_id": 1,
-            "read_code": 4,
-            "address": "0x4010",
-            "length": 2,
-            "access": "ReadOnly",
-            "type": "U32"
-        },
-        "Charging Current L2": {
-            "slave_id": 1,
-            "read_code": 4,
-            "address": "0x4012",
-            "length": 2,
-            "access": "ReadOnly",
-            "type": "U32"
-        },
-        "Charging Current L3": {
-            "slave_id": 1,
-            "read_code": 4,
-            "address": "0x4014",
-            "length": 2,
-            "access": "ReadOnly",
-            "type": "U32"
-        },
-        "Voltage L1": {
-            "slave_id": 1,
-            "read_code": 4,
-            "address": "0x4016",
-            "length": 2,
-            "access": "ReadOnly",
-            "type": "U32"
-        },
-        "Voltage L2": {
-            "slave_id": 1,
-            "read_code": 4,
-            "address": "0x4018",
-            "length": 2,
-            "access": "ReadOnly",
-            "type": "U32"
-        },
-        "Voltage L3": {
-            "slave_id": 1,
-            "read_code": 4,
-            "address": "0x401A",
-            "length": 2,
-            "access": "ReadOnly",
-            "type": "U32"
-        },
-        "Active Power": {
-            "slave_id": 1,
-            "read_code": 4,
-            "address": "0x401C",
-            "length": 2,
-            "access": "ReadOnly",
-            "type": "U32"
-        },
-        "Energy Delivered": {
-            "slave_id": 1,
-            "read_code": 4,
-            "address": "0x401E",
-            "length": 2,
-            "access": "ReadOnly",
-            "type": "U32"
-        },
-        "Communication Timeout": {
-            "slave_id": 1,
-            "read_code": 4,
-            "address": "0x4020",
+            "read_code": 1,
+            "address": 0,
             "length": 1,
-            "access": "ReadOnly",
+            "access": "ReadWrite",
             "type": "U16"
         },
-        "Set Charging Current Limit": {
+        "discrete_input": {
             "slave_id": 1,
-            "read_code": 4,
-            "address": "0x4100",
-            "length": 2,
-            "access": "ReadOnly",
-            "type": "U32"
-        },
-        "Lock/Unlock Socket Cable": {
-            "slave_id": 1,
-            "read_code": 4,
-            "address": "0x4103",
+            "read_code": 2,
+            "address": 1,
             "length": 1,
-            "access": "ReadOnly",
+            "access": "ReadWrite",
             "type": "U16"
         },
-        "Start/Stop Charging Session": {
+        "input_register": {
             "slave_id": 1,
-            "read_code": 4,
-            "address": "0x4105",
+            "read_code": 3,
+            "address": 2,
             "length": 1,
-            "access": "ReadOnly",
+            "access": "ReadWrite",
             "type": "U16"
         },
-        "Set Communication Timeout": {
+        "holding_register": {
             "slave_id": 1,
             "read_code": 4,
-            "address": "0x4106",
+            "address": 3,
             "length": 1,
-            "access": "ReadOnly",
-            "type": "U16"
-        },
-        "Set Fallback Limit": {
-            "slave_id": 1,
-            "read_code": 4,
-            "address": "0x4109",
-            "length": 1,
-            "access": "ReadOnly",
+            "access": "ReadWrite",
             "type": "U16"
         }
     }

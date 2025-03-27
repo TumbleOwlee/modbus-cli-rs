@@ -394,7 +394,7 @@ impl App {
                         );
                         self.edit_dialog.set(
                             EditFieldType::DataType,
-                            Some(format!("{:?}", entry.1.r#type())),
+                            Some(format!("{:}", entry.1.r#type().label())),
                             None,
                         );
                         self.edit_dialog.set(
@@ -425,16 +425,53 @@ impl App {
                                                                 "Provided input requires a longer register as available.",
                                                             ));
                                     } else if let Some(ref sender) = cmd_sender {
-                                        if let Err(e) =
-                                            sender.blocking_send(Command::WriteMultipleRegisters((
-                                                register.slave_id(),
-                                                register.address(),
-                                                v,
-                                            )))
-                                        {
-                                            self.log_entries.push(LogMsg::err(&format!("{}", e)));
-                                        } else {
-                                            self.popup = Popup::None;
+                                        let command: Option<Command>;
+                                        match register.function_code() {
+                                            tokio_modbus::FunctionCode::ReadCoils
+                                            | tokio_modbus::FunctionCode::ReadDiscreteInputs => {
+                                                if register.length() == 1 {
+                                                    command = Some(Command::WriteSingleCoil((
+                                                        register.slave_id(),
+                                                        register.address(),
+                                                        v[0] != 0,
+                                                    )))
+                                                } else {
+                                                    command = Some(Command::WriteMultipleCoils((
+                                                        register.slave_id(),
+                                                        register.address(),
+                                                        v.iter().map(|e| *e != 0).collect(),
+                                                    )))
+                                                }
+                                            }
+                                            tokio_modbus::FunctionCode::ReadHoldingRegisters
+                                            | tokio_modbus::FunctionCode::ReadInputRegisters => {
+                                                if register.length() == 1 {
+                                                    command = Some(Command::WriteSingleRegister((
+                                                        register.slave_id(),
+                                                        register.address(),
+                                                        v[0],
+                                                    )))
+                                                } else {
+                                                    command =
+                                                        Some(Command::WriteMultipleRegisters((
+                                                            register.slave_id(),
+                                                            register.address(),
+                                                            v,
+                                                        )))
+                                                }
+                                            }
+                                            _ => unreachable!(
+                                                "Invalid read code {}!",
+                                                register.function_code()
+                                            ),
+                                        }
+                                        if let Some(c) = command {
+                                            if let Err(e) = sender.blocking_send(c) {
+                                                self.log_entries
+                                                    .push(LogMsg::err(&format!("{}", e)));
+                                            } else {
+                                                self.popup = Popup::None;
+                                            }
                                         }
                                     } else if let Err(e) = self.register_handler.set_values(
                                         register.slave_id(),
@@ -597,7 +634,7 @@ fn render_register(f: &mut Frame, app: &mut App, area: Rect) {
                 format!("{}", r.slave_id()),
                 str!(n),
                 format!("{:#06X} ({})", r.address(), r.address()),
-                format!("{:?}", r.r#type().label()),
+                format!("{}", r.r#type().label()),
                 r.raw().len().to_string(),
                 r.value()
                     .chars()

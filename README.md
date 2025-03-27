@@ -52,6 +52,7 @@ The configuraation has to contain the following entries.
 {
     "history_length": 30,
     "interval_ms": 500,
+    "delay_after_connect_ms": 500,
     "contiguous_memory": [],
     "definitions": {}
 }
@@ -91,8 +92,52 @@ here optional, too. If none is provided, `slave_id = 0` is used.
     "address": "0x4000",
     "length": 4,
     "access": "ReadOnly",
-    "type": "PackedString"
+    "type": "I32",
+    "reverse": false
 }
 ```
 
-Please refer to `config.json` of this repository for a example configuration based on the ABB Terra AC wallbox.
+Explanation:
+
+- `slave_id`: The modbus slave identifier
+- `read_code`: The modbus function code for read operation
+- `address`: The modbus register address
+- `length`: The successive modbus register count
+- `access`: Accessability mode (either ReadOnly, WriteOnly or ReadWrite)
+- `type`: The type that is represented by the modbus registers
+- `reverse`: Define whether the registers have to be flipped before interpretation (default: `false`)
+
+If you use the client mode `--client` the corresponding write codes for manipulating registers or coils are derived from the configured `read_code`. Please refer to `config.json` of this repository for a example configuration.
+
+### Data Types
+
+The following data types are currently supported and can be configured:
+
+- `PackedAscii`: Every byte is an ASCII character (single register = 2 ASCII characters)
+- `LooseAscii`: Every register contains only a single ASCII character
+- `PackedUtf8`: All combined register values represent a valid UTF-8 string
+- `LooseUtf8`: Every register is a single UTF-8 character
+- `U8`: The register contains a single 8-bit unsigned value
+- `U16`: The register contains a 16-bit unsigned value
+- `U32`: The combined register contents contain a 32-bit unsigned value
+- `U64`: The combined register contents contain a 32-bit unsigned value
+- `U128`: The combined register contents contain a 32-bit unsigned value
+- `U8`: The register contains a single 8-bit little-endian unsigned value
+- `U16`: The register contains a 16-bit little-endian unsigned value
+- `U32`: The combined register contents contain a 32-bit little-endian unsigned value
+- `U64`: The combined register contents contain a 32-bit little-endian unsigned value
+- `U128`: The combined register contents contain a 32-bit little-endian unsigned value
+- `I8`: The register contains a single 8-bit signed value
+- `I16`: The register contains a 16-bit signed value
+- `I32`: The combined register contents contain a 32-bit signed value
+- `I64`: The combined register contents contain a 32-bit signed value
+- `I128`: The combined register contents contain a 32-bit signed value
+- `I8`: The register contains a single 8-bit little-endian signed value
+- `I16`: The register contains a 16-bit little-endian signed value
+- `I32`: The combined register contents contain a 32-bit little-endian signed value
+- `I64`: The combined register contents contain a 32-bit little-endian signed value
+- `I128`: The combined register contents contain a 32-bit little-endian signed value
+- `F32`: The combined register contents contain a 32-bit float value
+- `F32le`: The combined register contents contain a 32-bit little-endian float value
+- `F64`: The combined register contents contain a 64-bit float value
+- `F64le`: The combined register contents contain a 64-bit little-endian float value
