@@ -581,7 +581,7 @@ fn ui(f: &mut Frame, app: &mut App, status: String) {
         Constraint::Max(10),
         Constraint::Length(2),
     ])
-    .split(f.size());
+    .split(f.area());
     app.set_colors();
     // Draw register table
     render_register(f, app, rects[0]);
@@ -594,7 +594,7 @@ fn ui(f: &mut Frame, app: &mut App, status: String) {
 
     // Render popup
     if let Popup::Edit(_) = app.popup {
-        app.edit_dialog.render_ref(f.size(), f.buffer_mut())
+        app.edit_dialog.render_ref(f.area(), f.buffer_mut())
     }
 }
 
@@ -706,13 +706,13 @@ fn render_register(f: &mut Frame, app: &mut App, area: Rect) {
         ],
     )
     .header(header)
-    .highlight_style(selected_style)
+    .row_highlight_style(selected_style)
     .highlight_symbol(Text::from(vec!["".into(), bar.into(), "".into()]).style(bar_style))
     .bg(app.colors.buffer.bg)
     .highlight_spacing(HighlightSpacing::Always);
 
-    app.register_table.table_visible_width = f.size().width;
-    if app.register_table.table_max_width <= f.size().width {
+    app.register_table.table_visible_width = f.area().width;
+    if app.register_table.table_max_width <= f.area().width {
         f.render_stateful_widget(t, area, &mut app.register_table.table_state);
     } else {
         let f_rect = area;
@@ -735,9 +735,7 @@ fn render_register(f: &mut Frame, app: &mut App, area: Rect) {
         );
         let f_buffer = f.buffer_mut();
         for (x, y) in itertools::iproduct!(offset..(offset + f_rect.width), 0..(rect.height)) {
-            f_buffer
-                .get_mut(x - offset + f_rect.x, y + f_rect.y)
-                .clone_from(buffer.get(x, y));
+            f_buffer[(x - offset + f_rect.x, y + f_rect.y)].clone_from(&buffer[(x, y)]);
         }
     }
 }
@@ -748,7 +746,7 @@ fn render_scrollbar(f: &mut Frame, state: &mut ScrollbarState, area: Rect) {
             .orientation(ScrollbarOrientation::VerticalRight)
             .begin_symbol(None)
             .end_symbol(None),
-        area.inner(&Margin {
+        area.inner(Margin {
             vertical: 1,
             horizontal: 0,
         }),
@@ -888,14 +886,14 @@ fn render_log(f: &mut Frame, app: &mut App, area: Rect) {
         [Constraint::Max(limits.0 + 1), Constraint::Min(limits.1 + 1)],
     )
     .header(header)
-    .highlight_style(selected_style)
+    .row_highlight_style(selected_style)
     .highlight_symbol(Text::from(bar).style(header_style))
     .fg(app.colors.buffer.fg)
     .bg(app.colors.buffer.bg)
     .highlight_spacing(HighlightSpacing::Always);
 
-    app.log_table.table_visible_width = f.size().width;
-    if app.log_table.table_max_width <= f.size().width {
+    app.log_table.table_visible_width = f.area().width;
+    if app.log_table.table_max_width <= f.area().width {
         f.render_stateful_widget(t, area, &mut app.log_table.table_state);
     } else {
         let f_rect = area;
@@ -918,9 +916,7 @@ fn render_log(f: &mut Frame, app: &mut App, area: Rect) {
         );
         let f_buffer = f.buffer_mut();
         for (x, y) in itertools::iproduct!(offset..(offset + f_rect.width), 0..(rect.height)) {
-            f_buffer
-                .get_mut(x - offset + f_rect.x, y + f_rect.y)
-                .clone_from(buffer.get(x, y));
+            f_buffer[(x - offset + f_rect.x, y + f_rect.y)].clone_from(&buffer[(x, y)]);
         }
     }
 }

@@ -154,7 +154,7 @@ impl WidgetRef for EditDialog {
             Constraint::Length(1),
             Constraint::Length(3),
         ])
-        .split(inner.inner(&Margin {
+        .split(inner.inner(Margin {
             vertical: 1,
             horizontal: 1,
         }));

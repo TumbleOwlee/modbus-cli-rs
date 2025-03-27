@@ -12,7 +12,7 @@ use std::{
 };
 use tokio::net::TcpListener;
 use tokio::sync::mpsc::Sender;
-use tokio_modbus::prelude::{Exception, Request, Response, Slave};
+use tokio_modbus::prelude::{ExceptionCode, Request, Response, SlaveRequest};
 use tokio_modbus::server::tcp::{accept_tcp_connection, Server as TcpServer};
 
 struct Service {
@@ -45,30 +45,33 @@ fn to_str(values: &[u16]) -> String {
 }
 
 impl tokio_modbus::server::Service for Service {
-    type Request = Request<'static>;
-    type Future = future::Ready<Result<Response, Exception>>;
+    type Request = SlaveRequest<'static>;
+    type Exception = ExceptionCode;
+    type Response = Response;
+    type Future = future::Ready<Result<Response, ExceptionCode>>;
 
-    fn call(&self, slave: Slave, req: Self::Request) -> Self::Future {
-        match req {
+    fn call(&self, req: Self::Request) -> Self::Future {
+        let SlaveRequest { slave, request } = req;
+        match request {
             Request::ReadCoils(addr, cnt) => future::ready(
                 self.memory
                     .lock()
                     .unwrap()
-                    .read(slave.0, &Range::new(addr, addr + cnt))
+                    .read(slave, &Range::new(addr, addr + cnt))
                     .map_err(|e| {
                         let _ = self.log_sender.try_send(LogMsg::err(&format!(
                             "Slave: {}, ReadCoils: [{:#06X}, {:#06X}) ({})",
-                            slave.0,
+                            slave,
                             addr,
                             addr + cnt,
                             e
                         )));
-                        Exception::IllegalDataAddress
+                        Self::Exception::IllegalDataAddress
                     })
                     .map(|v| {
                         let _ = self.log_sender.try_send(LogMsg::info(&format!(
                             "Slave: {}, ReadCoils: [{:#06X}, {:#06X}) = {}",
-                            slave.0,
+                            slave,
                             addr,
                             addr + cnt,
                             refs_to_str(&v)
@@ -80,21 +83,21 @@ impl tokio_modbus::server::Service for Service {
                 self.memory
                     .lock()
                     .unwrap()
-                    .read(slave.0, &Range::new(addr, addr + cnt))
+                    .read(slave, &Range::new(addr, addr + cnt))
                     .map_err(|e| {
                         let _ = self.log_sender.try_send(LogMsg::err(&format!(
                             "Slave: {}, ReadDiscreteInputs: [{:#06X}, {:#06X}) ({})",
-                            slave.0,
+                            slave,
                             addr,
                             addr + cnt,
                             e
                         )));
-                        Exception::IllegalDataAddress
+                        Self::Exception::IllegalDataAddress
                     })
                     .map(|v| {
                         let _ = self.log_sender.try_send(LogMsg::info(&format!(
                             "Slave: {}, ReadDiscreteInputs: [{:#06X}, {:#06X}) = {}",
-                            slave.0,
+                            slave,
                             addr,
                             addr + cnt,
                             refs_to_str(&v)
@@ -106,52 +109,52 @@ impl tokio_modbus::server::Service for Service {
                 self.memory
                     .lock()
                     .unwrap()
-                    .read(slave.0, &Range::new(addr, addr + cnt))
+                    .read(slave, &Range::new(addr, addr + cnt))
                     .map_err(|e| {
                         let _ = self.log_sender.try_send(LogMsg::err(&format!(
                             "Slave: {}, ReadInputRegisters: [{:#06X}, {:#06X}) ({})",
-                            slave.0,
+                            slave,
                             addr,
                             addr + cnt,
                             e
                         )));
-                        Exception::IllegalDataAddress
+                        Self::Exception::IllegalDataAddress
                     })
                     .map(|v| {
                         let _ = self.log_sender.try_send(LogMsg::info(&format!(
                             "Slave: {}, ReadInputRegisters: [{:#06X}, {:#06X}) = {}",
-                            slave.0,
+                            slave,
                             addr,
                             addr + cnt,
                             refs_to_str(&v)
                         )));
-                        Response::ReadInputRegisters(v.into_iter().copied().collect())
+                        Response::ReadInputRegisters(v.into_iter().map(|v| *v).collect())
                     }),
             ),
             Request::ReadHoldingRegisters(addr, cnt) => future::ready(
                 self.memory
                     .lock()
                     .unwrap()
-                    .read(slave.0, &Range::new(addr, addr + cnt))
+                    .read(slave, &Range::new(addr, addr + cnt))
                     .map_err(|e| {
                         let _ = self.log_sender.try_send(LogMsg::err(&format!(
                             "Slave: {}, ReadHoldingRegisters: [{:#06X}, {:#06X}) ({})",
-                            slave.0,
+                            slave,
                             addr,
                             addr + cnt,
                             e
                         )));
-                        Exception::IllegalDataAddress
+                        Self::Exception::IllegalDataAddress
                     })
                     .map(|v| {
                         let _ = self.log_sender.try_send(LogMsg::info(&format!(
                             "Slave: {}, ReadHoldingRegisters: [{:#06X}, {:#06X}) = {}",
-                            slave.0,
+                            slave,
                             addr,
                             addr + cnt,
                             refs_to_str(&v)
                         )));
-                        Response::ReadHoldingRegisters(v.into_iter().copied().collect())
+                        Response::ReadHoldingRegisters(v.into_iter().map(|v| *v).collect())
                     }),
             ),
             Request::WriteMultipleRegisters(addr, values) => future::ready(
@@ -159,24 +162,24 @@ impl tokio_modbus::server::Service for Service {
                     .lock()
                     .unwrap()
                     .write(
-                        slave.0,
+                        slave,
                         Range::new(addr, addr + (values.len() as u16)),
                         &values,
                     )
                     .map_err(|e| {
                         let _ = self.log_sender.try_send(LogMsg::err(&format!(
                             "Slave: {}, WriteMultipleRegisters: [{:#06X}, {:#06X}) ({})",
-                            slave.0,
+                            slave,
                             addr,
                             addr as usize + values.len(),
                             e
                         )));
-                        Exception::IllegalDataAddress
+                        Self::Exception::IllegalDataAddress
                     })
                     .map(|_| {
                         let _ = self.log_sender.try_send(LogMsg::info(&format!(
                             "Slave: {}, WriteMultipleRegisters: [{:#06X}, {:#06X}) = {}",
-                            slave.0,
+                            slave,
                             addr,
                             addr as usize + values.len(),
                             to_str(&values)
@@ -188,21 +191,21 @@ impl tokio_modbus::server::Service for Service {
                 self.memory
                     .lock()
                     .unwrap()
-                    .write(slave.0, Range::new(addr, addr + 1), &[value])
+                    .write(slave, Range::new(addr, addr + 1), &[value])
                     .map_err(|e| {
                         let _ = self.log_sender.try_send(LogMsg::err(&format!(
                             "Slave: {}, WriteSingleRegister: [{:#06X}, {:#06X}) ({})",
-                            slave.0,
+                            slave,
                             addr,
                             addr + 1,
                             e
                         )));
-                        Exception::IllegalDataAddress
+                        Self::Exception::IllegalDataAddress
                     })
                     .map(|_| {
                         let _ = self.log_sender.try_send(LogMsg::info(&format!(
                             "Slave: {}, WriteSingleRegister: [{:#06X}, {:#06X}) = {}",
-                            slave.0,
+                            slave,
                             addr,
                             addr + 1,
                             value
@@ -216,21 +219,21 @@ impl tokio_modbus::server::Service for Service {
                     self.memory
                         .lock()
                         .unwrap()
-                        .write(slave.0, Range::new(addr, addr + 1), &values)
+                        .write(slave, Range::new(addr, addr + 1), &values)
                         .map_err(|e| {
                             let _ = self.log_sender.try_send(LogMsg::err(&format!(
                                 "Slave: {}, WriteMultipleCoils: [{:#06X}, {:#06X}) ({})",
-                                slave.0,
+                                slave,
                                 addr,
                                 addr + 1,
                                 e
                             )));
-                            Exception::IllegalDataAddress
+                            Self::Exception::IllegalDataAddress
                         })
                         .map(|_| {
                             let _ = self.log_sender.try_send(LogMsg::info(&format!(
                                 "Slave: {}, WriteMultipleCoils: [{:#06X}, {:#06X}) = {}",
-                                slave.0,
+                                slave,
                                 addr,
                                 addr + 1,
                                 to_str(&values)
@@ -245,21 +248,21 @@ impl tokio_modbus::server::Service for Service {
                     self.memory
                         .lock()
                         .unwrap()
-                        .write(slave.0, Range::new(addr, addr + 1), &[value])
+                        .write(slave, Range::new(addr, addr + 1), &[value])
                         .map_err(|e| {
                             let _ = self.log_sender.try_send(LogMsg::err(&format!(
                                 "Slave: {}, WriteSingleCoil: [{:#06X}, {:#06X}) ({})",
-                                slave.0,
+                                slave,
                                 addr,
                                 addr + 1,
                                 e
                             )));
-                            Exception::IllegalDataAddress
+                            Self::Exception::IllegalDataAddress
                         })
                         .map(|_| {
                             let _ = self.log_sender.try_send(LogMsg::info(&format!(
                                 "Slave: {}, WriteSingleCoil: [{:#06X}, {:#06X}) = {}",
-                                slave.0,
+                                slave,
                                 addr,
                                 addr + 1,
                                 value
@@ -269,11 +272,12 @@ impl tokio_modbus::server::Service for Service {
                 )
             }
             _ => {
-                let _ = self.log_sender.try_send(LogMsg::err(&format!(
-                    "Slave: {} (Illegal Function)",
-                    slave.0,
-                )));
-                future::ready(Err(Exception::IllegalFunction))
+                let _ = self
+                    .log_sender
+                    .try_send(LogMsg::err(
+                        &format!("Slave: {} (Illegal Function)", slave,),
+                    ));
+                future::ready(Err(Self::Exception::IllegalFunction))
             }
         }
     }

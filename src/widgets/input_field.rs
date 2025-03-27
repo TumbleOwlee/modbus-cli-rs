@@ -81,7 +81,7 @@ impl WidgetRef for InputField {
             }
             let inner = block.inner(area);
             block.render(area, buf);
-            area = inner.inner(&Margin {
+            area = inner.inner(Margin {
                 vertical: 0,
                 horizontal: 1,
             });
@@ -122,7 +122,7 @@ impl WidgetRef for InputField {
         if !self.disabled {
             // Display cursor
             if self.focused {
-                buf.get_mut(area.x + (self.cursor_pos - x_start) as u16, area.y)
+                buf[(area.x + (self.cursor_pos - x_start) as u16, area.y)]
                     .set_style(self.style.cursor);
             }
         }
