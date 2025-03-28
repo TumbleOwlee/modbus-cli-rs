@@ -53,14 +53,14 @@ The configuraation has to contain the following entries.
     "history_length": 30,
     "interval_ms": 500,
     "delay_after_connect_ms": 500,
+    "timeout_ms": 3000,
     "contiguous_memory": [],
     "definitions": {}
 }
 ```
 
 The `history_length` defines the scroll back limit of the displayed log messages. The parameter `interval_ms` specifies the frequency of read operations
-and is only used if the `modbus-cli-rs` application is executed in client mode using the `--client` flag. Based on the modbus server it may be necessary to
-increase the duration if it can only handle a limited amount of commands per second.
+, `delay_after_connect_ms` specifies the wait time after successfully connecting and first transmission and `timeout_ms` specifies the timeout for each command execution. These options are only used if the `modbus-cli-rs` application is executed in client mode using the `--client` flag. Based on the modbus server it may be necessary to increase the duration if it can only handle a limited amount of commands per second.
 
 In `contiguous_memory` you can define address ranges that are available on a modbus server. This is used to group multiple registers together and
 reduce the amount of read commands. E.g. if you have two registers `0x200` and `0x202` and both registers have length 1, the client would perform

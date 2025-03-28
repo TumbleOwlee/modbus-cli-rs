@@ -71,6 +71,7 @@ pub struct AppConfig {
     history_length: usize,
     interval_ms: u64,
     delay_after_connect_ms: Option<u64>,
+    timeout_ms: Option<u64>,
     contiguous_memory: Vec<ContiguousMemory>,
     definitions: HashMap<String, Definition>,
 }
@@ -80,6 +81,7 @@ impl Default for AppConfig {
         Self {
             history_length: 50,
             interval_ms: 500,
+            timeout_ms: None,
             delay_after_connect_ms: None,
             contiguous_memory: Vec::new(),
             definitions: HashMap::new(),
@@ -108,6 +110,7 @@ fn main() {
         .unwrap_or(AppConfig::default());
     let interval_ms = app_config.interval_ms;
     let delay_after_connect_ms = app_config.delay_after_connect_ms.unwrap_or(500);
+    let timeout_ms = app_config.timeout_ms.unwrap_or(3000);
 
     // Initialize memory storage for all registers
     let mut memory = Memory::new();
@@ -139,7 +142,7 @@ fn main() {
                 runtime.block_on(async_cloned!(interval_ms, app_config, memory; {
                     spawn_detach(async move {
                         let mut client = TcpClient::new(app_config, config, memory, status_sender, cmd_receiver, log_sender);
-                        client.run(delay_after_connect_ms, interval_ms).await
+                        client.run(delay_after_connect_ms, interval_ms, timeout_ms).await
                     })
                     .await
                 }));
@@ -148,7 +151,7 @@ fn main() {
                 runtime.block_on(async_cloned!(interval_ms, app_config, memory; {
                     spawn_detach(async move {
                         let mut client = RtuClient::new(app_config, config, memory, status_sender, cmd_receiver, log_sender);
-                        client.run(delay_after_connect_ms, interval_ms).await
+                        client.run(delay_after_connect_ms, interval_ms, timeout_ms).await
                     })
                     .await
                 }));

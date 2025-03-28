@@ -11,7 +11,7 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 use tokio::sync::mpsc::{Receiver, Sender};
-use tokio_modbus::prelude::{Reader, SlaveContext, SlaveId, Writer};
+use tokio_modbus::prelude::{Client as ModbusClient, Reader, SlaveContext, SlaveId, Writer};
 use tokio_modbus::{FunctionCode, Slave};
 
 pub struct Client {
@@ -68,7 +68,7 @@ impl Client {
                 0,
                 DataType::default(),
                 0,
-                AccessType::ReadOnly,
+                AccessType::ReadWrite,
                 None,
             ),
         );
@@ -146,11 +146,20 @@ impl Client {
         operations
     }
 
-    pub async fn run(&mut self, delay_after_connect: u64, interval_ms: u64) {
+    pub async fn run(&mut self, delay_after_connect: u64, interval_ms: u64, timeout_ms: u64) {
         let addr: SocketAddr = format!("{}:{}", self.tcp_config.ip, self.tcp_config.port)
             .parse()
             .panic(|e| format!("Failed to create SocketAddr ({e})"));
-        let mut connection = tokio_modbus::client::tcp::connect(addr).await.ok();
+        let mut connection = if let Ok(r) = tokio::time::timeout(
+            std::time::Duration::from_millis(timeout_ms),
+            tokio_modbus::client::tcp::connect(addr),
+        )
+        .await
+        {
+            r.ok()
+        } else {
+            None
+        };
         if connection.is_some() {
             let _ = self
                 .status_sender
@@ -183,8 +192,10 @@ impl Client {
             .checked_sub(Duration::from_millis(interval_ms + 1))
             .unwrap();
         let mut op_idx = 0;
+        let mut retries = 0;
         loop {
             if let Some(ref mut context) = connection {
+                let mut reconnect = false;
                 let mut disconnect = false;
 
                 // Perform next read of registers
@@ -196,50 +207,63 @@ impl Client {
                     let modbus_result = match fc {
                         FunctionCode::ReadCoils => {
                             context.set_slave(Slave(*slave));
-                            context
-                                .read_coils(op.start() as u16, (op.end() - op.start()) as u16)
-                                .await
-                                .map(|v| {
+                            tokio::time::timeout(
+                                Duration::from_millis(timeout_ms),
+                                context
+                                    .read_coils(op.start() as u16, (op.end() - op.start()) as u16),
+                            )
+                            .await
+                            .map(|r| {
+                                r.map(|v| {
                                     v.map(|b| {
                                         b.into_iter().map(|e| if e { 1 } else { 0 }).collect()
                                     })
                                 })
+                            })
                         }
                         FunctionCode::ReadDiscreteInputs => {
                             context.set_slave(Slave(*slave));
-                            context
-                                .read_discrete_inputs(
+                            tokio::time::timeout(
+                                Duration::from_millis(timeout_ms),
+                                context.read_discrete_inputs(
                                     op.start() as u16,
                                     (op.end() - op.start()) as u16,
-                                )
-                                .await
-                                .map(|v| {
+                                ),
+                            )
+                            .await
+                            .map(|r| {
+                                r.map(|v| {
                                     v.map(|b| {
                                         b.into_iter().map(|e| if e { 1 } else { 0 }).collect()
                                     })
                                 })
+                            })
                         }
                         FunctionCode::ReadInputRegisters => {
                             context.set_slave(Slave(*slave));
-                            context
-                                .read_input_registers(
+                            tokio::time::timeout(
+                                Duration::from_millis(timeout_ms),
+                                context.read_input_registers(
                                     op.start() as u16,
                                     (op.end() - op.start()) as u16,
-                                )
-                                .await
+                                ),
+                            )
+                            .await
                         }
                         FunctionCode::ReadHoldingRegisters => {
                             context.set_slave(Slave(*slave));
-                            context
-                                .read_holding_registers(
+                            tokio::time::timeout(
+                                Duration::from_millis(timeout_ms),
+                                context.read_holding_registers(
                                     op.start() as u16,
                                     (op.end() - op.start()) as u16,
-                                )
-                                .await
+                                ),
+                            )
+                            .await
                         }
                         _ => panic!("Invalid function code in operation."),
                     };
-                    if let Ok(Ok(vec)) = modbus_result {
+                    if let Ok(Ok(Ok(vec))) = modbus_result {
                         let _ = self.log_sender
                             .send(LogMsg::info(&format!(
                                 "Read address space [ {start:#06X} ({start}), {end:#06X} ({end}) ) successful.",
@@ -257,7 +281,18 @@ impl Client {
                         } else {
                             op_idx + 1
                         };
+                        retries = 0;
                     } else {
+                        retries += 1;
+                        if retries > 3 {
+                            op_idx = if op_idx + 1 == self.operations.len() {
+                                0
+                            } else {
+                                op_idx + 1
+                            };
+                            retries = 0;
+                        }
+
                         let _ = self.log_sender
                             .send(LogMsg::err(&format!(
                                 "Read address space [ {start:#06X} ({start}), {end:#06X} ({end}) ) failed.",
@@ -269,7 +304,7 @@ impl Client {
                             .status_sender
                             .send(Status::String(str!("Modbus TCP disconnected.")))
                             .await;
-                        disconnect = true;
+                        reconnect = true;
                     }
                 }
 
@@ -290,17 +325,24 @@ impl Client {
                                 .await;
                             disconnect = true;
                         }
-                        Command::Connect => {}
+                        Command::Connect => {
+                            reconnect = true;
+                        }
                         Command::WriteSingleCoil((slave, addr, coil)) => {
                             context.set_slave(Slave(slave));
-                            if let Err(e) = context.write_single_coil(addr, coil).await {
+                            if let Err(e) = tokio::time::timeout(
+                                std::time::Duration::from_millis(timeout_ms),
+                                context.write_single_coil(addr, coil),
+                            )
+                            .await
+                            {
                                 let _ = self
                                     .log_sender
                                     .send(LogMsg::err(&format!(
                                         "Failed to write address {addr} with values {coil:?} [{e}]."
                                     )))
                                     .await;
-                                disconnect = true;
+                                reconnect = true;
                             } else {
                                 let _ = self
                                     .log_sender
@@ -312,14 +354,19 @@ impl Client {
                         }
                         Command::WriteMultipleCoils((slave, addr, coils)) => {
                             context.set_slave(Slave(slave));
-                            if let Err(e) = context.write_multiple_coils(addr, &coils).await {
+                            if let Err(e) = tokio::time::timeout(
+                                std::time::Duration::from_millis(timeout_ms),
+                                context.write_multiple_coils(addr, &coils),
+                            )
+                            .await
+                            {
                                 let _ = self
                                     .log_sender
                                     .send(LogMsg::err(&format!(
                                         "Failed to write address {addr} with values {coils:?} [{e}]."
                                     )))
                                     .await;
-                                disconnect = true;
+                                reconnect = true;
                             } else {
                                 let _ = self
                                     .log_sender
@@ -331,14 +378,19 @@ impl Client {
                         }
                         Command::WriteSingleRegister((slave, addr, value)) => {
                             context.set_slave(Slave(slave));
-                            if let Err(e) = context.write_single_register(addr, value).await {
+                            if let Err(e) = tokio::time::timeout(
+                                std::time::Duration::from_millis(timeout_ms),
+                                context.write_single_register(addr, value),
+                            )
+                            .await
+                            {
                                 let _ = self
                                     .log_sender
                                     .send(LogMsg::err(&format!(
                                         "Failed to write address {addr} with values {value:?} [{e}]."
                                     )))
                                     .await;
-                                disconnect = true;
+                                reconnect = true;
                             } else {
                                 let _ = self
                                     .log_sender
@@ -350,14 +402,19 @@ impl Client {
                         }
                         Command::WriteMultipleRegisters((slave, addr, vec)) => {
                             context.set_slave(Slave(slave));
-                            if let Err(e) = context.write_multiple_registers(addr, &vec).await {
+                            if let Err(e) = tokio::time::timeout(
+                                std::time::Duration::from_millis(timeout_ms),
+                                context.write_multiple_registers(addr, &vec),
+                            )
+                            .await
+                            {
                                 let _ = self
                                     .log_sender
                                     .send(LogMsg::err(&format!(
                                         "Failed to write address {addr} with values {vec:?} [{e}]."
                                     )))
                                     .await;
-                                disconnect = true;
+                                reconnect = true;
                             } else {
                                 let _ = self
                                     .log_sender
@@ -370,14 +427,63 @@ impl Client {
                     }
                 }
 
-                // Reset connection on error
                 if disconnect {
-                    connection = None;
+                    if let Some(mut conn) = connection.take() {
+                        let _ = tokio::time::timeout(
+                            std::time::Duration::from_millis(timeout_ms),
+                            conn.disconnect(),
+                        )
+                        .await;
+                    }
+                }
+
+                // Reset connection on error
+                if reconnect {
+                    connection = if let Ok(r) = tokio::time::timeout(
+                        std::time::Duration::from_millis(timeout_ms),
+                        tokio_modbus::client::tcp::connect(addr),
+                    )
+                    .await
+                    {
+                        r.ok()
+                    } else {
+                        None
+                    };
+                    if connection.is_some() {
+                        let _ = self
+                            .status_sender
+                            .send(Status::String(str!("Modbus TCP connected.")))
+                            .await;
+                        let _ = self
+                            .log_sender
+                            .send(LogMsg::ok(&format!(
+                                "Modbus TCP reconnected successfully to {}:{}",
+                                self.tcp_config.ip, self.tcp_config.port
+                            )))
+                            .await;
+                    } else {
+                        let _ = self
+                            .log_sender
+                            .send(LogMsg::err(&format!(
+                                "Modbus TCP failed to reconnect to {}:{}",
+                                self.tcp_config.ip, self.tcp_config.port
+                            )))
+                            .await;
+                    }
                 }
             } else if let Ok(cmd) = self.cmd_receiver.try_recv() {
                 match cmd {
                     Command::Connect => {
-                        connection = tokio_modbus::client::tcp::connect(addr).await.ok();
+                        connection = if let Ok(r) = tokio::time::timeout(
+                            std::time::Duration::from_millis(timeout_ms),
+                            tokio_modbus::client::tcp::connect(addr),
+                        )
+                        .await
+                        {
+                            r.ok()
+                        } else {
+                            None
+                        };
                         if connection.is_some() {
                             let _ = self
                                 .status_sender
