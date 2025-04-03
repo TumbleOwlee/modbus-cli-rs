@@ -23,6 +23,7 @@ Provide a CLI application that can interact with a modbus server and modbus clie
 - [x] Allow the manipulation of register contents in server and client mode.
 - [x] Support TCP modbus
 - [x] Support RTU modbus
+- [ ] Optional: Support separated memory backends for read/write (e.g. Hypercharger utilizes the same addresses for different information depending on the used function code)
 
 ## Quickstart
 
@@ -59,8 +60,18 @@ The configuraation has to contain the following entries.
 }
 ```
 
-The `history_length` defines the scroll back limit of the displayed log messages. The parameter `interval_ms` specifies the frequency of read operations
-, `delay_after_connect_ms` specifies the wait time after successfully connecting and first transmission and `timeout_ms` specifies the timeout for each command execution. These options are only used if the `modbus-cli-rs` application is executed in client mode using the `--client` flag. Based on the modbus server it may be necessary to increase the duration if it can only handle a limited amount of commands per second.
+### Explanation
+
+- `history_length`: Number of entries kept in the log history (lower view)
+- `interval_ms`: Delay in milliseconds between two successive Modbus operations
+- `delay_after_connect_ms`: Delay in milliseconds between the successful connect and the first Modbus operation
+- `timeout_ms`: Timeout in milliseconds for every Modbus operation
+- `contiguous_memory`: Array of continguous memory sections (neighboring registers with the same function code and part of the same section will be grouped together if possible)
+- `definitions`: Modbus register definitions
+
+The `interval_ms`, `delay_after_connect_ms` and `timeout_ms` are only taken into account if the application is executed in client mode (`--client`). In this case these configuration parameters heavily depend on the targeted Modbus server. If the server is only able to handle a limited workload, you will have to increase these paramters.
+
+## Contiguous Memory
 
 In `contiguous_memory` you can define address ranges that are available on a modbus server. This is used to group multiple registers together and
 reduce the amount of read commands. E.g. if you have two registers `0x200` and `0x202` and both registers have length 1, the client would perform
@@ -81,6 +92,8 @@ can specify the specific `slave_id` for the memory range.
     }
 ]
 ```
+
+## Register Defintion
 
 You can define all registers by adding the entries for each register to the `definitions` map. A definition entry looks like this. The `slave_id` is
 here optional, too. If none is provided, `slave_id = 0` is used.
