@@ -21,6 +21,12 @@ pub struct Message {
     pub message: String,
 }
 
+impl std::fmt::Display for Message {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{} - {}", self.timestamp, self.message)
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum LogMsg {
     Err(Message),

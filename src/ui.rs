@@ -14,7 +14,9 @@ use itertools::Itertools;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::{prelude::*, widgets::*};
-use std::io::stdout;
+use std::fs::File;
+use std::io::Write;
+use std::io::{stdout, BufWriter};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use style::palette::tailwind;
@@ -146,6 +148,7 @@ pub struct App {
     config: Arc<Mutex<AppConfig>>,
     popup: Popup,
     edit_dialog: EditDialog,
+    file: Option<BufWriter<File>>,
 }
 
 impl App {
@@ -156,6 +159,15 @@ impl App {
             crossterm::execute!(stdout(), LeaveAlternateScreen).unwrap();
             original_hook(panic);
         }));
+
+        let mut file = None;
+        if let Ok(f) = std::fs::OpenOptions::new()
+            .append(true)
+            .create(true)
+            .open("./modbus_cli_rs.log")
+        {
+            file = Some(std::io::BufWriter::new(f));
+        }
 
         let history_len = config.lock().unwrap().history_length;
 
@@ -173,6 +185,7 @@ impl App {
             config,
             popup: Popup::None,
             edit_dialog: EditDialog::new(PALETTES[0].c400, bg_color),
+            file,
         }
     }
 
@@ -479,12 +492,18 @@ impl App {
                                         &v,
                                     ) {
                                         self.log_entries.push(LogMsg::err(&format!("{}", e)));
+                                        if let Some(ref mut f) = self.file {
+                                            let _ = writeln!(f, "{}", e);
+                                        }
                                     } else {
                                         self.popup = Popup::None;
                                     }
                                 }
                                 Err(e) => {
                                     self.log_entries.push(LogMsg::err(&format!("{}", e)));
+                                    if let Some(ref mut f) = self.file {
+                                        let _ = writeln!(f, "{}", e);
+                                    }
                                 }
                             }
                         }
@@ -526,6 +545,13 @@ impl App {
             // Update log
             for _ in 0..5 {
                 if let Ok(v) = log_recv.try_recv() {
+                    if let Some(ref mut f) = self.file {
+                        match v {
+                            LogMsg::Ok(ref m) | LogMsg::Err(ref m) | LogMsg::Info(ref m) => {
+                                let _ = writeln!(f, "{}", m);
+                            }
+                        }
+                    }
                     self.log_entries.push(v);
                 } else {
                     break;

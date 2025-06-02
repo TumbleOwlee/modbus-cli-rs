@@ -304,6 +304,15 @@ impl Client {
                             .status_sender
                             .send(Status::String(str!("Modbus TCP disconnected.")))
                             .await;
+
+                        if let Err(e) = modbus_result {
+                            let _ = self.log_sender.send(LogMsg::err(&format!("{:?}", e))).await;
+                        } else if let Ok(Err(e)) = modbus_result {
+                            let _ = self.log_sender.send(LogMsg::err(&format!("{:?}", e))).await;
+                        } else if let Ok(Ok(Err(e))) = modbus_result {
+                            let _ = self.log_sender.send(LogMsg::err(&format!("{:?}", e))).await;
+                        }
+
                         reconnect = true;
                     }
                 }
@@ -439,6 +448,7 @@ impl Client {
 
                 // Reset connection on error
                 if reconnect {
+                    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
                     connection = if let Ok(r) = tokio::time::timeout(
                         std::time::Duration::from_millis(timeout_ms),
                         tokio_modbus::client::tcp::connect(addr),
