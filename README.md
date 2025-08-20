@@ -1,5 +1,7 @@
 # Modbus CLI
 
+[![status-badge](https://github-ci.code-ape.dev/api/badges/3/status.svg)](https://github-ci.code-ape.dev/repos/3)
+
 Modbus CLI is a Rust implementation of a simple and intuative commandline application to interact with or simulate a modbus server. I started with the project because I'm used to work in environments that doesn't provide a GUI environment and my work required to handle different modbus use-cases.
 
 If you prefer a GUI application, check out [QModbus](https://github.com/ed-chemnitz/qmodbus/) or similar applications.
