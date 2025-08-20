@@ -1,5 +1,5 @@
 steps:
-   build:
+  build:
     image: rust:latest
 
     commands:
