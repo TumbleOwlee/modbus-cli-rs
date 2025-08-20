@@ -14,7 +14,7 @@ steps:
         ref: refs/tags/nightly
 
   upload:
-    image: woodpeckerci/plugin-github-release:latest
+    image: woodpeckerci/plugin-release
 
     settings:
       api_key:
