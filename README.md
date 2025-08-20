@@ -122,7 +122,7 @@ here optional, too. If none is provided, `slave_id = 0` is used.
 - `type`: The type that is represented by the modbus registers
 - `reverse`: Define whether the registers have to be flipped before interpretation (default: `false`)
 
-If you use the client mode `--client` the corresponding write codes for manipulating registers or coils are derived from the configured `read_code`. Please refer to `config.json` of this repository for a example configuration.
+If you use the client mode `--client` the corresponding write codes for manipulating registers or coils are derived from the configured `read_code`. E.g. if you specify a `read_code` that corresponds to coils, the write code will be the function code associated with coils, and if you specify the `read_code` 3 or 4 for input and holding registers, the client will use function code 6 or 16 (depending on the length) to write the values. Please refer to `config.json` of this repository for a example configuration.
 
 ### Data Types
 
