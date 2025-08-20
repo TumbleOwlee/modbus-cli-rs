@@ -1,0 +1,31 @@
+steps:
+   build:
+    image: rust:latest
+
+    commands:
+      - rustup target add x86_64-pc-windows-gnu
+      - cargo check
+      - cargo build --release
+      - cargo build --release --target x86_64-pc-windows-gnu
+
+    when:
+      - event: tag
+        ref: refs/tags/nightly
+
+  upload:
+    image: woodpeckerci/plugin-github-release:latest
+
+    settings:
+      api_key:
+        from_secret: github_token
+      files: 
+        - ./target/release/modbus-cli-rs
+        - ./target/x86_64-pc-windows-gnu/release/modbus-cli-rs.exe
+      title: 'modbus-cli-rs nightly'
+      checksum:
+        - sha256
+        - md5
+
+    when:
+      - event: tag
+        ref: refs/tags/nightly
