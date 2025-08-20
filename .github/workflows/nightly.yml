@@ -21,4 +21,4 @@ jobs:
         uses: EndBug/latest-tag@latest
         if: github.ref == 'refs/heads/main'
         with:
-          tag-name: nightly
+          ref: nightly
