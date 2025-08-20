@@ -1,32 +1,30 @@
 steps:
   build:
     image: rust:latest
-
     commands:
-      - apt-get update && apt-get install -y mingw-w64
+      - apt-get update && apt-get install -y mingw-w64 zip
       - rustup target add x86_64-pc-windows-gnu
       - cargo check
       - cargo build --release
       - cargo build --release --target x86_64-pc-windows-gnu
-
+      - zip -j modbus-cli-windows.zip target/x86_64-pc-windows-gnu/release/modbus-cli-rs.exe
+      - tar -C target/release -cvf modbus-cli-unix.tar.gz modbus-cli-rs
     when:
       - event: tag
         ref: refs/tags/nightly
 
   upload:
     image: woodpeckerci/plugin-release
-
     settings:
       api_key:
         from_secret: github_token
       files: 
-        - ./target/release/modbus-cli-rs
-        - ./target/x86_64-pc-windows-gnu/release/modbus-cli-rs.exe
+        - modbus-cli-unix.tar.gz
+        - modbus-cli-windows.zip
       title: 'modbus-cli-rs nightly'
       checksum:
         - sha256
         - md5
-
     when:
       - event: tag
         ref: refs/tags/nightly
