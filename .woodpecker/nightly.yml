@@ -21,7 +21,7 @@ steps:
       files: 
         - modbus-cli-unix.tar.gz
         - modbus-cli-windows.zip
-      title: 'nightly'
+      title: 'Nightly'
       checksum:
         - sha256
         - md5
