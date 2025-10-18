@@ -216,7 +216,7 @@ Arguments:
 Return: Integer value of the register
 
 
-Method:   C_Register.GetFloat(name)
+Method:   C_Register:GetFloat(name)
 
 Arguments:
                Name: name
@@ -226,7 +226,7 @@ Arguments:
 Return: Floating point value of the register
 
 
-Method:   C_Register.GetBool(name)
+Method:   C_Register:GetBool(name)
 
 Arguments:
                Name: name
@@ -236,7 +236,7 @@ Arguments:
 Return: Boolean value of the register
 
 
-Method:   C_Register.Set(name, value)
+Method:   C_Register:Set(name, value)
 
 Arguments:
                Name: name
