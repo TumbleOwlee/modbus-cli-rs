@@ -121,7 +121,7 @@ here optional, too. If none is provided, `slave_id = 0` is used.
     "access": "ReadOnly",
     "type": "I32",
     "reverse": false,
-    "on_update": "Register.GetString(\"Serial Number\")"
+    "on_update": "C_Register:GetString(\"Serial Number\")"
 }
 ```
 

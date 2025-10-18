@@ -19,8 +19,8 @@ length = 1
 access = "ReadWrite"
 type = "U16"
 on_update = """
-local value = Register.GetInt("input_register")
-Register.Set("holding_register", value << 1)
+local value = C_Register:GetInt("input_register")
+C_Register:Set("holding_register", value << 1)
  """
 
 [definitions.input_register]
