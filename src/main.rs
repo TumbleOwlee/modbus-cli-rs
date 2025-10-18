@@ -161,7 +161,7 @@ fn main() {
     // Initialize tokio runtime for modbus server
     let runtime = Runtime::new().panic(|e| format!("Failed to create runtime. [{}]", e));
 
-    let lua_runtime = lua::LuaRuntime::init(memory.clone(), app_config.clone(), log_sender.clone())
+    let lua_runtime = lua::Runtime::init(memory.clone(), app_config.clone(), log_sender.clone())
         .expect("Lua Runtime startup failed");
 
     if args.client {

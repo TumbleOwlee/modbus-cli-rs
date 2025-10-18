@@ -526,7 +526,7 @@ impl App {
         mut status_recv: Receiver<Status>,
         mut log_recv: Receiver<LogMsg>,
         cmd_sender: Option<Sender<Command>>,
-        mut lua_runtime: lua::LuaRuntime,
+        mut lua_runtime: lua::Runtime,
     ) -> anyhow::Result<()> {
         enable_raw_mode()?;
         let mut terminal = App::create_terminal()?;
