@@ -44,6 +44,10 @@ cargo run --release -- --config ./path/to/config.json tcp -i <ip> -p <port>
 
 Please refer to `--help` for all available options.
 
+## Important Change
+
+The tool now supports the configuration is TOML and JSON format. Additionally a new subcommand `convert` is added that takes the specified configuration and outputs it in the specified configuration format. The support of TOML is added to support easier multiline text values as part of the configuration which are used to specify LUA scripts.
+
 ## Configuration
 
 The application will need a JSON configuration file. Besides some basic configuration parameters the configuration provides the register definitions.
@@ -108,9 +112,12 @@ here optional, too. If none is provided, `slave_id = 0` is used.
     "length": 4,
     "access": "ReadOnly",
     "type": "I32",
-    "reverse": false
+    "reverse": false,
+    "on_update": "Register.GetString(\"Serial Number\")"
 }
 ```
+
+Please refer to the section [Lua Support](#Lua Support) for information about the optional `on_update` property.
 
 ### Explanation:
 
@@ -156,3 +163,81 @@ The following data types are currently supported and can be configured:
 - `F32le`: The combined register contents contain a 32-bit little-endian float value
 - `F64`: The combined register contents contain a 64-bit float value
 - `F64le`: The combined register contents contain a 64-bit little-endian float value
+
+### Lua Support
+
+Since the user may be interested in adding virtual registers that will use information of other registers to combine them in a single value, instead of adding a custom parser to provide support of expressions, we add support of the Lua programming language to provide far more than that. Currently Lua script are only configurable under the `on_update` property. The lua script will be executed each cycle and can read and write any registers the user is interested in. Besides the functionality provided by the Lua standard libraries (excluding access to the filesystem or network), the following methods are available.
+
+#### Global
+
+```
+Method:   GetTime()
+
+Arguments: None
+
+Return: Time in seconds since startup.
+
+
+Method:   GetTimeMs()
+
+Arguments: None
+
+Return: Time in milliseconds since startup.
+```
+
+#### Module Register
+
+```
+Method:   Register.GetString(name)
+
+Arguments:
+               Name: name
+               Type: String
+        Description: Name of the register as defined in the configuration.
+
+Return: String value of the register
+
+
+Method:   Register.GetInt(name)
+
+Arguments:
+               Name: name
+               Type: String
+        Description: Name of the register as defined in the configuration.
+
+Return: Integer value of the register
+
+
+Method:   Register.GetFloat(name)
+
+Arguments:
+               Name: name
+               Type: String
+        Description: Name of the register as defined in the configuration.
+
+Return: Floating point value of the register
+
+
+Method:   Register.GetBool(name)
+
+Arguments:
+               Name: name
+               Type: String
+        Description: Name of the register as defined in the configuration.
+
+Return: Boolean value of the register
+
+
+Method:   Register.Set(name, value)
+
+Arguments:
+               Name: name
+               Type: String
+        Description: Name of the register as defined in the configuration.
+
+               Name: value
+               Type: String | bool | integer | float
+        Description: Value to set for the specified register
+
+Return: void
+```

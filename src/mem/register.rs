@@ -74,6 +74,7 @@ pub struct Definition {
     read_code: u8,
     access: AccessType,
     default: Option<Value>,
+    on_update: Option<String>,
 }
 
 impl Definition {
@@ -86,6 +87,7 @@ impl Definition {
         read_code: u8,
         access: AccessType,
         default: Option<Value>,
+        on_update: Option<String>,
     ) -> Self {
         Self {
             slave_id,
@@ -95,6 +97,7 @@ impl Definition {
             read_code,
             access,
             default,
+            on_update,
         }
     }
 
@@ -128,6 +131,10 @@ impl Definition {
 
     pub fn access_type(&self) -> AccessType {
         self.access.clone()
+    }
+
+    pub fn on_update(&self) -> &Option<String> {
+        &self.on_update
     }
 }
 

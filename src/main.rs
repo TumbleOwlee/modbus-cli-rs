@@ -1,3 +1,4 @@
+mod lua;
 mod mem;
 mod msg;
 mod rtu;
@@ -20,16 +21,31 @@ use crate::ui::App;
 use crate::util::tokio::spawn_detach;
 use crate::util::{async_cloned, str, Expect};
 
+use clap::ValueEnum;
 use clap::{Parser, Subcommand};
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::default::Default;
 use std::fs::File;
-use std::io::BufReader;
+use std::io::{BufReader, Write};
 use std::sync::{Arc, Mutex};
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc::channel;
 use tokio_modbus::prelude::SlaveId;
+
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+pub enum FileType {
+    Toml,
+    Json,
+}
+
+#[derive(Parser)]
+pub struct Format {
+    /// The interface to use for the service or the ip to connect to in client mode.
+    #[arg(value_enum)]
+    file_type: FileType,
+}
 
 #[derive(Subcommand)]
 enum Commands {
@@ -38,6 +54,9 @@ enum Commands {
 
     /// Use RTU connection
     Rtu(RtuConfig),
+
+    /// Convert configuration file to other type
+    Convert(Format),
 }
 
 #[derive(Parser)]
@@ -66,7 +85,7 @@ pub struct ContiguousMemory {
     range: Range<Address>,
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct AppConfig {
     history_length: usize,
     interval_ms: u64,
@@ -94,13 +113,19 @@ impl AppConfig {
     pub fn read(path: &str) -> anyhow::Result<Self> {
         let file = File::open(path)?;
         let reader = BufReader::new(file);
-        serde_json::from_reader(reader).map_err(|e| e.into())
+        if let Ok(c) = serde_json::from_reader(reader) {
+            Ok(c)
+        } else {
+            let content = std::fs::read_to_string(path)?;
+            toml::from_str(&content).map_err(|e| e.into())
+        }
     }
 }
 
 fn main() {
     let args = Args::parse();
 
+    let cfg_path = args.config.clone();
     // Read register definitions
     let app_config = args
         .config
@@ -136,6 +161,9 @@ fn main() {
     // Initialize tokio runtime for modbus server
     let runtime = Runtime::new().panic(|e| format!("Failed to create runtime. [{}]", e));
 
+    let lua_runtime = lua::LuaRuntime::init(memory.clone(), app_config.clone(), log_sender.clone())
+        .expect("Lua Runtime startup failed");
+
     if args.client {
         match args.command {
             Commands::Tcp(config) => {
@@ -155,6 +183,40 @@ fn main() {
                     })
                     .await
                 }));
+            }
+            Commands::Convert(format) => {
+                if let Some(ref path) = cfg_path {
+                    let idx = path.chars().rev().find_position(|c| *c == '.');
+                    let mut path = path.clone();
+                    if let Some((idx, _)) = idx {
+                        let _ = path.split_off(path.len() - idx);
+                    }
+                    match format.file_type {
+                        FileType::Toml => {
+                            let content = toml::to_string::<AppConfig>(
+                                &(*app_config
+                                    .lock()
+                                    .expect("Failed to serialize configuration")),
+                            )
+                            .expect("Failed to serialize configuration to toml");
+                            let mut file = File::create(path.to_owned() + ".toml")
+                                .expect("Failed to open output file");
+                            write!(file, "{}", content).expect("Failed to write file");
+                        }
+                        FileType::Json => {
+                            let content = serde_json::to_string::<AppConfig>(
+                                &(*app_config
+                                    .lock()
+                                    .expect("Failed to serialize configuration")),
+                            )
+                            .expect("Failed to serialize configuration to json");
+                            let mut file = File::create(path.to_owned() + ".json")
+                                .expect("Failed to open output file");
+                            write!(file, "{}", content).expect("Failed to write file");
+                        }
+                    }
+                }
+                return;
             }
         }
     } else {
@@ -177,25 +239,61 @@ fn main() {
                     .await
                 }));
             }
+            Commands::Convert(format) => {
+                if let Some(ref path) = cfg_path {
+                    let idx = path.chars().rev().find_position(|c| *c == '.');
+                    let mut path = path.clone();
+                    if let Some((idx, _)) = idx {
+                        let _ = path.split_off(path.len() - idx - 1);
+                    }
+                    match format.file_type {
+                        FileType::Toml => {
+                            let content = toml::to_string::<AppConfig>(
+                                &(*app_config
+                                    .lock()
+                                    .expect("Failed to serialize configuration")),
+                            )
+                            .expect("Failed to serialize configuration to toml");
+                            let mut file = File::create(path.to_owned() + ".toml")
+                                .expect("Failed to open output file");
+                            write!(file, "{}", content).expect("Failed to write file");
+                        }
+                        FileType::Json => {
+                            let content = serde_json::to_string::<AppConfig>(
+                                &(*app_config
+                                    .lock()
+                                    .expect("Failed to serialize configuration")),
+                            )
+                            .expect("Failed to serialize configuration to json");
+                            let mut file = File::create(path.to_owned() + ".json")
+                                .expect("Failed to open output file");
+                            write!(file, "{}", content).expect("Failed to write file");
+                        }
+                    }
+                }
+                return;
+            }
         }
     };
 
     // Initialize register handler
     let register_handler = Handler::new(app_config.clone(), memory.clone());
-    for def in app_config.lock().unwrap().definitions.values() {
-        if let Some(value) = def.get_default() {
-            let s: String = match value {
-                Value::Str(v) => v.to_string(),
-                Value::Num(v) => format!("{}", v),
-                Value::Float(v) => format!("{}", v),
-            };
-            if let Ok(v) = def.get_type().encode(&s) {
-                if memory
-                    .lock()
-                    .unwrap()
-                    .write(def.get_slave_id().unwrap_or(0), def.get_range(), &v)
-                    .is_err()
-                {}
+    {
+        for def in app_config.lock().unwrap().definitions.values() {
+            if let Some(value) = def.get_default() {
+                let s: String = match value {
+                    Value::Str(v) => v.to_string(),
+                    Value::Num(v) => format!("{}", v),
+                    Value::Float(v) => format!("{}", v),
+                };
+                if let Ok(v) = def.get_type().encode(&s) {
+                    if memory
+                        .lock()
+                        .unwrap()
+                        .write(def.get_slave_id().unwrap_or(0), def.get_range(), &v)
+                        .is_err()
+                    {}
+                }
             }
         }
     }
@@ -203,7 +301,7 @@ fn main() {
     // Run UI
     let app = App::new(register_handler, app_config);
     let cmd_sender = if args.client { Some(cmd_sender) } else { None };
-    app.run(status_receiver, log_receiver, cmd_sender)
+    app.run(status_receiver, log_receiver, cmd_sender, lua_runtime)
         .panic(|e| format!("Run app failed [{}]", e));
     //runtime.block_on(async { crate::util::tokio::join_all().await });
 }

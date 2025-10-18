@@ -68,6 +68,235 @@ impl DataType {
         }
     }
 
+    pub fn as_plain_str(&self, bytes: &[u16]) -> anyhow::Result<String> {
+        match self.format {
+            Format::F32 => {
+                if let (Some(b1), Some(b2)) = (
+                    bytes.first().map(|v| self.apply_order(*v)),
+                    bytes.get(1).map(|v| self.apply_order(*v)),
+                ) {
+                    let uval: u32 = ((b1 as u32) << 16) + (b2 as u32);
+                    let val = f32::from_bits(uval);
+                    Ok(format!("{}", val))
+                } else {
+                    Err(anyhow!("Not enough bytes"))
+                }
+            }
+            Format::F32le => {
+                if let (Some(b1), Some(b2)) = (
+                    bytes.first().map(|v| self.apply_order(*v)),
+                    bytes.get(1).map(|v| self.apply_order(*v)),
+                ) {
+                    let uval: u32 = ((b2 as u32) << 16) + (b1 as u32);
+                    let val = f32::from_bits(uval);
+                    Ok(format!("{}", val))
+                } else {
+                    Err(anyhow!("Not enough bytes"))
+                }
+            }
+            Format::F64 => {
+                if let (Some(b1), Some(b2), Some(b3), Some(b4)) = (
+                    bytes.first().map(|v| self.apply_order(*v)),
+                    bytes.get(1).map(|v| self.apply_order(*v)),
+                    bytes.get(2).map(|v| self.apply_order(*v)),
+                    bytes.get(3).map(|v| self.apply_order(*v)),
+                ) {
+                    let uval: u64 = ((b1 as u64) << 48)
+                        + ((b2 as u64) << 32)
+                        + ((b3 as u64) << 16)
+                        + (b4 as u64);
+                    let val = f64::from_bits(uval);
+                    Ok(format!("{}", val))
+                } else {
+                    Err(anyhow!("Not enough bytes"))
+                }
+            }
+            Format::F64le => {
+                if let (Some(b1), Some(b2), Some(b3), Some(b4)) = (
+                    bytes.first().map(|v| self.apply_order(*v)),
+                    bytes.get(1).map(|v| self.apply_order(*v)),
+                    bytes.get(2).map(|v| self.apply_order(*v)),
+                    bytes.get(3).map(|v| self.apply_order(*v)),
+                ) {
+                    let uval: u64 = ((b4 as u64) << 48)
+                        + ((b3 as u64) << 32)
+                        + ((b2 as u64) << 16)
+                        + (b1 as u64);
+                    let val = f64::from_bits(uval);
+                    Ok(format!("{}", val))
+                } else {
+                    Err(anyhow!("Not enough bytes"))
+                }
+            }
+            Format::PackedAscii => String::from_utf8(
+                bytes
+                    .iter()
+                    .map(|v| self.apply_order(*v))
+                    .flat_map(|v| vec![((v & 0xFF00) >> 8) as u8, (v & 0xFF) as u8])
+                    .collect(),
+            )
+            .map_err(|e| e.into()),
+            Format::LooseAscii => String::from_utf8(
+                bytes
+                    .iter()
+                    .map(|v| self.apply_order(*v))
+                    .map(|v| (v & 0xFF) as u8)
+                    .collect(),
+            )
+            .map_err(|e| e.into()),
+            Format::PackedUtf8 => String::from_utf8(
+                bytes
+                    .iter()
+                    .map(|v| self.apply_order(*v))
+                    .flat_map(|v| vec![((v >> 8) & 0xFF) as u8, (v & 0xFF) as u8])
+                    .collect(),
+            )
+            .map_err(|e| e.into()),
+            Format::LooseUtf8 => bytes
+                .iter()
+                .map(|v| self.apply_order(*v))
+                .map(|v| {
+                    if (v & 0xFF00) != 0x0000 {
+                        let s = String::from_utf8(vec![((v >> 8) & 0xFF) as u8, (v & 0xFF) as u8]);
+                        match s {
+                            Ok(s) if s.len() == 1 => Ok(s),
+                            Ok(_) => Err(anyhow!("Invalid data")),
+                            Err(e) => Err(e.into()),
+                        }
+                    } else {
+                        String::from_utf8(vec![(v & 0xFF) as u8]).map_err(|e| e.into())
+                    }
+                })
+                .try_fold(String::new(), |mut s, r| match r {
+                    Ok(r) => {
+                        s.push_str(&r);
+                        Ok(s)
+                    }
+                    Err(_) => Err(anyhow!("Invalid data")),
+                }),
+            Format::U8 => {
+                let val: u8 = ((self.apply_order(*bytes.first().unwrap())) & 0xFF) as u8;
+                Ok(format!("{}", val))
+            }
+            Format::U16 => {
+                let val: u16 = self.apply_order(*bytes.first().unwrap());
+                Ok(format!("{}", val))
+            }
+            Format::U32 => {
+                let val: u32 = ((self.apply_order(*bytes.first().unwrap()) as u32) << 16)
+                    + (self.apply_order(*bytes.get(1).unwrap()) as u32);
+                Ok(format!("{}", val))
+            }
+            Format::U64 => {
+                let val: u64 = ((self.apply_order(*bytes.first().unwrap()) as u64) << 48)
+                    + ((self.apply_order(*bytes.get(1).unwrap()) as u64) << 32)
+                    + ((self.apply_order(*bytes.get(2).unwrap()) as u64) << 16)
+                    + self.apply_order(*bytes.get(3).unwrap()) as u64;
+                Ok(format!("{}", val))
+            }
+            Format::U128 => {
+                let val: u128 = ((self.apply_order(*bytes.first().unwrap()) as u128) << 112)
+                    + ((self.apply_order(*bytes.get(1).unwrap()) as u128) << 96)
+                    + ((self.apply_order(*bytes.get(2).unwrap()) as u128) << 80)
+                    + ((self.apply_order(*bytes.get(3).unwrap()) as u128) << 64)
+                    + ((self.apply_order(*bytes.get(4).unwrap()) as u128) << 48)
+                    + ((self.apply_order(*bytes.get(5).unwrap()) as u128) << 32)
+                    + ((self.apply_order(*bytes.get(6).unwrap()) as u128) << 16)
+                    + self.apply_order(*bytes.get(7).unwrap()) as u128;
+                Ok(format!("{}", val))
+            }
+            Format::I8 => {
+                let val: i8 = (self.apply_order(*bytes.first().unwrap()) & 0xFF) as i8;
+                Ok(format!("{}", val))
+            }
+            Format::I16 => {
+                let val: i16 = self.apply_order(*bytes.first().unwrap()) as i16;
+                Ok(format!("{}", val))
+            }
+            Format::I32 => {
+                let val: i32 = ((self.apply_order(*bytes.first().unwrap()) as i32) << 16)
+                    + (self.apply_order(*bytes.get(1).unwrap()) as i32);
+                Ok(format!("{}", val))
+            }
+            Format::I64 => {
+                let val: i64 = ((self.apply_order(*bytes.first().unwrap()) as i64) << 48)
+                    + ((self.apply_order(*bytes.get(1).unwrap()) as i64) << 32)
+                    + ((self.apply_order(*bytes.get(2).unwrap()) as i64) << 16)
+                    + self.apply_order(*bytes.get(3).unwrap()) as i64;
+                Ok(format!("{}", val))
+            }
+            Format::I128 => {
+                let val: i128 = ((self.apply_order(*bytes.first().unwrap()) as i128) << 112)
+                    + ((self.apply_order(*bytes.get(1).unwrap()) as i128) << 96)
+                    + ((self.apply_order(*bytes.get(2).unwrap()) as i128) << 80)
+                    + ((self.apply_order(*bytes.get(3).unwrap()) as i128) << 64)
+                    + ((self.apply_order(*bytes.get(4).unwrap()) as i128) << 48)
+                    + ((self.apply_order(*bytes.get(5).unwrap()) as i128) << 32)
+                    + ((self.apply_order(*bytes.get(6).unwrap()) as i128) << 16)
+                    + self.apply_order(*bytes.get(7).unwrap()) as i128;
+                Ok(format!("{}", val))
+            }
+            Format::U16le => {
+                let val: u16 = self.apply_order(*bytes.first().unwrap());
+                Ok(format!("{}", val))
+            }
+            Format::U32le => {
+                let val: u32 = ((self.apply_order(*bytes.get(1).unwrap()) as u32) << 16)
+                    + (self.apply_order(*bytes.first().unwrap()) as u32);
+                Ok(format!("{}", val))
+            }
+            Format::U64le => {
+                let val: u64 = ((self.apply_order(*bytes.get(3).unwrap()) as u64) << 48)
+                    + ((self.apply_order(*bytes.get(2).unwrap()) as u64) << 32)
+                    + ((self.apply_order(*bytes.get(1).unwrap()) as u64) << 16)
+                    + self.apply_order(*bytes.first().unwrap()) as u64;
+                Ok(format!("{}", val))
+            }
+            Format::U128le => {
+                let val: u128 = ((self.apply_order(*bytes.get(7).unwrap()) as u128) << 112)
+                    + ((self.apply_order(*bytes.get(6).unwrap()) as u128) << 96)
+                    + ((self.apply_order(*bytes.get(5).unwrap()) as u128) << 80)
+                    + ((self.apply_order(*bytes.get(4).unwrap()) as u128) << 64)
+                    + ((self.apply_order(*bytes.get(3).unwrap()) as u128) << 48)
+                    + ((self.apply_order(*bytes.get(2).unwrap()) as u128) << 32)
+                    + ((self.apply_order(*bytes.get(1).unwrap()) as u128) << 16)
+                    + self.apply_order(*bytes.first().unwrap()) as u128;
+                Ok(format!("{}", val))
+            }
+            Format::I8le => {
+                let val: i8 = (self.apply_order(*bytes.first().unwrap()) & 0xFF) as i8;
+                Ok(format!("{}", val))
+            }
+            Format::I16le => {
+                let val: i16 = self.apply_order(*bytes.first().unwrap()) as i16;
+                Ok(format!("{}", val))
+            }
+            Format::I32le => {
+                let val: i32 = ((self.apply_order(*bytes.first().unwrap()) as i32) << 16)
+                    + (self.apply_order(*bytes.get(1).unwrap()) as i32);
+                Ok(format!("{}", val))
+            }
+            Format::I64le => {
+                let val: i64 = ((self.apply_order(*bytes.get(3).unwrap()) as i64) << 48)
+                    + ((self.apply_order(*bytes.get(2).unwrap()) as i64) << 32)
+                    + ((self.apply_order(*bytes.get(1).unwrap()) as i64) << 16)
+                    + self.apply_order(*bytes.first().unwrap()) as i64;
+                Ok(format!("{}", val))
+            }
+            Format::I128le => {
+                let val: i128 = ((self.apply_order(*bytes.get(7).unwrap()) as i128) << 112)
+                    + ((self.apply_order(*bytes.get(6).unwrap()) as i128) << 96)
+                    + ((self.apply_order(*bytes.get(5).unwrap()) as i128) << 80)
+                    + ((self.apply_order(*bytes.get(4).unwrap()) as i128) << 64)
+                    + ((self.apply_order(*bytes.get(3).unwrap()) as i128) << 48)
+                    + ((self.apply_order(*bytes.get(2).unwrap()) as i128) << 32)
+                    + ((self.apply_order(*bytes.get(1).unwrap()) as i128) << 16)
+                    + self.apply_order(*bytes.first().unwrap()) as i128;
+                Ok(format!("{}", val))
+            }
+        }
+    }
+
     pub fn as_str(&self, bytes: &[u16]) -> anyhow::Result<String> {
         match self.format {
             Format::F32 => {

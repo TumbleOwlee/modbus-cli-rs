@@ -1,7 +1,7 @@
 use crate::mem::register::{Handler, Register};
 use crate::util::str;
 use crate::widgets::{EditDialog, EditFieldType};
-use crate::{AppConfig, Command, LogMsg, Status};
+use crate::{lua, AppConfig, Command, LogMsg, Status};
 
 use crossterm::{
     event::{
@@ -407,7 +407,7 @@ impl App {
                         );
                         self.edit_dialog.set(
                             EditFieldType::DataType,
-                            Some(format!("{:}", entry.1.r#type().label())),
+                            Some(entry.1.r#type().label().to_string()),
                             None,
                         );
                         self.edit_dialog.set(
@@ -526,6 +526,7 @@ impl App {
         mut status_recv: Receiver<Status>,
         mut log_recv: Receiver<LogMsg>,
         cmd_sender: Option<Sender<Command>>,
+        mut lua_runtime: lua::LuaRuntime,
     ) -> anyhow::Result<()> {
         enable_raw_mode()?;
         let mut terminal = App::create_terminal()?;
@@ -533,6 +534,8 @@ impl App {
 
         let mut status = str!("");
         loop {
+            lua_runtime.execute();
+
             // Update status
             if let Ok(v) = status_recv.try_recv() {
                 match v {
@@ -660,7 +663,7 @@ fn render_register(f: &mut Frame, app: &mut App, area: Rect) {
                 format!("{}", r.slave_id()),
                 str!(n),
                 format!("{:#06X} ({})", r.address(), r.address()),
-                format!("{}", r.r#type().label()),
+                r.r#type().label().to_string(),
                 r.raw().len().to_string(),
                 r.value()
                     .chars()
