@@ -1,0 +1,40 @@
+ history_length = 30
+ delay_afer_connect = 500
+ interval_ms = 500
+ contiguous_memory = []
+
+[definitions.coil]
+slave_id = 1
+read_code = 1
+address = 0
+length = 1
+access = "ReadWrite"
+type = "U16"
+
+[definitions.discrete_input]
+slave_id = 1
+read_code = 2
+address = 1
+length = 1
+access = "ReadWrite"
+type = "U16"
+on_update = """
+local value = Register.GetInt("input_register")
+Register.Set("holding_register", value << 1)
+ """
+
+[definitions.input_register]
+slave_id = 1
+read_code = 3
+address = 2
+length = 1
+access = "ReadWrite"
+type = "U16"
+
+[definitions.holding_register]
+slave_id = 1
+read_code = 4
+address = 3
+length = 1
+access = "ReadWrite"
+type = "U16"
