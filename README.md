@@ -174,7 +174,7 @@ The following data types are currently supported and can be configured:
 
 ### Lua Support
 
-Since the user may be interested in adding virtual registers that will use information of other registers to combine them in a single value, instead of adding a custom parser to provide support of expressions, we add support of the Lua programming language to provide far more than that. Currently Lua script are only configurable under the `on_update` property. The lua script will be executed each cycle and can read and write any registers the user is interested in. Besides the functionality provided by the Lua standard libraries (excluding access to the filesystem or network), the following methods are available.
+Since the user may be interested in adding virtual registers that will use information of other registers to combine them into a single value, instead of adding a custom parser to provide support of expressions, we add support of the Lua programming language to simply use the full potential of it. Currently lua script are only used in the `on_update` property. The lua script will be executed each cycle and can read and write any registers the user is interested in. Besides the standard libraries provided by lua itself, the following predefined modules are available.
 
 #### Module C_Time
 
@@ -184,8 +184,8 @@ Method:   C_Time:Get()
 Arguments: None
 
 Return: Time in seconds since startup.
-
-
+```
+```
 Method:   C_Time:GetMs()
 
 Arguments: None
@@ -204,8 +204,8 @@ Arguments:
         Description: Name of the register as defined in the configuration.
 
 Return: String value of the register
-
-
+```
+```
 Method:   C_Register:GetInt(name)
 
 Arguments:
@@ -214,8 +214,8 @@ Arguments:
         Description: Name of the register as defined in the configuration.
 
 Return: Integer value of the register
-
-
+```
+```
 Method:   C_Register:GetFloat(name)
 
 Arguments:
@@ -224,8 +224,8 @@ Arguments:
         Description: Name of the register as defined in the configuration.
 
 Return: Floating point value of the register
-
-
+```
+```
 Method:   C_Register:GetBool(name)
 
 Arguments:
@@ -234,8 +234,8 @@ Arguments:
         Description: Name of the register as defined in the configuration.
 
 Return: Boolean value of the register
-
-
+```
+```
 Method:   C_Register:Set(name, value)
 
 Arguments:
@@ -247,5 +247,5 @@ Arguments:
                Type: String | bool | integer | float
         Description: Value to set for the specified register
 
-Return: void
+Return: nil
 ```
