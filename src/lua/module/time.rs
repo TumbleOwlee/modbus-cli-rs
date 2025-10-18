@@ -21,15 +21,21 @@ impl Module for Time {
 
 impl UserData for Time {
     fn add_methods<M: mlua::UserDataMethods<Self>>(methods: &mut M) {
-        methods.add_method("Get", |_, this, ()| -> LuaResult<u64> {
-            Ok(std::time::Instant::now()
-                .duration_since(this.start)
-                .as_secs())
-        });
-        methods.add_method("GetMs", |_, this, ()| -> LuaResult<u128> {
-            Ok(std::time::Instant::now()
-                .duration_since(this.start)
-                .as_millis())
-        })
+        methods.add_method("Get", Time::get);
+        methods.add_method("GetMs", Time::get_ms);
+    }
+}
+
+impl Time {
+    fn get(_: &mlua::Lua, this: &Time, _: ()) -> LuaResult<u64> {
+        Ok(std::time::Instant::now()
+            .duration_since(this.start)
+            .as_secs())
+    }
+
+    fn get_ms(_: &mlua::Lua, this: &Time, _: ()) -> LuaResult<u128> {
+        Ok(std::time::Instant::now()
+            .duration_since(this.start)
+            .as_millis())
     }
 }

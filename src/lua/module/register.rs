@@ -7,20 +7,20 @@ use tokio::sync::mpsc::Sender;
 
 pub struct Register {
     memory: Arc<Mutex<Memory>>,
-    app_config: Arc<Mutex<AppConfig>>,
-    log_sender: Sender<LogMsg>,
+    config: Arc<Mutex<AppConfig>>,
+    logger: Sender<LogMsg>,
 }
 
 impl Register {
     pub fn init(
         memory: Arc<Mutex<Memory>>,
-        app_config: Arc<Mutex<AppConfig>>,
-        log_sender: Sender<LogMsg>,
+        config: Arc<Mutex<AppConfig>>,
+        logger: Sender<LogMsg>,
     ) -> Self {
         Self {
             memory,
-            app_config,
-            log_sender,
+            config,
+            logger,
         }
     }
 }
@@ -33,186 +33,179 @@ impl Module for Register {
 
 impl UserData for Register {
     fn add_methods<M: mlua::UserDataMethods<Self>>(methods: &mut M) {
-        methods.add_method("GetInt", |_, this, name: String| -> LuaResult<i128> {
-            let config = this
-                .app_config
+        methods.add_method("GetInt", Self::get_int);
+        methods.add_method("GetFloat", Self::get_float);
+        methods.add_method("GetString", Self::get_string);
+        methods.add_method("GetBool", Self::get_bool);
+        methods.add_method("Set", Self::set);
+    }
+}
+
+impl Register {
+    fn get_int(_: &mlua::Lua, this: &Register, name: String) -> LuaResult<i128> {
+        let config = this
+            .config
+            .lock()
+            .map_err(|_| mlua::Error::UserDataBorrowError)?;
+        let definitions: Vec<_> = config.definitions.iter().filter(|r| *r.0 == name).collect();
+        if definitions.len() == 1 {
+            let bytes: Vec<u16> = this
+                .memory
                 .lock()
-                .map_err(|_| mlua::Error::UserDataBorrowError)?;
-            let definitions: Vec<_> = config.definitions.iter().filter(|r| *r.0 == name).collect();
-            if definitions.len() == 1 {
-                let bytes: Vec<u16> = this
-                    .memory
-                    .lock()
-                    .unwrap()
-                    .read(
-                        definitions[0].1.get_slave_id().unwrap_or(0),
-                        &definitions[0].1.get_range(),
-                    )
-                    .unwrap_or(vec![&0, &0, &0, &0, &0, &0, &0, &0])
-                    .into_iter()
-                    .copied()
-                    .collect();
-                let value = definitions[0]
-                    .1
-                    .get_type()
-                    .as_plain_str(&bytes)
-                    .map_err(|_| mlua::Error::UserDataTypeMismatch)?;
-
-                value
-                    .parse::<i128>()
-                    .map_err(|_| mlua::Error::UserDataTypeMismatch)
-            } else {
-                Err(mlua::Error::RuntimeError(String::new()))
-            }
-        });
-
-        methods.add_method("GetFloat", |_, this, name: String| -> LuaResult<f64> {
-            let rg = this
-                .app_config
-                .lock()
-                .map_err(|_| mlua::Error::UserDataBorrowError)?;
-            let regs: Vec<_> = rg.definitions.iter().filter(|r| *r.0 == name).collect();
-            if regs.len() == 1 {
-                let bytes: Vec<u16> = this
-                    .memory
-                    .lock()
-                    .unwrap()
-                    .read(
-                        regs[0].1.get_slave_id().unwrap_or(0),
-                        &regs[0].1.get_range(),
-                    )
-                    .unwrap_or(vec![&0, &0, &0, &0, &0, &0, &0, &0])
-                    .into_iter()
-                    .copied()
-                    .collect();
-                let value = regs[0]
-                    .1
-                    .get_type()
-                    .as_plain_str(&bytes)
-                    .map_err(|_| mlua::Error::UserDataTypeMismatch)?;
-
-                value
-                    .parse::<f64>()
-                    .map_err(|_| mlua::Error::UserDataTypeMismatch)
-            } else {
-                Err(mlua::Error::RuntimeError(String::new()))
-            }
-        });
-
-        methods.add_method("GetString", |_, this, name: String| -> LuaResult<String> {
-            let app_config = this
-                .app_config
-                .lock()
-                .map_err(|_| mlua::Error::UserDataBorrowError)?;
-            let regs: Vec<_> = app_config
-                .definitions
-                .iter()
-                .filter(|r| *r.0 == name)
+                .unwrap()
+                .read(
+                    definitions[0].1.get_slave_id().unwrap_or(0),
+                    &definitions[0].1.get_range(),
+                )
+                .unwrap_or(vec![&0, &0, &0, &0, &0, &0, &0, &0])
+                .into_iter()
+                .copied()
                 .collect();
-            if regs.len() == 1 {
-                let bytes: Vec<u16> = this
-                    .memory
-                    .lock()
-                    .unwrap()
-                    .read(
-                        regs[0].1.get_slave_id().unwrap_or(0),
-                        &regs[0].1.get_range(),
-                    )
-                    .unwrap_or(vec![&0, &0, &0, &0, &0, &0, &0, &0])
-                    .into_iter()
-                    .copied()
-                    .collect();
-                regs[0]
-                    .1
-                    .get_type()
-                    .as_plain_str(&bytes)
-                    .map_err(|_| mlua::Error::UserDataTypeMismatch)
-            } else {
-                Err(mlua::Error::RuntimeError(String::new()))
-            }
-        });
+            let value = definitions[0]
+                .1
+                .get_type()
+                .as_plain_str(&bytes)
+                .map_err(|_| mlua::Error::UserDataTypeMismatch)?;
 
-        methods.add_method("GetBool", |_, this, name: String| -> LuaResult<bool> {
-            let app_config = this
-                .app_config
+            value
+                .parse::<i128>()
+                .map_err(|_| mlua::Error::UserDataTypeMismatch)
+        } else {
+            Err(mlua::Error::RuntimeError(String::new()))
+        }
+    }
+
+    fn get_float(_: &mlua::Lua, this: &Register, name: String) -> LuaResult<f64> {
+        let rg = this
+            .config
+            .lock()
+            .map_err(|_| mlua::Error::UserDataBorrowError)?;
+        let regs: Vec<_> = rg.definitions.iter().filter(|r| *r.0 == name).collect();
+        if regs.len() == 1 {
+            let bytes: Vec<u16> = this
+                .memory
                 .lock()
-                .map_err(|_| mlua::Error::UserDataBorrowError)?;
-            let regs: Vec<_> = app_config
-                .definitions
-                .iter()
-                .filter(|r| *r.0 == name)
+                .unwrap()
+                .read(
+                    regs[0].1.get_slave_id().unwrap_or(0),
+                    &regs[0].1.get_range(),
+                )
+                .unwrap_or(vec![&0, &0, &0, &0, &0, &0, &0, &0])
+                .into_iter()
+                .copied()
                 .collect();
-            if regs.len() == 1 {
-                let bytes: Vec<u16> = this
-                    .memory
-                    .lock()
-                    .unwrap()
-                    .read(
-                        regs[0].1.get_slave_id().unwrap_or(0),
-                        &regs[0].1.get_range(),
-                    )
-                    .unwrap_or(vec![&0, &0, &0, &0, &0, &0, &0, &0])
-                    .into_iter()
-                    .copied()
-                    .collect();
-                let value = regs[0]
-                    .1
-                    .get_type()
-                    .as_plain_str(&bytes)
-                    .map_err(|_| mlua::Error::UserDataTypeMismatch)?;
+            let value = regs[0]
+                .1
+                .get_type()
+                .as_plain_str(&bytes)
+                .map_err(|_| mlua::Error::UserDataTypeMismatch)?;
 
-                value
-                    .parse::<bool>()
-                    .map_err(|_| mlua::Error::UserDataTypeMismatch)
-            } else {
-                Err(mlua::Error::RuntimeError(String::new()))
-            }
-        });
+            value
+                .parse::<f64>()
+                .map_err(|_| mlua::Error::UserDataTypeMismatch)
+        } else {
+            Err(mlua::Error::RuntimeError(String::new()))
+        }
+    }
 
-        methods.add_method(
-            "Set",
-            |_, this, (name, value): (String, String)| -> LuaResult<()> {
-                if let Some(register) = this
-                    .app_config
-                    .lock()
-                    .map_err(|_| mlua::Error::UserDataBorrowError)?
-                    .definitions
-                    .get(&name)
-                {
-                    match register.get_type().encode(&value) {
-                        Ok(values) => {
-                            if values.len() > register.length() as usize {
-                                let _ = this.log_sender.try_send(LogMsg::err(
-                                    "Provided input requires a longer register as available.",
-                                ));
-                            } else {
-                                let mut memory = this.memory.lock().unwrap();
-                                let addr = register.get_address();
-                                let slave = register.get_slave_id().unwrap_or(0);
+    fn get_string(_: &mlua::Lua, this: &Register, name: String) -> LuaResult<String> {
+        let config = this
+            .config
+            .lock()
+            .map_err(|_| mlua::Error::UserDataBorrowError)?;
+        let regs: Vec<_> = config.definitions.iter().filter(|r| *r.0 == name).collect();
+        if regs.len() == 1 {
+            let bytes: Vec<u16> = this
+                .memory
+                .lock()
+                .unwrap()
+                .read(
+                    regs[0].1.get_slave_id().unwrap_or(0),
+                    &regs[0].1.get_range(),
+                )
+                .unwrap_or(vec![&0, &0, &0, &0, &0, &0, &0, &0])
+                .into_iter()
+                .copied()
+                .collect();
+            regs[0]
+                .1
+                .get_type()
+                .as_plain_str(&bytes)
+                .map_err(|_| mlua::Error::UserDataTypeMismatch)
+        } else {
+            Err(mlua::Error::RuntimeError(String::new()))
+        }
+    }
 
-                                if let Err(e) = memory
-                                    .write(
-                                        slave,
-                                        Range::new(addr, addr + values.len() as u16),
-                                        &values,
-                                    )
-                                    .map(|_| ())
-                                {
-                                    let _ = this
-                                        .log_sender
-                                        .try_send(LogMsg::err(&format!("{} = {}", value, e)));
-                                }
-                            }
-                        }
-                        Err(e) => {
+    fn get_bool(_: &mlua::Lua, this: &Register, name: String) -> LuaResult<bool> {
+        let config = this
+            .config
+            .lock()
+            .map_err(|_| mlua::Error::UserDataBorrowError)?;
+        let regs: Vec<_> = config.definitions.iter().filter(|r| *r.0 == name).collect();
+        if regs.len() == 1 {
+            let bytes: Vec<u16> = this
+                .memory
+                .lock()
+                .unwrap()
+                .read(
+                    regs[0].1.get_slave_id().unwrap_or(0),
+                    &regs[0].1.get_range(),
+                )
+                .unwrap_or(vec![&0, &0, &0, &0, &0, &0, &0, &0])
+                .into_iter()
+                .copied()
+                .collect();
+            let value = regs[0]
+                .1
+                .get_type()
+                .as_plain_str(&bytes)
+                .map_err(|_| mlua::Error::UserDataTypeMismatch)?;
+
+            value
+                .parse::<bool>()
+                .map_err(|_| mlua::Error::UserDataTypeMismatch)
+        } else {
+            Err(mlua::Error::RuntimeError(String::new()))
+        }
+    }
+
+    fn set(_: &mlua::Lua, this: &Register, (name, value): (String, String)) -> LuaResult<()> {
+        if let Some(register) = this
+            .config
+            .lock()
+            .map_err(|_| mlua::Error::UserDataBorrowError)?
+            .definitions
+            .get(&name)
+        {
+            match register.get_type().encode(&value) {
+                Ok(values) => {
+                    if values.len() > register.length() as usize {
+                        let _ = this.logger.try_send(LogMsg::err(
+                            "Provided input requires a longer register as available.",
+                        ));
+                    } else {
+                        let mut memory = this.memory.lock().unwrap();
+                        let addr = register.get_address();
+                        let slave = register.get_slave_id().unwrap_or(0);
+
+                        if let Err(e) = memory
+                            .write(slave, Range::new(addr, addr + values.len() as u16), &values)
+                            .map(|_| ())
+                        {
                             let _ = this
-                                .log_sender
+                                .logger
                                 .try_send(LogMsg::err(&format!("{} = {}", value, e)));
                         }
                     }
                 }
-                Ok(())
-            },
-        );
+                Err(e) => {
+                    let _ = this
+                        .logger
+                        .try_send(LogMsg::err(&format!("{} = {}", value, e)));
+                }
+            }
+        }
+        Ok(())
     }
 }
