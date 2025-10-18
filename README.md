@@ -48,6 +48,14 @@ Please refer to `--help` for all available options.
 
 The tool now supports the configuration is TOML and JSON format. Additionally a new subcommand `convert` is added that takes the specified configuration and outputs it in the specified configuration format. The support of TOML is added to support easier multiline text values as part of the configuration which are used to specify LUA scripts.
 
+```bash
+# Convert JSON configuration to TOML (output: ./path/to/config.toml)
+modbus-cli-rs --config ./path/to/config.json convert toml
+
+# Convert TOML configuration to JSON (output: ./path/to/config.config)
+modbus-cli-rs --config ./path/to/config.toml convert json 
+```
+
 ## Configuration
 
 The application will need a JSON configuration file. Besides some basic configuration parameters the configuration provides the register definitions.

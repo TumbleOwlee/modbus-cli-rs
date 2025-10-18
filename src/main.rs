@@ -204,7 +204,7 @@ fn main() {
                             write!(file, "{}", content).expect("Failed to write file");
                         }
                         FileType::Json => {
-                            let content = serde_json::to_string::<AppConfig>(
+                            let content = serde_json::to_string_pretty::<AppConfig>(
                                 &(*app_config
                                     .lock()
                                     .expect("Failed to serialize configuration")),
@@ -259,7 +259,7 @@ fn main() {
                             write!(file, "{}", content).expect("Failed to write file");
                         }
                         FileType::Json => {
-                            let content = serde_json::to_string::<AppConfig>(
+                            let content = serde_json::to_string_pretty::<AppConfig>(
                                 &(*app_config
                                     .lock()
                                     .expect("Failed to serialize configuration")),
