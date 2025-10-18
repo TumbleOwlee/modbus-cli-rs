@@ -1,4 +1,4 @@
-use crate::lua::namespace::Namespace;
+use crate::lua::module::Module;
 use anyhow::anyhow;
 use mlua::{Function, Lua, StdLib, UserData};
 use std::collections::HashMap;
@@ -37,12 +37,12 @@ impl Default for Context {
 }
 
 impl Context {
-    pub fn add_namespace<T>(&mut self, value: T) -> Result<(), mlua::Error>
+    pub fn add_module<T>(&mut self, value: T) -> Result<(), mlua::Error>
     where
-        T: 'static + Namespace + UserData,
+        T: 'static + Module + UserData,
     {
         let globals = self.lua.globals();
-        globals.set(T::namespace(), value)
+        globals.set(T::module(), value)
     }
     pub fn enable_stdlib(&mut self) -> Result<(), mlua::Error> {
         self.lua.load_std_libs(StdLib::STRING)?;

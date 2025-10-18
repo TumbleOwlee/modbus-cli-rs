@@ -1,5 +1,5 @@
 mod context;
-mod namespace;
+mod module;
 
 use crate::lua::context::Context;
 use crate::{mem::memory::Memory, msg::LogMsg, AppConfig};
@@ -20,8 +20,8 @@ impl Runtime {
         let mut lua = Context::default();
         lua.enable_stdlib()?;
 
-        lua.add_namespace(namespace::Time::default())?;
-        lua.add_namespace(namespace::Register::init(
+        lua.add_module(module::Time::default())?;
+        lua.add_module(module::Register::init(
             memory,
             app_config.clone(),
             log_sender.clone(),

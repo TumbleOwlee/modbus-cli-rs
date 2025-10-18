@@ -53,7 +53,7 @@ The tool now supports the configuration is TOML and JSON format. Additionally a 
 modbus-cli-rs --config ./path/to/config.json convert toml
 
 # Convert TOML configuration to JSON (output: ./path/to/config.config)
-modbus-cli-rs --config ./path/to/config.toml convert json 
+modbus-cli-rs --config ./path/to/config.toml convert json
 ```
 
 ## Configuration
@@ -176,27 +176,27 @@ The following data types are currently supported and can be configured:
 
 Since the user may be interested in adding virtual registers that will use information of other registers to combine them in a single value, instead of adding a custom parser to provide support of expressions, we add support of the Lua programming language to provide far more than that. Currently Lua script are only configurable under the `on_update` property. The lua script will be executed each cycle and can read and write any registers the user is interested in. Besides the functionality provided by the Lua standard libraries (excluding access to the filesystem or network), the following methods are available.
 
-#### Global
+#### Module C_Time
 
 ```
-Method:   GetTime()
+Method:   C_Time:Get()
 
 Arguments: None
 
 Return: Time in seconds since startup.
 
 
-Method:   GetTimeMs()
+Method:   C_Time:GetMs()
 
 Arguments: None
 
 Return: Time in milliseconds since startup.
 ```
 
-#### Module Register
+#### Module C_Register
 
 ```
-Method:   Register.GetString(name)
+Method:   C_Register:GetString(name)
 
 Arguments:
                Name: name
@@ -206,7 +206,7 @@ Arguments:
 Return: String value of the register
 
 
-Method:   Register.GetInt(name)
+Method:   C_Register:GetInt(name)
 
 Arguments:
                Name: name
@@ -216,7 +216,7 @@ Arguments:
 Return: Integer value of the register
 
 
-Method:   Register.GetFloat(name)
+Method:   C_Register.GetFloat(name)
 
 Arguments:
                Name: name
@@ -226,7 +226,7 @@ Arguments:
 Return: Floating point value of the register
 
 
-Method:   Register.GetBool(name)
+Method:   C_Register.GetBool(name)
 
 Arguments:
                Name: name
@@ -236,7 +236,7 @@ Arguments:
 Return: Boolean value of the register
 
 
-Method:   Register.Set(name, value)
+Method:   C_Register.Set(name, value)
 
 Arguments:
                Name: name

@@ -1,4 +1,4 @@
-use crate::lua::namespace::Namespace;
+use crate::lua::module::Module;
 use crate::mem::memory::Range;
 use crate::{mem::memory::Memory, msg::LogMsg, AppConfig};
 use mlua::{Result as LuaResult, UserData};
@@ -25,8 +25,8 @@ impl Register {
     }
 }
 
-impl Namespace for Register {
-    fn namespace() -> &'static str {
+impl Module for Register {
+    fn module() -> &'static str {
         "C_Register"
     }
 }
