@@ -1,7 +1,7 @@
- history_length = 30
- delay_afer_connect = 500
- interval_ms = 500
- contiguous_memory = []
+history_length = 30
+delay_afer_connect = 500
+interval_ms = 500
+contiguous_memory = []
 
 [definitions.coil]
 slave_id = 1
@@ -18,10 +18,6 @@ address = 1
 length = 1
 access = "ReadWrite"
 type = "U16"
-on_update = """
-local value = C_Register:GetInt("input_register")
-C_Register:Set("holding_register", value << 1)
- """
 
 [definitions.input_register]
 slave_id = 1
@@ -38,3 +34,16 @@ address = 3
 length = 1
 access = "ReadWrite"
 type = "U16"
+
+[definitions.expression]
+slave_id = 1
+read_code = 2
+address = 10
+length = 10
+access = "ReadWrite"
+type = "PackedAscii"
+virtual = true
+on_update = """
+local value = C_Register:GetInt("input_register")
+C_Register:Set("expression", "Tag: " .. value)
+ """

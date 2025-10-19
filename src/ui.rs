@@ -414,7 +414,7 @@ impl App {
                         .sorted_by(|a, b| self.ordering.apply(a, b))
                         .enumerate()
                         .filter_map(|(j, (name, r))| {
-                            if j == i && !r.is_virtual() {
+                            if j == i {
                                 Some((name.clone(), (*r).clone()))
                             } else {
                                 None
