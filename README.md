@@ -146,7 +146,7 @@ Please refer to the section [Lua Support](#Lua Support) for information about th
 - `reverse`: Define whether the registers have to be flipped before interpretation (default: `false`)
 - `on_update`: Lua script to run on each update. See Lua section for details.
 - `virtual`: Mark a register as virtual. Only required in client mode to prevent any read of the register.
-- `values`: List of predefined values for selection in edit dialog. Either a object with properties `name` (for display purposes) and `value` or simply the value.
+- `values`: List of predefined values for selection in edit dialog. Either a object with properties `name` (for display purposes) and `value` or simply the value. If this property ist omitted, an Input field ist displyed while editing.
 
 If you use the client mode `--client` the corresponding write codes for manipulating registers or coils are derived from the configured `read_code`. E.g. if you specify a `read_code` that corresponds to coils, the write code will be the function code associated with coils, and if you specify the `read_code` 3 or 4 for input and holding registers, the client will use function code 6 or 16 (depending on the length) to write the values. Please refer to `config.json` of this repository for a example configuration.
 
