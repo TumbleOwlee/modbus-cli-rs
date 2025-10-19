@@ -2,7 +2,7 @@ use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Layout, Margin, Rect},
-    style::Style,
+    style::{Style, Stylize},
     text::Text,
     widgets::{Block, Widget, WidgetRef},
 };
@@ -112,6 +112,10 @@ impl Selection {
     pub fn margins(self, margins: Margin) -> Self {
         Self { margins, ..self }
     }
+
+    pub fn set_style(&mut self, style: InputStyle) {
+        self.style = style;
+    }
 }
 
 impl WidgetRef for Selection {
@@ -153,8 +157,8 @@ impl WidgetRef for Selection {
             .items
             .iter()
             .map(|v| match v {
-                Values::Value(s) => s.to_string(),
-                Values::ValueDef(d) => d.name.to_string(),
+                Values::Value(s) => format!(" {}", s),
+                Values::ValueDef(d) => format!(" {}", d.name),
             })
             .collect::<Vec<_>>();
 
@@ -178,11 +182,11 @@ impl WidgetRef for Selection {
         {
             let mut bg = self.colors.row_color.bg.get(i % 2);
             let mut fg = self.colors.row_color.fg;
+            let mut style = Style::new().fg(fg).bg(bg);
             if i == selection {
-                bg = self.colors.selected_color.bg;
-                fg = self.colors.selected_color.fg;
+                style = self.style.focused.reversed();
             }
-            let t = Text::from(v).style(Style::new().fg(fg).bg(bg));
+            let t = Text::from(v).style(style);
             t.render_ref(area[n], buf);
         }
     }

@@ -84,11 +84,13 @@ impl EditDialog {
     }
 
     pub fn set_highlight_color(&mut self, hi: Color) {
-        self.input.set_style(InputStyle {
+        let style = InputStyle {
             focused: Style::default().fg(hi).bg(tailwind::SLATE.c950),
             cursor: Style::default().bg(hi).fg(tailwind::SLATE.c950),
             ..InputStyle::default()
-        })
+        };
+        self.input.set_style(style.clone());
+        self.selection.set_style(style);
     }
 
     pub fn set(&mut self, ty: FieldType, input: Option<String>, placeholder: Option<String>) {

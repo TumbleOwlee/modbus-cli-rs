@@ -16,6 +16,7 @@ pub enum Action {
     InputIgnored,
 }
 
+#[derive(Clone)]
 pub struct Style {
     pub default: UiStyle,
     pub focused: UiStyle,
