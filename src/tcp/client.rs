@@ -48,6 +48,7 @@ impl Client {
         let mut sorted_defs = config
             .definitions
             .iter()
+            .filter(|d| !d.1.is_virtual())
             .sorted_by(|a, b| {
                 a.1.get_slave_id()
                     .unwrap_or(0)
@@ -69,6 +70,7 @@ impl Client {
                 DataType::default(),
                 0,
                 AccessType::ReadWrite,
+                None,
                 None,
                 None,
             ),
@@ -482,44 +484,39 @@ impl Client {
                             .await;
                     }
                 }
-            } else if let Ok(cmd) = self.cmd_receiver.try_recv() {
-                match cmd {
-                    Command::Connect => {
-                        connection = if let Ok(r) = tokio::time::timeout(
-                            std::time::Duration::from_millis(timeout_ms),
-                            tokio_modbus::client::tcp::connect(addr),
-                        )
-                        .await
-                        {
-                            r.ok()
-                        } else {
-                            None
-                        };
-                        if connection.is_some() {
-                            let _ = self
-                                .status_sender
-                                .send(Status::String(str!("Modbus TCP connected.")))
-                                .await;
-                            let _ = self
-                                .log_sender
-                                .send(LogMsg::ok(&format!(
-                                    "Modbus TCP connected successfully to {}:{}",
-                                    self.tcp_config.ip, self.tcp_config.port
-                                )))
-                                .await;
-                        } else {
-                            let _ = self
-                                .log_sender
-                                .send(LogMsg::err(&format!(
-                                    "Modbus TCP failed to connect to {}:{}",
-                                    self.tcp_config.ip, self.tcp_config.port
-                                )))
-                                .await;
-                        }
-                        op_idx = 0;
-                    }
-                    _ => {}
+            } else if let Ok(Command::Connect) = self.cmd_receiver.try_recv() {
+                connection = if let Ok(r) = tokio::time::timeout(
+                    std::time::Duration::from_millis(timeout_ms),
+                    tokio_modbus::client::tcp::connect(addr),
+                )
+                .await
+                {
+                    r.ok()
+                } else {
+                    None
+                };
+                if connection.is_some() {
+                    let _ = self
+                        .status_sender
+                        .send(Status::String(str!("Modbus TCP connected.")))
+                        .await;
+                    let _ = self
+                        .log_sender
+                        .send(LogMsg::ok(&format!(
+                            "Modbus TCP connected successfully to {}:{}",
+                            self.tcp_config.ip, self.tcp_config.port
+                        )))
+                        .await;
+                } else {
+                    let _ = self
+                        .log_sender
+                        .send(LogMsg::err(&format!(
+                            "Modbus TCP failed to connect to {}:{}",
+                            self.tcp_config.ip, self.tcp_config.port
+                        )))
+                        .await;
                 }
+                op_idx = 0;
             }
             tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
         }

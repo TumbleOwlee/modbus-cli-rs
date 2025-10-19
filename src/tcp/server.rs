@@ -128,7 +128,7 @@ impl tokio_modbus::server::Service for Service {
                             addr + cnt,
                             refs_to_str(&v)
                         )));
-                        Response::ReadInputRegisters(v.into_iter().map(|v| *v).collect())
+                        Response::ReadInputRegisters(v.into_iter().copied().collect())
                     }),
             ),
             Request::ReadHoldingRegisters(addr, cnt) => future::ready(
@@ -146,7 +146,7 @@ impl tokio_modbus::server::Service for Service {
                         )));
                         Self::Exception::IllegalDataAddress
                     })
-                    .map(|v| {
+                    .map(|v| -> Response {
                         let _ = self.log_sender.try_send(LogMsg::info(&format!(
                             "Slave: {}, ReadHoldingRegisters: [{:#06X}, {:#06X}) = {}",
                             slave,
@@ -154,7 +154,7 @@ impl tokio_modbus::server::Service for Service {
                             addr + cnt,
                             refs_to_str(&v)
                         )));
-                        Response::ReadHoldingRegisters(v.into_iter().map(|v| *v).collect())
+                        Response::ReadHoldingRegisters(v.into_iter().copied().collect())
                     }),
             ),
             Request::WriteMultipleRegisters(addr, values) => future::ready(

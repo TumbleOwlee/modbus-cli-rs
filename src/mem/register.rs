@@ -75,6 +75,7 @@ pub struct Definition {
     access: AccessType,
     default: Option<Value>,
     on_update: Option<String>,
+    r#virtual: Option<bool>,
 }
 
 impl Definition {
@@ -88,6 +89,7 @@ impl Definition {
         access: AccessType,
         default: Option<Value>,
         on_update: Option<String>,
+        r#virtual: Option<bool>,
     ) -> Self {
         Self {
             slave_id,
@@ -98,7 +100,12 @@ impl Definition {
             access,
             default,
             on_update,
+            r#virtual,
         }
+    }
+
+    pub fn is_virtual(&self) -> bool {
+        self.r#virtual.unwrap_or(false)
     }
 
     pub fn get_default(&self) -> &Option<Value> {
@@ -148,6 +155,7 @@ pub struct Register {
     raw: Vec<u16>,
     r#type: DataType,
     access: AccessType,
+    r#virtual: bool,
 }
 
 impl Register {
@@ -193,7 +201,12 @@ impl Register {
             raw: bytes,
             r#type: definition.get_type().clone(),
             access: definition.access_type(),
+            r#virtual: definition.is_virtual(),
         }
+    }
+
+    pub fn is_virtual(&self) -> bool {
+        self.r#virtual
     }
 
     pub fn slave_id(&self) -> SlaveId {

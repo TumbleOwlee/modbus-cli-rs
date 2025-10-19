@@ -51,6 +51,8 @@ mod tests {
                 0x04u8,
                 AccessType::ReadOnly,
                 None,
+                None,
+                None,
             ),
         );
         let config = Arc::new(Mutex::new(AppConfig::default()));

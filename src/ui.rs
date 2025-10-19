@@ -31,7 +31,7 @@ const PALETTES: [tailwind::Palette; 4] = [
 ];
 
 const REGISTER_INFO_TEXT: &str =
-    "(q)uit | (k) up | (j) down | (h) left | (l) right | (g) top | (G) bottom | (t)heme | (f)ormat | (d)isconnect | (c)onnect | (e)dit | (s)ave";
+    "(q)uit | (k) up | (j) down | (h) left | (l) right | (g) top | (G) bottom | (t)heme | (f)ormat | (d)isconnect | (c)onnect | (e)dit | (o)rder";
 const LOGGER_INFO_TEXT: &str = "(m) up | (n) down | (b) left | (,) right | (v) top | (V) bottom";
 
 const LOG_HEADER: &str = " Modbus Log";
@@ -137,7 +137,43 @@ pub enum Popup {
     Edit(Register),
 }
 
+pub enum Order {
+    NameAsc,
+    NameDesc,
+    AddressAsc,
+    AddressDesc,
+}
+
+impl Order {
+    fn apply(&self, a: &(&String, &Register), b: &(&String, &Register)) -> std::cmp::Ordering {
+        match self {
+            Order::NameAsc => Ord::cmp(&a.1.slave_id(), &b.1.slave_id())
+                .then(a.0.cmp(b.0))
+                .then(a.1.address().cmp(&b.1.address())),
+            Order::NameDesc => Ord::cmp(&a.1.slave_id(), &b.1.slave_id())
+                .then(b.0.cmp(a.0))
+                .then(a.1.address().cmp(&b.1.address())),
+            Order::AddressAsc => Ord::cmp(&a.1.slave_id(), &b.1.slave_id())
+                .then(a.1.address().cmp(&b.1.address()))
+                .then(a.0.cmp(b.0)),
+            Order::AddressDesc => Ord::cmp(&a.1.slave_id(), &b.1.slave_id())
+                .then(b.1.address().cmp(&a.1.address()))
+                .then(a.0.cmp(b.0)),
+        }
+    }
+
+    fn next(&self) -> Self {
+        match self {
+            Order::NameAsc => Order::NameDesc,
+            Order::NameDesc => Order::AddressAsc,
+            Order::AddressAsc => Order::AddressDesc,
+            Order::AddressDesc => Order::NameAsc,
+        }
+    }
+}
+
 pub struct App {
+    ordering: Order,
     register_handler: Handler,
     register_table: UiTable,
     log_entries: Vec<LogMsg>,
@@ -175,6 +211,7 @@ impl App {
         let colors = TableColors::new(&PALETTES[0]);
         let bg_color = colors.buffer.bg;
         Self {
+            ordering: Order::AddressAsc,
             register_handler,
             register_table: UiTable::new(len, ITEM_HEIGHT),
             log_entries: Vec::new(),
@@ -339,12 +376,8 @@ impl App {
         cmd_sender: &Option<Sender<Command>>,
     ) -> anyhow::Result<LoopAction> {
         match key.code {
-            KeyCode::Char('s') => {
-                // TODO: Dialog to specify output path
-                let config = self.config.lock().unwrap();
-                let f = std::fs::File::create_new("./test.json")?;
-                let writer = std::io::BufWriter::new(f);
-                let _ = serde_json::to_writer_pretty::<_, AppConfig>(writer, &config);
+            KeyCode::Char('o') => {
+                self.ordering = self.ordering.next();
             }
             KeyCode::Char('q') | KeyCode::Esc => return Ok(LoopAction::Break),
             KeyCode::Char('j') | KeyCode::Down => self.move_down(),
@@ -378,14 +411,10 @@ impl App {
                         .values()
                         .iter()
                         .filter(|(n, _)| !n.starts_with("hide_"))
-                        .sorted_by(|a, b| {
-                            Ord::cmp(&a.1.slave_id(), &b.1.slave_id())
-                                .then(a.0.cmp(b.0))
-                                .then(a.1.address().cmp(&b.1.address()))
-                        })
+                        .sorted_by(|a, b| self.ordering.apply(a, b))
                         .enumerate()
                         .filter_map(|(j, (name, r))| {
-                            if j == i {
+                            if j == i && !r.is_virtual() {
                                 Some((name.clone(), (*r).clone()))
                             } else {
                                 None
@@ -652,11 +681,7 @@ fn render_register(f: &mut Frame, app: &mut App, area: Rect) {
         .values()
         .iter()
         .filter(|(n, _)| !n.starts_with("hide_"))
-        .sorted_by(|a, b| {
-            Ord::cmp(&a.1.slave_id(), &b.1.slave_id())
-                .then(a.0.cmp(b.0))
-                .then(a.1.address().cmp(&b.1.address()))
-        })
+        .sorted_by(|a, b| app.ordering.apply(a, b))
         .map(|(n, r)| {
             [
                 format!("{}", r.access_type()),

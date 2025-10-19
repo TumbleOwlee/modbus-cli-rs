@@ -49,6 +49,7 @@ impl Client {
         let mut sorted_defs = config
             .definitions
             .iter()
+            .filter(|d| !d.1.is_virtual())
             .sorted_by(|a, b| {
                 a.1.get_slave_id()
                     .unwrap_or(0)
@@ -70,6 +71,7 @@ impl Client {
                 DataType::default(),
                 0,
                 AccessType::ReadOnly,
+                None,
                 None,
                 None,
             ),
@@ -459,42 +461,35 @@ impl Client {
                             .await;
                     }
                 }
-            } else if let Ok(cmd) = self.cmd_receiver.try_recv() {
-                match cmd {
-                    Command::Connect => {
-                        let builder = tokio_serial::new(
-                            self.rtu_config.path.clone(),
-                            self.rtu_config.baud_rate,
-                        );
-                        let port = SerialStream::open(&builder)
-                            .panic(|e| format!("Failed to open SerialStream ({e})"));
-                        let slave = Slave(self.rtu_config.slave);
-                        connection = Some(rtu::attach_slave(port, slave));
-                        if connection.is_some() {
-                            let _ = self
-                                .status_sender
-                                .send(Status::String(str!("Modbus TCP connected.")))
-                                .await;
-                            let _ = self
-                                .log_sender
-                                .send(LogMsg::ok(&format!(
-                                    "Modbus RTU connected successfully to {} with baud rate {}",
-                                    self.rtu_config.path, self.rtu_config.baud_rate
-                                )))
-                                .await;
-                        } else {
-                            let _ = self
-                                .log_sender
-                                .send(LogMsg::err(&format!(
-                                    "Modbus RTU failed to connect to {} with baud rate {}",
-                                    self.rtu_config.path, self.rtu_config.baud_rate
-                                )))
-                                .await;
-                        }
-                        op_idx = 0;
-                    }
-                    _ => {}
+            } else if let Ok(Command::Connect) = self.cmd_receiver.try_recv() {
+                let builder =
+                    tokio_serial::new(self.rtu_config.path.clone(), self.rtu_config.baud_rate);
+                let port = SerialStream::open(&builder)
+                    .panic(|e| format!("Failed to open SerialStream ({e})"));
+                let slave = Slave(self.rtu_config.slave);
+                connection = Some(rtu::attach_slave(port, slave));
+                if connection.is_some() {
+                    let _ = self
+                        .status_sender
+                        .send(Status::String(str!("Modbus TCP connected.")))
+                        .await;
+                    let _ = self
+                        .log_sender
+                        .send(LogMsg::ok(&format!(
+                            "Modbus RTU connected successfully to {} with baud rate {}",
+                            self.rtu_config.path, self.rtu_config.baud_rate
+                        )))
+                        .await;
+                } else {
+                    let _ = self
+                        .log_sender
+                        .send(LogMsg::err(&format!(
+                            "Modbus RTU failed to connect to {} with baud rate {}",
+                            self.rtu_config.path, self.rtu_config.baud_rate
+                        )))
+                        .await;
                 }
+                op_idx = 0;
             }
             tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
         }
