@@ -35,6 +35,15 @@ length = 1
 access = "ReadWrite"
 type = "U16"
 
+[definitions.evse_state]
+slave_id = 1
+read_code = 4
+address = 5
+length = 1
+access = "ReadWrite"
+type = "I16"
+values = [ {name = "waiting", value = 0}, {name = "plugged", value = 1}, {name = "charging", value = 2}, {name = "finishing", value = 3}, {name = "error", value = -1 }]
+
 [definitions.expression]
 slave_id = 1
 read_code = 2

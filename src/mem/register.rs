@@ -6,6 +6,7 @@ use crate::AppConfig;
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fmt::Display;
 use std::sync::{Arc, Mutex};
 use tokio_modbus::prelude::SlaveId;
 use tokio_modbus::FunctionCode;
@@ -64,6 +65,29 @@ pub enum Value {
     Float(f64),
 }
 
+impl Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Value::Str(s) => f.write_str(s),
+            Value::Num(i) => f.write_str(&i.to_string()),
+            Value::Float(i) => f.write_str(&i.to_string()),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ValueDef {
+    pub name: String,
+    pub value: Value,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(untagged)]
+pub enum Values {
+    ValueDef(ValueDef),
+    Value(Value),
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Definition {
     slave_id: Option<SlaveId>,
@@ -76,6 +100,7 @@ pub struct Definition {
     default: Option<Value>,
     on_update: Option<String>,
     r#virtual: Option<bool>,
+    values: Option<Vec<Values>>,
 }
 
 impl Definition {
@@ -90,6 +115,7 @@ impl Definition {
         default: Option<Value>,
         on_update: Option<String>,
         r#virtual: Option<bool>,
+        values: Option<Vec<Values>>,
     ) -> Self {
         Self {
             slave_id,
@@ -101,7 +127,12 @@ impl Definition {
             default,
             on_update,
             r#virtual,
+            values,
         }
+    }
+
+    pub fn values(&self) -> &Option<Vec<Values>> {
+        &self.values
     }
 
     pub fn is_virtual(&self) -> bool {
@@ -156,6 +187,7 @@ pub struct Register {
     r#type: DataType,
     access: AccessType,
     r#virtual: bool,
+    values: Option<Vec<Values>>,
 }
 
 impl Register {
@@ -202,7 +234,12 @@ impl Register {
             r#type: definition.get_type().clone(),
             access: definition.access_type(),
             r#virtual: definition.is_virtual(),
+            values: definition.values().clone(),
         }
+    }
+
+    pub fn values(&self) -> &Option<Vec<Values>> {
+        &self.values
     }
 
     pub fn is_virtual(&self) -> bool {

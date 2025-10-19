@@ -53,6 +53,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
             ),
         );
         let config = Arc::new(Mutex::new(AppConfig::default()));

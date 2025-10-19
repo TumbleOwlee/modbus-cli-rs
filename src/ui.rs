@@ -23,7 +23,7 @@ use style::palette::tailwind;
 use tokio::sync::mpsc::{Receiver, Sender};
 use unicode_width::UnicodeWidthStr;
 
-const PALETTES: [tailwind::Palette; 4] = [
+pub const PALETTES: [tailwind::Palette; 4] = [
     tailwind::BLUE,
     tailwind::INDIGO,
     tailwind::EMERALD,
@@ -44,7 +44,7 @@ enum LoopAction {
 }
 
 #[derive(Clone, Debug)]
-struct RowColorPair {
+pub struct RowColorPair {
     pub normal: Color,
     pub alt: Color,
 }
@@ -75,19 +75,19 @@ impl<Forground: Clone, Background: Clone> ColorPair<Forground, Background> {
     }
 }
 
-struct TableColors {
-    buffer: ColorPair<Color, Color>,
-    header: ColorPair<Color, Color>,
-    selected_color: ColorPair<Color, Color>,
-    selected_color_error: ColorPair<Color, Color>,
-    selected_color_success: ColorPair<Color, Color>,
-    row_color: ColorPair<Color, RowColorPair>,
-    row_error_color: ColorPair<Color, RowColorPair>,
-    row_success_color: ColorPair<Color, RowColorPair>,
+pub struct TableColors {
+    pub buffer: ColorPair<Color, Color>,
+    pub header: ColorPair<Color, Color>,
+    pub selected_color: ColorPair<Color, Color>,
+    pub selected_color_error: ColorPair<Color, Color>,
+    pub selected_color_success: ColorPair<Color, Color>,
+    pub row_color: ColorPair<Color, RowColorPair>,
+    pub row_error_color: ColorPair<Color, RowColorPair>,
+    pub row_success_color: ColorPair<Color, RowColorPair>,
 }
 
 impl TableColors {
-    const fn new(color: &tailwind::Palette) -> Self {
+    pub const fn new(color: &tailwind::Palette) -> Self {
         Self {
             buffer: ColorPair::new(tailwind::SLATE.c200, tailwind::SLATE.c950),
             header: ColorPair::new(tailwind::SLATE.c200, color.c900),
@@ -434,6 +434,8 @@ impl App {
                             Some(format!("{a:#06X} ({a})", a = entry.1.address())),
                             None,
                         );
+                        self.edit_dialog
+                            .limit_to(entry.1.values().clone().unwrap_or(vec![]));
                         self.edit_dialog.set(
                             EditFieldType::DataType,
                             Some(entry.1.r#type().label().to_string()),
@@ -929,6 +931,7 @@ fn render_log(f: &mut Frame, app: &mut App, area: Rect) {
         };
         item.iter()
             .map(|content| Cell::from(Text::from(str!(*content))))
+            .map(|e: Cell<'_>| e)
             .collect::<Row>()
             .style(Style::new().fg(fg).bg(bg))
             .height(1)
