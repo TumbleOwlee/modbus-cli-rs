@@ -133,7 +133,7 @@ here optional, too. If none is provided, `slave_id = 0` is used.
 }
 ```
 
-Please refer to the section [Lua Support](#Lua Support) for information about the optional `on_update` property.
+Please refer to the section [Lua Support](#lua-support) for information about the optional `on_update` property.
 
 ### Explanation:
 
