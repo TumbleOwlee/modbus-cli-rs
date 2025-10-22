@@ -90,6 +90,7 @@ pub enum Values {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Definition {
+    id: Option<String>,
     slave_id: Option<SlaveId>,
     address: Address,
     length: u16,
@@ -106,6 +107,7 @@ pub struct Definition {
 impl Definition {
     #[allow(dead_code)]
     pub fn new(
+        id: Option<String>,
         slave_id: Option<SlaveId>,
         address: u16,
         length: u16,
@@ -118,6 +120,7 @@ impl Definition {
         values: Option<Vec<Values>>,
     ) -> Self {
         Self {
+            id,
             slave_id,
             address: Address::Decimal(address),
             length,
@@ -129,6 +132,10 @@ impl Definition {
             r#virtual,
             values,
         }
+    }
+
+    pub fn get_id(&self) -> &Option<String> {
+        &self.id
     }
 
     pub fn values(&self) -> &Option<Vec<Values>> {

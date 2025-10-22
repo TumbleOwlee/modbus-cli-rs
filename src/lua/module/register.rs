@@ -47,31 +47,62 @@ impl Register {
             .config
             .lock()
             .map_err(|_| mlua::Error::UserDataBorrowError)?;
-        let definitions: Vec<_> = config.definitions.iter().filter(|r| *r.0 == name).collect();
-        if definitions.len() == 1 {
-            let bytes: Vec<u16> = this
-                .memory
-                .lock()
-                .unwrap()
-                .read(
-                    definitions[0].1.get_slave_id().unwrap_or(0),
-                    &definitions[0].1.get_range(),
-                )
-                .unwrap_or(vec![&0, &0, &0, &0, &0, &0, &0, &0])
-                .into_iter()
-                .copied()
-                .collect();
-            let value = definitions[0]
-                .1
-                .get_type()
-                .as_plain_str(&bytes)
-                .map_err(|_| mlua::Error::UserDataTypeMismatch)?;
+        let (def_by_name, def_by_id): (Vec<_>, Vec<_>) = (
+            config.definitions.iter().filter(|r| *r.0 == name).collect(),
+            config
+                .definitions
+                .iter()
+                .filter(|r| r.1.get_id().is_some() && *r.1.get_id().as_ref().unwrap() == name)
+                .collect(),
+        );
+        match (def_by_name.len(), def_by_id.len()) {
+            (1, 0) => {
+                let bytes: Vec<u16> = this
+                    .memory
+                    .lock()
+                    .unwrap()
+                    .read(
+                        def_by_name[0].1.get_slave_id().unwrap_or(0),
+                        &def_by_name[0].1.get_range(),
+                    )
+                    .unwrap_or(vec![&0, &0, &0, &0, &0, &0, &0, &0])
+                    .into_iter()
+                    .copied()
+                    .collect();
+                let value = def_by_name[0]
+                    .1
+                    .get_type()
+                    .as_plain_str(&bytes)
+                    .map_err(|_| mlua::Error::UserDataTypeMismatch)?;
 
-            value
-                .parse::<i128>()
-                .map_err(|_| mlua::Error::UserDataTypeMismatch)
-        } else {
-            Err(mlua::Error::RuntimeError(String::new()))
+                value
+                    .parse::<i128>()
+                    .map_err(|_| mlua::Error::UserDataTypeMismatch)
+            }
+            (0, 1) => {
+                let bytes: Vec<u16> = this
+                    .memory
+                    .lock()
+                    .unwrap()
+                    .read(
+                        def_by_id[0].1.get_slave_id().unwrap_or(0),
+                        &def_by_id[0].1.get_range(),
+                    )
+                    .unwrap_or(vec![&0, &0, &0, &0, &0, &0, &0, &0])
+                    .into_iter()
+                    .copied()
+                    .collect();
+                let value = def_by_id[0]
+                    .1
+                    .get_type()
+                    .as_plain_str(&bytes)
+                    .map_err(|_| mlua::Error::UserDataTypeMismatch)?;
+
+                value
+                    .parse::<i128>()
+                    .map_err(|_| mlua::Error::UserDataTypeMismatch)
+            }
+            _ => return Err(mlua::Error::RuntimeError(String::new())),
         }
     }
 

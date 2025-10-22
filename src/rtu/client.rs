@@ -66,6 +66,7 @@ impl Client {
             str!(""),
             Definition::new(
                 None,
+                None,
                 0,
                 0,
                 DataType::default(),
