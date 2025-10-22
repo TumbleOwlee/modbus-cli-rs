@@ -501,8 +501,8 @@ impl DataType {
                 Ok(format!("{:#06X} ({})", val, val))
             }
             Format::I32le => {
-                let val: i32 = ((self.apply_order(*bytes.first().unwrap()) as i32) << 16)
-                    + (self.apply_order(*bytes.get(1).unwrap()) as i32);
+                let val: i32 = ((self.apply_order(*bytes.get(1).unwrap()) as i32) << 16)
+                    + (self.apply_order(*bytes.first().unwrap()) as i32);
                 Ok(format!("0x{:02$X} ({})", val, val, 8))
             }
             Format::I64le => {
