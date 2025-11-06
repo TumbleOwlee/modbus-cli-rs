@@ -80,7 +80,7 @@ modbus-cli-rs --client --config ./path/to/config.sjon tcp -i <ip> -p <port>
 | `d` | Disconnect client (only available in client mode). |
 | `c` | Connect client (only avaialable in client mode). |
 | `p` | Toggle lua execution (enable/disable). |
-| `e | Enter` | Select register for editing. |
+| `e \| Enter` | Select register for editing. |
 | `j | Down` | Select next register in table. |
 | `k | Up` | Select previous register in table. |
 | `h | Left` | Scroll left in register table. |
