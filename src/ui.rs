@@ -31,7 +31,8 @@ pub const PALETTES: [tailwind::Palette; 4] = [
 ];
 
 const REGISTER_INFO_TEXT: &str =
-    "(q)uit | (k) up | (j) down | (h) left | (l) right | (g) top | (G) bottom | (t)heme | (f)ormat | (d)isconnect | (c)onnect | (e)dit | (o)rder";
+    "(q)uit | (k) up | (j) down | (h) left | (l) right | (g) top | (G) bottom | (t)heme | (f)ormat | (e)dit | (o)rder | (r)estart | (s)witch mode";
+const REGISTER_INFO_TEXT_CLIENT: &str = " | (d)isconnect | (c)onnect";
 const LOGGER_INFO_TEXT: &str = "(m) up | (n) down | (b) left | (,) right | (v) top | (V) bottom";
 
 const LOG_HEADER: &str = " Modbus Log";
@@ -41,6 +42,8 @@ const ITEM_HEIGHT: usize = 3;
 enum LoopAction {
     Break,
     Continue,
+    Restart,
+    SwitchMode,
 }
 
 #[derive(Clone, Debug)]
@@ -172,7 +175,19 @@ impl Order {
     }
 }
 
+pub enum Mode {
+    Server,
+    Client,
+}
+
+pub enum AppAction {
+    Exit,
+    Restart,
+    SwitchMode(Mode),
+}
+
 pub struct App {
+    mode: Mode,
     ordering: Order,
     register_handler: Handler,
     register_table: UiTable,
@@ -188,7 +203,7 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(register_handler: Handler, config: Arc<Mutex<AppConfig>>) -> Self {
+    pub fn new(register_handler: Handler, config: Arc<Mutex<AppConfig>>, is_client: bool) -> Self {
         let original_hook = std::panic::take_hook();
         std::panic::set_hook(Box::new(move |panic| {
             disable_raw_mode().unwrap();
@@ -210,7 +225,13 @@ impl App {
         let len = register_handler.len();
         let colors = TableColors::new(&PALETTES[0]);
         let bg_color = colors.buffer.bg;
+        let mode = if is_client {
+            Mode::Client
+        } else {
+            Mode::Server
+        };
         Self {
+            mode,
             ordering: Order::AddressAsc,
             register_handler,
             register_table: UiTable::new(len, ITEM_HEIGHT),
@@ -379,7 +400,16 @@ impl App {
             KeyCode::Char('o') => {
                 self.ordering = self.ordering.next();
             }
-            KeyCode::Char('q') | KeyCode::Esc => return Ok(LoopAction::Break),
+            KeyCode::Char('q') => return Ok(LoopAction::Break),
+            KeyCode::Char('r') => return Ok(LoopAction::Restart),
+            KeyCode::Char('s') => {
+                self.mode = if let Mode::Client = self.mode {
+                    Mode::Server
+                } else {
+                    Mode::Client
+                };
+                return Ok(LoopAction::SwitchMode);
+            }
             KeyCode::Char('j') | KeyCode::Down => self.move_down(),
             KeyCode::Char('k') | KeyCode::Up => self.move_up(),
             KeyCode::Char('h') | KeyCode::Left => self.move_left(),
@@ -558,12 +588,14 @@ impl App {
         mut log_recv: Receiver<LogMsg>,
         cmd_sender: Option<Sender<Command>>,
         mut lua_runtime: lua::Runtime,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<AppAction> {
         enable_raw_mode()?;
         let mut terminal = App::create_terminal()?;
         execute!(terminal.backend_mut(), DisableMouseCapture)?;
 
         let mut status = str!("");
+        let mut action = AppAction::Exit;
+
         loop {
             lua_runtime.execute();
 
@@ -603,6 +635,19 @@ impl App {
                             Popup::None => match self.handle_event(key, &cmd_sender) {
                                 Ok(LoopAction::Continue) => {}
                                 Ok(LoopAction::Break) => break,
+                                Ok(LoopAction::Restart) => {
+                                    action = AppAction::Restart;
+                                    break;
+                                }
+                                Ok(LoopAction::SwitchMode) => {
+                                    let mode = if let Mode::Client = self.mode {
+                                        Mode::Server
+                                    } else {
+                                        Mode::Client
+                                    };
+                                    action = AppAction::SwitchMode(mode);
+                                    break;
+                                }
                                 Err(e) => return Err(e),
                             },
                             Popup::Edit(_) => self.handle_event_edit_dialog(key, &cmd_sender),
@@ -622,7 +667,7 @@ impl App {
         )?;
         terminal.show_cursor()?;
 
-        Ok(())
+        Ok(action)
     }
 
     fn create_terminal() -> anyhow::Result<Terminal<CrosstermBackend<std::io::Stdout>>> {
@@ -812,14 +857,24 @@ fn render_scrollbar(f: &mut Frame, state: &mut ScrollbarState, area: Rect) {
 
 fn render_register_footer(f: &mut Frame, app: &App, area: Rect, status: String) {
     let rects = Layout::vertical([Constraint::Length(1), Constraint::Length(2)]).split(area);
-    let status_footer = Paragraph::new(Line::from(str!(" ") + &status))
+    let message = if let Mode::Client = app.mode {
+        Line::from(str!("CLIENT MODE: ") + &status)
+    } else {
+        Line::from(str!("SERVER MODE"))
+    };
+    let status_footer = Paragraph::new(message)
         .style(
             Style::new()
                 .fg(app.colors.header.fg)
                 .bg(app.colors.header.bg),
         )
         .centered();
-    let info_footer = Paragraph::new(Line::from(REGISTER_INFO_TEXT))
+    let ext = if let Mode::Client = app.mode {
+        REGISTER_INFO_TEXT_CLIENT
+    } else {
+        ""
+    };
+    let info_footer = Paragraph::new(Line::from(str!(REGISTER_INFO_TEXT) + ext))
         .style(Style::new().fg(tailwind::WHITE).bg(tailwind::SLATE.c900))
         .centered();
     f.render_widget(status_footer, rects[0]);

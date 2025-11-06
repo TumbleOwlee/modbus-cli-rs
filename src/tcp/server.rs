@@ -316,6 +316,13 @@ impl Server {
             .parse()
             .panic(|e| format!("Failed to create SocketAddr ({e})"));
         if let Ok(listener) = TcpListener::bind(addr).await {
+            let _ = self
+                .log_sender
+                .send(LogMsg::ok(&format!(
+                    "Successfully binded to {}:{}.",
+                    self.config.ip, self.config.port
+                )))
+                .await;
             let server = TcpServer::new(listener);
             let new_request_handler = |_socket_addr| {
                 Ok(Some(Service::new(
