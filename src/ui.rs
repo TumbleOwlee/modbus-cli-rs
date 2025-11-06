@@ -31,7 +31,8 @@ pub const PALETTES: [tailwind::Palette; 4] = [
 ];
 
 const REGISTER_INFO_TEXT: &str =
-    "(q)uit | (k) up | (j) down | (h) left | (l) right | (g) top | (G) bottom | (t)heme | (f)ormat | (e)dit | (o)rder | (r)estart | (s)witch mode | (z) compact view";
+    "(q)uit | (k) up | (j) down | (h) left | (l) right | (g) top | (G) bottom | (t)heme | (f)ormat | (e)dit | (o)rder";
+const REGISTER_INFO_TEXT_EXT: &str = "(r)estart | (s)witch mode | (z) compact view";
 const REGISTER_INFO_TEXT_CLIENT: &str = " | (d)isconnect | (c)onnect";
 const ENABLE_LUA: &str = " | (p) activate lua";
 const DISABLE_LUA: &str = " | (p) deactivate lua";
@@ -697,7 +698,7 @@ impl App {
 fn ui(f: &mut Frame, app: &mut App, status: String) {
     let rects = Layout::vertical([
         Constraint::Min(5),
-        Constraint::Length(2),
+        Constraint::Length(3),
         Constraint::Max(10),
         Constraint::Length(2),
     ])
@@ -874,7 +875,12 @@ fn render_scrollbar(f: &mut Frame, state: &mut ScrollbarState, area: Rect) {
 }
 
 fn render_register_footer(f: &mut Frame, app: &App, area: Rect, status: String) {
-    let rects = Layout::vertical([Constraint::Length(1), Constraint::Length(2)]).split(area);
+    let rects = Layout::vertical([
+        Constraint::Length(1),
+        Constraint::Length(1),
+        Constraint::Length(1),
+    ])
+    .split(area);
     let message = if let Mode::Client = app.mode {
         Line::from(str!("CLIENT MODE: ") + &status)
     } else {
@@ -899,11 +905,17 @@ fn render_register_footer(f: &mut Frame, app: &App, area: Rect, status: String) 
         ext += ENABLE_LUA;
     }
 
-    let info_footer = Paragraph::new(Line::from(str!(REGISTER_INFO_TEXT) + &ext))
+    f.render_widget(status_footer, rects[0]);
+
+    let info_footer = Paragraph::new(Line::from(str!(REGISTER_INFO_TEXT)))
         .style(Style::new().fg(tailwind::WHITE).bg(tailwind::SLATE.c900))
         .centered();
-    f.render_widget(status_footer, rects[0]);
     f.render_widget(info_footer, rects[1]);
+
+    let info_footer = Paragraph::new(Line::from(str!(REGISTER_INFO_TEXT_EXT) + &ext))
+        .style(Style::new().fg(tailwind::WHITE).bg(tailwind::SLATE.c900))
+        .centered();
+    f.render_widget(info_footer, rects[2]);
 }
 
 fn render_log_footer(f: &mut Frame, app: &App, area: Rect) {
