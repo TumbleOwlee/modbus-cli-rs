@@ -30,11 +30,11 @@ Provide a CLI application that can interact with a modbus server and modbus clie
 
 ## Features
 
-- [x] Modbus server that allows clients to manipulate the registers.
-- [x] Modbus client to read and display all reigster contents of a modbus server.
-- [x] Allow the manipulation of register contents in server and client mode.
-- [x] Support TCP modbus
-- [x] Support RTU modbus
+- [x] Run Modbus Server providing a set of configured registers
+- [x] Run Modbus Client to retrieve data from Modbus Server and Display the contents
+- [x] Manipulation of registers in Server and Client mode
+- [x] Support of Modbus over TCP/IP
+- [x] Support of Modbus over Serial/RTU
 - [x] Support of Lua scripts to manipulate registers at runtime (check out [Lua Support](#lua-support))
 - [ ] Optional: Support separated memory backends for read/write (e.g. Hypercharger utilizes the same addresses for different information depending on the used function code)
 
