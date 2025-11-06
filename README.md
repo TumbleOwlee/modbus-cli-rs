@@ -69,6 +69,7 @@ modbus-cli-rs --client --config ./path/to/config.sjon tcp -i <ip> -p <port>
 | `t` | Change color theme. |
 | `d` | Disconnect client (only available in client mode). |
 | `c` | Connect client (only avaialable in client mode). |
+| `p` | Toggle lua execution (enable/disable). |
 | `e` or `Enter` | Select register for editing. |
 | `j` or `Down` | Select next register in table. |
 | `k` or `Up` | Select previous register in table. |
@@ -77,6 +78,7 @@ modbus-cli-rs --client --config ./path/to/config.sjon tcp -i <ip> -p <port>
 | `f` or `Tab` | Change display format between hexadecimal and numeric. |
 | `g` | Move to top of register table. |
 | `G` | Move to bottom of register table. |
+| `z` | Use compact register table view. |
 | `m` or `PageUp` | Scroll up in log view. |
 | `n` or `PageDown` | Scroll down in log view. |
 | `b` or `Home` | Scroll left in log view. |

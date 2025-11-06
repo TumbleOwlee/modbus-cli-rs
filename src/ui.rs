@@ -31,13 +31,16 @@ pub const PALETTES: [tailwind::Palette; 4] = [
 ];
 
 const REGISTER_INFO_TEXT: &str =
-    "(q)uit | (k) up | (j) down | (h) left | (l) right | (g) top | (G) bottom | (t)heme | (f)ormat | (e)dit | (o)rder | (r)estart | (s)witch mode";
+    "(q)uit | (k) up | (j) down | (h) left | (l) right | (g) top | (G) bottom | (t)heme | (f)ormat | (e)dit | (o)rder | (r)estart | (s)witch mode | (z) compact view";
 const REGISTER_INFO_TEXT_CLIENT: &str = " | (d)isconnect | (c)onnect";
+const ENABLE_LUA: &str = " | (p) activate lua";
+const DISABLE_LUA: &str = " | (p) deactivate lua";
 const LOGGER_INFO_TEXT: &str = "(m) up | (n) down | (b) left | (,) right | (v) top | (V) bottom";
 
 const LOG_HEADER: &str = " Modbus Log";
 
-const ITEM_HEIGHT: usize = 3;
+const ITEM_SPACING: usize = 1;
+const ITEM_HEIGHT: usize = 1 + 2 * ITEM_SPACING;
 
 enum LoopAction {
     Break,
@@ -187,6 +190,8 @@ pub enum AppAction {
 }
 
 pub struct App {
+    is_compact: bool,
+    exec_lua: bool,
     mode: Mode,
     ordering: Order,
     register_handler: Handler,
@@ -231,6 +236,8 @@ impl App {
             Mode::Server
         };
         Self {
+            is_compact: false,
+            exec_lua: true,
             mode,
             ordering: Order::AddressAsc,
             register_handler,
@@ -397,6 +404,12 @@ impl App {
         cmd_sender: &Option<Sender<Command>>,
     ) -> anyhow::Result<LoopAction> {
         match key.code {
+            KeyCode::Char('p') => {
+                self.exec_lua = !self.exec_lua;
+            }
+            KeyCode::Char('z') => {
+                self.is_compact = !self.is_compact;
+            }
             KeyCode::Char('o') => {
                 self.ordering = self.ordering.next();
             }
@@ -597,7 +610,9 @@ impl App {
         let mut action = AppAction::Exit;
 
         loop {
-            lua_runtime.execute();
+            if self.exec_lua {
+                lua_runtime.execute();
+            }
 
             // Update status
             if let Ok(v) = status_recv.try_recv() {
@@ -783,13 +798,16 @@ fn render_register(f: &mut Frame, app: &mut App, area: Rect) {
     app.register_table.table_max_width =
         limits.0 + limits.1 + limits.2 + limits.3 + limits.4 + limits.5 + limits.6 + limits.7 + 25;
 
+    let compact = app.is_compact;
     let rows = items.iter().enumerate().map(|(i, item)| {
         let color = app.colors.row_color.bg.get(i % 2);
+        let spacing_height = if compact { 0 } else { ITEM_SPACING };
+        let spacing = itertools::repeat_n('\n', spacing_height).collect::<String>();
         item.iter()
-            .map(|content| Cell::from(Text::from(format!("\n{content}\n"))))
+            .map(|content| Cell::from(Text::from(format!("{spacing}{content}{spacing}"))))
             .collect::<Row>()
             .style(Style::new().fg(app.colors.row_color.fg).bg(color))
-            .height(ITEM_HEIGHT as u16)
+            .height((spacing_height * 2 + 1) as u16)
     });
 
     let bar = " █ ";
@@ -869,12 +887,19 @@ fn render_register_footer(f: &mut Frame, app: &App, area: Rect, status: String) 
                 .bg(app.colors.header.bg),
         )
         .centered();
-    let ext = if let Mode::Client = app.mode {
-        REGISTER_INFO_TEXT_CLIENT
+    let mut ext = if let Mode::Client = app.mode {
+        str!(REGISTER_INFO_TEXT_CLIENT)
     } else {
-        ""
+        str!("")
     };
-    let info_footer = Paragraph::new(Line::from(str!(REGISTER_INFO_TEXT) + ext))
+
+    if app.exec_lua {
+        ext += DISABLE_LUA;
+    } else {
+        ext += ENABLE_LUA;
+    }
+
+    let info_footer = Paragraph::new(Line::from(str!(REGISTER_INFO_TEXT) + &ext))
         .style(Style::new().fg(tailwind::WHITE).bg(tailwind::SLATE.c900))
         .centered();
     f.render_widget(status_footer, rects[0]);
