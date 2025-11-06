@@ -81,18 +81,18 @@ modbus-cli-rs --client --config ./path/to/config.sjon tcp -i <ip> -p <port>
 | `c` | Connect client (only avaialable in client mode). |
 | `p` | Toggle lua execution (enable/disable). |
 | `e \| Enter` | Select register for editing. |
-| `j | Down` | Select next register in table. |
-| `k | Up` | Select previous register in table. |
-| `h | Left` | Scroll left in register table. |
-| `l | Right` | Scroll right in register table. |
-| `f | Tab` | Change display format between hexadecimal and numeric. |
+| `j \| Down` | Select next register in table. |
+| `k \| Up` | Select previous register in table. |
+| `h \| Left` | Scroll left in register table. |
+| `l \| Right` | Scroll right in register table. |
+| `f \| Tab` | Change display format between hexadecimal and numeric. |
 | `g` | Move to top of register table. |
 | `G` | Move to bottom of register table. |
 | `z` | Use compact register table view. |
-| `m | PageUp` | Scroll up in log view. |
-| `n | PageDown` | Scroll down in log view. |
-| `b | Home` | Scroll left in log view. |
-| `, | End` | Scroll right in log view. |
+| `m \| PageUp` | Scroll up in log view. |
+| `n \| PageDown` | Scroll down in log view. |
+| `b \| Home` | Scroll left in log view. |
+| `, \| End` | Scroll right in log view. |
 | `v` | Move to top of log view. |
 | `V` | Move to bottom of log view. |
 
