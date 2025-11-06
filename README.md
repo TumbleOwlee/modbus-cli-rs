@@ -65,14 +65,15 @@ modbus-cli-rs --client --config ./path/to/config.sjon tcp -i <ip> -p <port>
 | `o` | Change the order of the registers. |
 | `r` | Restart the application. |
 | `s` | Switch mode of the application. |
+| `t` | Change color theme. |
+| `d` | Disconnect client (only available in client mode). |
+| `c` | Connect client (only avaialable in client mode). |
+| `e` or `Enter` | Select register for editing. |
 | `j` or `Down` | Select next register in table. |
 | `k` or `Up` | Select previous register in table. |
 | `h` or `Left` | Scroll left in register table. |
 | `l` or `Right` | Scroll right in register table. |
 | `f` or `Tab` | Change display format between hexadecimal and numeric. |
-| `t` | Change color theme. |
-| `d` | Disconnect client (only available in client mode). |
-| `c` | Connect client (only avaialable in client mode). |
 | `g` | Move to top of register table. |
 | `G` | Move to bottom of register table. |
 | `m` or `PageUp` | Scroll up in log view. |
@@ -81,7 +82,6 @@ modbus-cli-rs --client --config ./path/to/config.sjon tcp -i <ip> -p <port>
 | `,` or `End` | Scroll right in log view. |
 | `v` | Move to top of log view. |
 | `V` | Move to bottom of log view. |
-| `e` or `Enter` | Select register for editing. |
 
 ## Important Change
 
