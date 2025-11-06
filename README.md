@@ -36,13 +36,52 @@ to set up the environment. Afterwards you are able to compile this project from 
 cargo build --release
 ```
 
-Alternatively, you can also run it directly using the following command.
+Alternatively, you can also run it directly using the following command. Please refer to `--help` for all available runtime options.
 
-```sh
+### Server Mode
+
+```bash
 cargo run --release -- --config ./path/to/config.json tcp -i <ip> -p <port>
+
+# Or with the application already built
+modbus-cli-rs --config ./path/to/config.sjon tcp -i <ip> -p <port>
 ```
 
-Please refer to `--help` for all available options.
+### Client Mode
+
+```bash
+cargo run --release -- --client --config ./path/to/config.json tcp -i <ip> -p <port>
+
+# Or with the application already built
+modbus-cli-rs --client --config ./path/to/config.sjon tcp -i <ip> -p <port>
+```
+
+## Keybindings
+
+| Keybind | Description |
+| ----- | ----- |
+| `q` | Exit the application or exit edit mode. |
+| `Escape` | Exit edit mode. |
+| `o` | Change the order of the registers. |
+| `r` | Restart the application. |
+| `s` | Switch mode of the application. |
+| `j` or `Down` | Select next register in table. |
+| `k` or `Up` | Select previous register in table. |
+| `h` or `Left` | Scroll left in register table. |
+| `l` or `Right` | Scroll right in register table. |
+| `f` or `Tab` | Change display format between hexadecimal and numeric. |
+| `t` | Change color theme. |
+| `d` | Disconnect client (only available in client mode). |
+| `c` | Connect client (only avaialable in client mode). |
+| `g` | Move to top of register table. |
+| `G` | Move to bottom of register table. |
+| `m` or `PageUp` | Scroll up in log view. |
+| `n` or `PageDown` | Scroll down in log view. |
+| `b` or `Home` | Scroll left in log view. |
+| `,` or `End` | Scroll right in log view. |
+| `v` | Move to top of log view. |
+| `V` | Move to bottom of log view. |
+| `e` or `Enter` | Select register for editing. |
 
 ## Important Change
 
