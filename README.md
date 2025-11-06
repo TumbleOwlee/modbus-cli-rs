@@ -12,9 +12,19 @@ Provide a CLI application that can interact with a modbus server and modbus clie
 
 ## Impressions
 
+### Default View
+
 <p align="center">
     <p align="center">
         <img src="./img/modbus-cli-rs.png" style="border-radius: 8px">
+    </p>
+</p>
+
+### Compact View
+
+<p align="center">
+    <p align="center">
+        <img src="./img/modbus-cli-rs-compact.jpg" style="border-radius: 8px">
     </p>
 </p>
 
