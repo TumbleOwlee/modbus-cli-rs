@@ -10,6 +10,10 @@ If you prefer a GUI application, check out [QModbus](https://github.com/ed-chemn
 
 Provide a CLI application that can interact with a modbus server and modbus clients and visualize the status of modbus registers with live updates.
 
+## Nightly Build
+
+This repository provides a Nightly build of the tool. Please check out the Release page. Prebuilt executables are provided for Unix and Windows.
+
 ## Impressions
 
 ### Default View
