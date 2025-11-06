@@ -44,14 +44,14 @@ This repository provides a Nightly build of the tool. Please check out the Relea
 
 ## Quickstart
 
-This project is written in Rust, thus you will have to install the rust toolchain to compile it. Just follow the instructions on [rustup.rs](https://rustup.rs/)
+This project is written in Rust, thus you will have to install the Rust toolchain to compile it. Just follow the instructions on [rustup.rs](https://rustup.rs/)
 to set up the environment. Afterwards you are able to compile this project from source using the following command.
 
 ```sh
 cargo build --release
 ```
 
-Alternatively, you can also run it directly using the following command. Please refer to `--help` for all available runtime options.
+Alternatively, you can also run it directly using the following command. Please refer to `--help` for all available runtime options and to the Release page for prebuilt binaries.
 
 ### Server Mode
 
@@ -102,7 +102,7 @@ modbus-cli-rs --client --config ./path/to/config.sjon tcp -i <ip> -p <port>
 
 ## Important Change
 
-The tool now supports the configuration is TOML and JSON format. Additionally a new subcommand `convert` is added that takes the specified configuration and outputs it in the specified configuration format. The support of TOML is added to support easier multiline text values as part of the configuration which are used to specify Lua scripts.
+The tool currently supports the configuration in TOML and JSON format. Additionally a new subcommand `convert` is added that takes the specified configuration and outputs it in the specified configuration format. The support of TOML is added to support easier multiline text values as part of the configuration which are used to specify written Lua scripts.
 
 ```bash
 # Convert JSON configuration to TOML (output: ./path/to/config.toml)
@@ -114,7 +114,7 @@ modbus-cli-rs --config ./path/to/config.toml convert json
 
 ## Configuration
 
-The application will need a JSON configuration file. Besides some basic configuration parameters the configuration provides the register definitions.
+The application will need a configuration file. Besides some basic configuration parameters the configuration provides the register definitions.
 These definitions are used to provide the table view and also group multiple registers together to e.g. limit read operations.
 
 The configuraation has to contain the following entries.
