@@ -309,6 +309,11 @@ impl Server {
                 let server = RtuServer::new(serial_stream);
                 let service = Service::new(self.memory.clone(), self.log_sender.clone());
 
+                let _ = self
+                    .log_sender
+                    .send(LogMsg::ok("Successfully attached to serial port."))
+                    .await;
+
                 if let Err(e) = server.serve_forever(service).await {
                     let _ = self
                         .status_sender

@@ -17,7 +17,7 @@ use crate::rtu::RtuConfig;
 use crate::tcp::client::Client as TcpClient;
 use crate::tcp::server::Server as TcpServer;
 use crate::tcp::TcpConfig;
-use crate::ui::App;
+use crate::ui::{App, AppAction, Mode};
 use crate::util::tokio::spawn_detach;
 use crate::util::{async_cloned, str, Expect};
 
@@ -40,14 +40,14 @@ pub enum FileType {
     Json,
 }
 
-#[derive(Parser)]
+#[derive(Parser, Clone)]
 pub struct Format {
     /// The interface to use for the service or the ip to connect to in client mode.
     #[arg(value_enum)]
     file_type: FileType,
 }
 
-#[derive(Subcommand)]
+#[derive(Subcommand, Clone)]
 enum Commands {
     /// Use TCP connection
     Tcp(TcpConfig),
@@ -123,7 +123,7 @@ impl AppConfig {
 }
 
 fn main() {
-    let args = Args::parse();
+    let mut args = Args::parse();
 
     let cfg_path = args.config.clone();
     // Read register definitions
@@ -154,154 +154,168 @@ fn main() {
     let memory = Arc::new(Mutex::new(memory));
     let app_config = Arc::new(Mutex::new(app_config));
 
-    let (status_sender, status_receiver) = channel::<Status>(10);
-    let (log_sender, log_receiver) = channel::<LogMsg>(10);
-    let (cmd_sender, cmd_receiver) = channel::<Command>(10);
+    loop {
+        let (status_sender, status_receiver) = channel::<Status>(10);
+        let (log_sender, log_receiver) = channel::<LogMsg>(10);
+        let (cmd_sender, cmd_receiver) = channel::<Command>(10);
 
-    // Initialize tokio runtime for modbus server
-    let runtime = Runtime::new().panic(|e| format!("Failed to create runtime. [{}]", e));
+        // Initialize tokio runtime for modbus server
+        let runtime = Runtime::new().panic(|e| format!("Failed to create runtime. [{}]", e));
 
-    let lua_runtime = lua::Runtime::init(memory.clone(), app_config.clone(), log_sender.clone())
-        .expect("Lua Runtime startup failed");
+        let lua_runtime =
+            lua::Runtime::init(memory.clone(), app_config.clone(), log_sender.clone())
+                .expect("Lua Runtime startup failed");
 
-    if args.client {
-        match args.command {
-            Commands::Tcp(config) => {
-                runtime.block_on(async_cloned!(interval_ms, app_config, memory; {
-                    spawn_detach(async move {
-                        let mut client = TcpClient::new(app_config, config, memory, status_sender, cmd_receiver, log_sender);
-                        client.run(delay_after_connect_ms, interval_ms, timeout_ms).await
-                    })
-                    .await
-                }));
-            }
-            Commands::Rtu(config) => {
-                runtime.block_on(async_cloned!(interval_ms, app_config, memory; {
-                    spawn_detach(async move {
-                        let mut client = RtuClient::new(app_config, config, memory, status_sender, cmd_receiver, log_sender);
-                        client.run(delay_after_connect_ms, interval_ms, timeout_ms).await
-                    })
-                    .await
-                }));
-            }
-            Commands::Convert(format) => {
-                if let Some(ref path) = cfg_path {
-                    let idx = path.chars().rev().find_position(|c| *c == '.');
-                    let mut path = path.clone();
-                    if let Some((idx, _)) = idx {
-                        let _ = path.split_off(path.len() - idx);
-                    }
-                    match format.file_type {
-                        FileType::Toml => {
-                            let content = toml::to_string::<AppConfig>(
-                                &(*app_config
-                                    .lock()
-                                    .expect("Failed to serialize configuration")),
-                            )
-                            .expect("Failed to serialize configuration to toml");
-                            let mut file = File::create(path.to_owned() + ".toml")
-                                .expect("Failed to open output file");
-                            write!(file, "{}", content).expect("Failed to write file");
-                        }
-                        FileType::Json => {
-                            let content = serde_json::to_string_pretty::<AppConfig>(
-                                &(*app_config
-                                    .lock()
-                                    .expect("Failed to serialize configuration")),
-                            )
-                            .expect("Failed to serialize configuration to json");
-                            let mut file = File::create(path.to_owned() + ".json")
-                                .expect("Failed to open output file");
-                            write!(file, "{}", content).expect("Failed to write file");
-                        }
-                    }
+        if args.client {
+            match args.command.clone() {
+                Commands::Tcp(config) => {
+                    runtime.block_on(async_cloned!(interval_ms, app_config, memory; {
+                        spawn_detach(async move {
+                            let mut client = TcpClient::new(app_config, config.clone(), memory, status_sender, cmd_receiver, log_sender);
+                            client.run(delay_after_connect_ms, interval_ms, timeout_ms).await
+                        })
+                        .await
+                    }));
                 }
-                return;
-            }
-        }
-    } else {
-        match args.command {
-            Commands::Tcp(config) => {
-                runtime.block_on(async_cloned!(memory; {
-                    spawn_detach(async move {
-                        let server = TcpServer::new(config, memory, status_sender, log_sender);
-                        server.run().await
-                    })
-                    .await
-                }));
-            }
-            Commands::Rtu(config) => {
-                runtime.block_on(async_cloned!(memory; {
-                    spawn_detach(async move {
-                        let server = RtuServer::new(config, memory, status_sender, log_sender);
-                        server.run().await
-                    })
-                    .await
-                }));
-            }
-            Commands::Convert(format) => {
-                if let Some(ref path) = cfg_path {
-                    let idx = path.chars().rev().find_position(|c| *c == '.');
-                    let mut path = path.clone();
-                    if let Some((idx, _)) = idx {
-                        let _ = path.split_off(path.len() - idx - 1);
-                    }
-                    match format.file_type {
-                        FileType::Toml => {
-                            let content = toml::to_string::<AppConfig>(
-                                &(*app_config
-                                    .lock()
-                                    .expect("Failed to serialize configuration")),
-                            )
-                            .expect("Failed to serialize configuration to toml");
-                            let mut file = File::create(path.to_owned() + ".toml")
-                                .expect("Failed to open output file");
-                            write!(file, "{}", content).expect("Failed to write file");
-                        }
-                        FileType::Json => {
-                            let content = serde_json::to_string_pretty::<AppConfig>(
-                                &(*app_config
-                                    .lock()
-                                    .expect("Failed to serialize configuration")),
-                            )
-                            .expect("Failed to serialize configuration to json");
-                            let mut file = File::create(path.to_owned() + ".json")
-                                .expect("Failed to open output file");
-                            write!(file, "{}", content).expect("Failed to write file");
-                        }
-                    }
+                Commands::Rtu(config) => {
+                    runtime.block_on(async_cloned!(interval_ms, app_config, memory; {
+                        spawn_detach(async move {
+                            let mut client = RtuClient::new(app_config, config.clone(), memory, status_sender, cmd_receiver, log_sender);
+                            client.run(delay_after_connect_ms, interval_ms, timeout_ms).await
+                        })
+                        .await
+                    }));
                 }
-                return;
-            }
-        }
-    };
-
-    // Initialize register handler
-    let register_handler = Handler::new(app_config.clone(), memory.clone());
-    {
-        for def in app_config.lock().unwrap().definitions.values() {
-            if let Some(value) = def.get_default() {
-                let s: String = match value {
-                    Value::Str(v) => v.to_string(),
-                    Value::Num(v) => format!("{}", v),
-                    Value::Float(v) => format!("{}", v),
-                };
-                if let Ok(v) = def.get_type().encode(&s) {
-                    if memory
-                        .lock()
-                        .unwrap()
-                        .write(def.get_slave_id().unwrap_or(0), def.get_range(), &v)
-                        .is_err()
-                    {}
+                Commands::Convert(format) => {
+                    if let Some(ref path) = cfg_path {
+                        let idx = path.chars().rev().find_position(|c| *c == '.');
+                        let mut path = path.clone();
+                        if let Some((idx, _)) = idx {
+                            let _ = path.split_off(path.len() - idx);
+                        }
+                        match format.file_type {
+                            FileType::Toml => {
+                                let content = toml::to_string::<AppConfig>(
+                                    &(*app_config
+                                        .lock()
+                                        .expect("Failed to serialize configuration")),
+                                )
+                                .expect("Failed to serialize configuration to toml");
+                                let mut file = File::create(path.to_owned() + ".toml")
+                                    .expect("Failed to open output file");
+                                write!(file, "{}", content).expect("Failed to write file");
+                            }
+                            FileType::Json => {
+                                let content = serde_json::to_string_pretty::<AppConfig>(
+                                    &(*app_config
+                                        .lock()
+                                        .expect("Failed to serialize configuration")),
+                                )
+                                .expect("Failed to serialize configuration to json");
+                                let mut file = File::create(path.to_owned() + ".json")
+                                    .expect("Failed to open output file");
+                                write!(file, "{}", content).expect("Failed to write file");
+                            }
+                        }
+                    }
+                    return;
                 }
             }
+        } else {
+            match args.command.clone() {
+                Commands::Tcp(config) => {
+                    runtime.block_on(async_cloned!(memory; {
+                        spawn_detach(async move {
+                            let server = TcpServer::new(config, memory, status_sender, log_sender);
+                            server.run().await
+                        })
+                        .await
+                    }));
+                }
+                Commands::Rtu(config) => {
+                    runtime.block_on(async_cloned!(memory; {
+                        spawn_detach(async move {
+                            let server = RtuServer::new(config, memory, status_sender, log_sender);
+                            server.run().await
+                        })
+                        .await
+                    }));
+                }
+                Commands::Convert(format) => {
+                    if let Some(ref path) = cfg_path {
+                        let idx = path.chars().rev().find_position(|c| *c == '.');
+                        let mut path = path.clone();
+                        if let Some((idx, _)) = idx {
+                            let _ = path.split_off(path.len() - idx - 1);
+                        }
+                        match format.file_type {
+                            FileType::Toml => {
+                                let content = toml::to_string::<AppConfig>(
+                                    &(*app_config
+                                        .lock()
+                                        .expect("Failed to serialize configuration")),
+                                )
+                                .expect("Failed to serialize configuration to toml");
+                                let mut file = File::create(path.to_owned() + ".toml")
+                                    .expect("Failed to open output file");
+                                write!(file, "{}", content).expect("Failed to write file");
+                            }
+                            FileType::Json => {
+                                let content = serde_json::to_string_pretty::<AppConfig>(
+                                    &(*app_config
+                                        .lock()
+                                        .expect("Failed to serialize configuration")),
+                                )
+                                .expect("Failed to serialize configuration to json");
+                                let mut file = File::create(path.to_owned() + ".json")
+                                    .expect("Failed to open output file");
+                                write!(file, "{}", content).expect("Failed to write file");
+                            }
+                        }
+                    }
+                    return;
+                }
+            }
+        };
+
+        // Initialize register handler
+        let register_handler = Handler::new(app_config.clone(), memory.clone());
+        {
+            for def in app_config.lock().unwrap().definitions.values() {
+                if let Some(value) = def.get_default() {
+                    let s: String = match value {
+                        Value::Str(v) => v.to_string(),
+                        Value::Num(v) => format!("{}", v),
+                        Value::Float(v) => format!("{}", v),
+                    };
+                    if let Ok(v) = def.get_type().encode(&s) {
+                        if memory
+                            .lock()
+                            .unwrap()
+                            .write(def.get_slave_id().unwrap_or(0), def.get_range(), &v)
+                            .is_err()
+                        {}
+                    }
+                }
+            }
         }
+
+        // Run UI
+        let app = App::new(register_handler, app_config.clone(), args.client);
+        let cmd_sender = if args.client { Some(cmd_sender) } else { None };
+        match app
+            .run(status_receiver, log_receiver, cmd_sender, lua_runtime)
+            .panic(|e| format!("Run app failed [{}]", e))
+        {
+            AppAction::Exit => break,
+            AppAction::Restart => continue,
+            AppAction::SwitchMode(Mode::Client) => {
+                args.client = true;
+            }
+            AppAction::SwitchMode(Mode::Server) => {
+                args.client = false;
+            }
+        }
+        args.client = !args.client;
     }
-
-    // Run UI
-    let app = App::new(register_handler, app_config);
-    let cmd_sender = if args.client { Some(cmd_sender) } else { None };
-    app.run(status_receiver, log_receiver, cmd_sender, lua_runtime)
-        .panic(|e| format!("Run app failed [{}]", e));
-    //runtime.block_on(async { crate::util::tokio::join_all().await });
 }
