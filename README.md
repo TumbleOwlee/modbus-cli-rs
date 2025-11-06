@@ -25,6 +25,7 @@ Provide a CLI application that can interact with a modbus server and modbus clie
 - [x] Allow the manipulation of register contents in server and client mode.
 - [x] Support TCP modbus
 - [x] Support RTU modbus
+- [x] Support of Lua scripts to manipulate registers at runtime (check out [Lua Support](#lua-support))
 - [ ] Optional: Support separated memory backends for read/write (e.g. Hypercharger utilizes the same addresses for different information depending on the used function code)
 
 ## Quickstart
@@ -85,7 +86,7 @@ modbus-cli-rs --client --config ./path/to/config.sjon tcp -i <ip> -p <port>
 
 ## Important Change
 
-The tool now supports the configuration is TOML and JSON format. Additionally a new subcommand `convert` is added that takes the specified configuration and outputs it in the specified configuration format. The support of TOML is added to support easier multiline text values as part of the configuration which are used to specify LUA scripts.
+The tool now supports the configuration is TOML and JSON format. Additionally a new subcommand `convert` is added that takes the specified configuration and outputs it in the specified configuration format. The support of TOML is added to support easier multiline text values as part of the configuration which are used to specify Lua scripts.
 
 ```bash
 # Convert JSON configuration to TOML (output: ./path/to/config.toml)
