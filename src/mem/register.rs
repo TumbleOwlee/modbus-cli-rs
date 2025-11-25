@@ -217,7 +217,7 @@ impl Register {
 
         let bytes: Vec<u16> = memory
             .lock()
-            .unwrap()
+            .expect("Unable to lock memory")
             .read(
                 definition.get_slave_id().unwrap_or(0),
                 &definition.get_range(),
@@ -298,13 +298,17 @@ impl Handler {
     }
 
     pub fn len(&self) -> usize {
-        self.config.lock().unwrap().definitions.len()
+        self.config
+            .lock()
+            .expect("Unable to lock configuration")
+            .definitions
+            .len()
     }
 
     pub fn values(&self) -> HashMap<String, Register> {
         self.config
             .lock()
-            .unwrap()
+            .expect("Unable to lock configuration")
             .definitions
             .iter()
             .map(|(name, def)| (name.clone(), Register::new(def, &self.memory)))
@@ -312,7 +316,7 @@ impl Handler {
     }
 
     pub fn set_values(&mut self, slave: SlaveId, addr: u16, values: &[u16]) -> anyhow::Result<()> {
-        let mut memory = self.memory.lock().unwrap();
+        let mut memory = self.memory.lock().expect("Unable to lock memory");
         memory
             .write(slave, Range::new(addr, addr + values.len() as u16), values)
             .map(|_| ())

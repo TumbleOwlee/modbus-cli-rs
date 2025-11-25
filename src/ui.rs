@@ -212,8 +212,9 @@ impl App {
     pub fn new(register_handler: Handler, config: Arc<Mutex<AppConfig>>, is_client: bool) -> Self {
         let original_hook = std::panic::take_hook();
         std::panic::set_hook(Box::new(move |panic| {
-            disable_raw_mode().unwrap();
-            crossterm::execute!(stdout(), LeaveAlternateScreen).unwrap();
+            disable_raw_mode().expect("Unable to disable raw mode");
+            crossterm::execute!(stdout(), LeaveAlternateScreen)
+                .expect("Unable to leave alternate screen");
             original_hook(panic);
         }));
 
@@ -226,7 +227,10 @@ impl App {
             file = Some(std::io::BufWriter::new(f));
         }
 
-        let history_len = config.lock().unwrap().history_length;
+        let history_len = config
+            .lock()
+            .expect("Unable to lock configuration")
+            .history_length;
 
         let len = register_handler.len();
         let colors = TableColors::new(&PALETTES[0]);
@@ -466,7 +470,7 @@ impl App {
                         })
                         .collect::<Vec<(String, Register)>>();
                     if !entry.is_empty() {
-                        let entry = entry.first().unwrap();
+                        let entry = entry.first().expect("Unable to retrieve first entry");
                         self.log_entries.push(LogMsg::info(&format!(
                             "Start edit of register {entry:#06X} ({entry})",
                             entry = entry.1.address()
@@ -957,7 +961,11 @@ fn render_log(f: &mut Frame, app: &mut App, area: Rect) {
         .style(header_style)
         .height(1);
 
-    let history_len = app.config.lock().unwrap().history_length;
+    let history_len = app
+        .config
+        .lock()
+        .expect("Unable to lock configuration")
+        .history_length;
     if app.log_entries.len() > history_len {
         let len_to_remove = app.log_entries.len() - history_len;
         app.log_entries = app.log_entries[len_to_remove..].to_vec();

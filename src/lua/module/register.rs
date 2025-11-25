@@ -52,7 +52,13 @@ impl Register {
             config
                 .definitions
                 .iter()
-                .filter(|r| r.1.get_id().is_some() && *r.1.get_id().as_ref().unwrap() == name)
+                .filter(|r| {
+                    if let Some(ref id) = r.1.get_id() {
+                        *id == name
+                    } else {
+                        false
+                    }
+                })
                 .collect(),
         );
         match (def_by_name.len(), def_by_id.len()) {
@@ -60,7 +66,7 @@ impl Register {
                 let bytes: Vec<u16> = this
                     .memory
                     .lock()
-                    .unwrap()
+                    .expect("Unable to lock memory")
                     .read(
                         def_by_name[0].1.get_slave_id().unwrap_or(0),
                         &def_by_name[0].1.get_range(),
@@ -83,7 +89,7 @@ impl Register {
                 let bytes: Vec<u16> = this
                     .memory
                     .lock()
-                    .unwrap()
+                    .expect("Unable to lock memory")
                     .read(
                         def_by_id[0].1.get_slave_id().unwrap_or(0),
                         &def_by_id[0].1.get_range(),
@@ -116,7 +122,7 @@ impl Register {
             let bytes: Vec<u16> = this
                 .memory
                 .lock()
-                .unwrap()
+                .expect("Unable to lock memory")
                 .read(
                     regs[0].1.get_slave_id().unwrap_or(0),
                     &regs[0].1.get_range(),
@@ -149,7 +155,7 @@ impl Register {
             let bytes: Vec<u16> = this
                 .memory
                 .lock()
-                .unwrap()
+                .expect("Unable to lock memory")
                 .read(
                     regs[0].1.get_slave_id().unwrap_or(0),
                     &regs[0].1.get_range(),
@@ -178,7 +184,7 @@ impl Register {
             let bytes: Vec<u16> = this
                 .memory
                 .lock()
-                .unwrap()
+                .expect("Unable to lock memory")
                 .read(
                     regs[0].1.get_slave_id().unwrap_or(0),
                     &regs[0].1.get_range(),
@@ -216,7 +222,7 @@ impl Register {
                             "Provided input requires a longer register as available.",
                         ));
                     } else {
-                        let mut memory = this.memory.lock().unwrap();
+                        let mut memory = this.memory.lock().expect("Unable to lock memory");
                         let addr = register.get_address();
                         let slave = register.get_slave_id().unwrap_or(0);
 

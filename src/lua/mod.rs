@@ -27,7 +27,7 @@ impl Runtime {
             log_sender.clone(),
         ))?;
 
-        let config = app_config.lock().unwrap();
+        let config = app_config.lock().expect("Unable to lock configuration");
         for (id, definition) in config.definitions.iter() {
             if let Some(code) = definition.on_update() {
                 lua.load(id, code)?;

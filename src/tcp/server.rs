@@ -56,7 +56,7 @@ impl tokio_modbus::server::Service for Service {
             Request::ReadCoils(addr, cnt) => future::ready(
                 self.memory
                     .lock()
-                    .unwrap()
+                    .expect("Unable to lock memory")
                     .read(slave, &Range::new(addr, addr + cnt))
                     .map_err(|e| {
                         let _ = self.log_sender.try_send(LogMsg::err(&format!(
@@ -82,7 +82,7 @@ impl tokio_modbus::server::Service for Service {
             Request::ReadDiscreteInputs(addr, cnt) => future::ready(
                 self.memory
                     .lock()
-                    .unwrap()
+                    .expect("Unable to lock memory")
                     .read(slave, &Range::new(addr, addr + cnt))
                     .map_err(|e| {
                         let _ = self.log_sender.try_send(LogMsg::err(&format!(
@@ -108,7 +108,7 @@ impl tokio_modbus::server::Service for Service {
             Request::ReadInputRegisters(addr, cnt) => future::ready(
                 self.memory
                     .lock()
-                    .unwrap()
+                    .expect("Unable to lock memory")
                     .read(slave, &Range::new(addr, addr + cnt))
                     .map_err(|e| {
                         let _ = self.log_sender.try_send(LogMsg::err(&format!(
@@ -134,7 +134,7 @@ impl tokio_modbus::server::Service for Service {
             Request::ReadHoldingRegisters(addr, cnt) => future::ready(
                 self.memory
                     .lock()
-                    .unwrap()
+                    .expect("Unable to lock memory")
                     .read(slave, &Range::new(addr, addr + cnt))
                     .map_err(|e| {
                         let _ = self.log_sender.try_send(LogMsg::err(&format!(
@@ -160,7 +160,7 @@ impl tokio_modbus::server::Service for Service {
             Request::WriteMultipleRegisters(addr, values) => future::ready(
                 self.memory
                     .lock()
-                    .unwrap()
+                    .expect("Unable to lock memory")
                     .write(
                         slave,
                         Range::new(addr, addr + (values.len() as u16)),
@@ -190,7 +190,7 @@ impl tokio_modbus::server::Service for Service {
             Request::WriteSingleRegister(addr, value) => future::ready(
                 self.memory
                     .lock()
-                    .unwrap()
+                    .expect("Unable to lock memory")
                     .write(slave, Range::new(addr, addr + 1), &[value])
                     .map_err(|e| {
                         let _ = self.log_sender.try_send(LogMsg::err(&format!(
@@ -218,7 +218,7 @@ impl tokio_modbus::server::Service for Service {
                 future::ready(
                     self.memory
                         .lock()
-                        .unwrap()
+                        .expect("Unable to lock memory")
                         .write(slave, Range::new(addr, addr + 1), &values)
                         .map_err(|e| {
                             let _ = self.log_sender.try_send(LogMsg::err(&format!(
@@ -247,7 +247,7 @@ impl tokio_modbus::server::Service for Service {
                 future::ready(
                     self.memory
                         .lock()
-                        .unwrap()
+                        .expect("Unable to lock memory")
                         .write(slave, Range::new(addr, addr + 1), &[value])
                         .map_err(|e| {
                             let _ = self.log_sender.try_send(LogMsg::err(&format!(

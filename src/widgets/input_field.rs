@@ -217,7 +217,14 @@ impl InputField {
                 Some(Action::InputTaken)
             }
             (_, KeyCode::Delete) => {
-                if self.input.is_some() && self.cursor_pos < self.input.as_ref().unwrap().len() {
+                if self.input.is_some()
+                    && self.cursor_pos
+                        < self
+                            .input
+                            .as_ref()
+                            .expect("Unable to get input as reference")
+                            .len()
+                {
                     if let Some(input) = self.input.as_mut() {
                         input.remove(self.cursor_pos);
                         if input.is_empty() {

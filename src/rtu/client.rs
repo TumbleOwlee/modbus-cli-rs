@@ -45,7 +45,7 @@ impl Client {
     }
 
     fn init(app_config: Arc<Mutex<AppConfig>>) -> Vec<(SlaveId, FunctionCode, Range<usize>)> {
-        let config = app_config.lock().unwrap();
+        let config = app_config.lock().expect("Unable to lock configuration");
         let mut sorted_defs = config
             .definitions
             .iter()
@@ -215,7 +215,7 @@ impl Client {
 
         let mut time_last_read = SystemTime::now()
             .checked_sub(Duration::from_millis(interval_ms + 1))
-            .unwrap();
+            .expect("Unable to calculate time difference");
         let mut op_idx = 0;
         let mut retries = 0;
         loop {
@@ -228,7 +228,10 @@ impl Client {
                 let res = now.duration_since(time_last_read);
                 if res.is_ok_and(|d| d.as_millis() > interval_ms as u128) {
                     time_last_read = now;
-                    let (slave, fc, op) = self.operations.get(op_idx).unwrap();
+                    let (slave, fc, op) = self
+                        .operations
+                        .get(op_idx)
+                        .expect("Unable to retrieve operation");
                     let modbus_result = match fc {
                         FunctionCode::ReadCoils => {
                             context.set_slave(Slave(*slave));
@@ -296,7 +299,7 @@ impl Client {
                                 end = op.start()
                             )))
                             .await;
-                        let mut memory = self.memory.lock().unwrap();
+                        let mut memory = self.memory.lock().expect("Unable to lock memory");
                         memory
                             .write(*slave, Range::new(op.start(), op.start() + vec.len()), &vec)
                             .panic(|e| format!("Failed to write to memory ({})", e));

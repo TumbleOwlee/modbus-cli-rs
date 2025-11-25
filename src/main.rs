@@ -281,7 +281,12 @@ fn main() {
         // Initialize register handler
         let register_handler = Handler::new(app_config.clone(), memory.clone());
         {
-            for def in app_config.lock().unwrap().definitions.values() {
+            for def in app_config
+                .lock()
+                .expect("Unable to lock configuration")
+                .definitions
+                .values()
+            {
                 if let Some(value) = def.get_default() {
                     let s: String = match value {
                         Value::Str(v) => v.to_string(),
@@ -291,7 +296,7 @@ fn main() {
                     if let Ok(v) = def.get_type().encode(&s) {
                         if memory
                             .lock()
-                            .unwrap()
+                            .expect("Unable to lock memory")
                             .write(def.get_slave_id().unwrap_or(0), def.get_range(), &v)
                             .is_err()
                         {}

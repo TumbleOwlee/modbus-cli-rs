@@ -175,123 +175,184 @@ impl DataType {
                     Err(_) => Err(anyhow!("Invalid data")),
                 }),
             Format::U8 => {
-                let val: u8 = ((self.apply_order(*bytes.first().unwrap())) & 0xFF) as u8;
+                let val: u8 = ((self.apply_order(*bytes.first().expect("Unable to retrieve byte")))
+                    & 0xFF) as u8;
                 Ok(format!("{}", val))
             }
             Format::U16 => {
-                let val: u16 = self.apply_order(*bytes.first().unwrap());
+                let val: u16 = self.apply_order(*bytes.first().expect("Unable to retrieve byte"));
                 Ok(format!("{}", val))
             }
             Format::U32 => {
-                let val: u32 = ((self.apply_order(*bytes.first().unwrap()) as u32) << 16)
-                    + (self.apply_order(*bytes.get(1).unwrap()) as u32);
+                let val: u32 = ((self.apply_order(*bytes.first().expect("Unable to retrieve byte"))
+                    as u32)
+                    << 16)
+                    + (self.apply_order(*bytes.get(1).expect("Unable to retrieve byte")) as u32);
                 Ok(format!("{}", val))
             }
             Format::U64 => {
-                let val: u64 = ((self.apply_order(*bytes.first().unwrap()) as u64) << 48)
-                    + ((self.apply_order(*bytes.get(1).unwrap()) as u64) << 32)
-                    + ((self.apply_order(*bytes.get(2).unwrap()) as u64) << 16)
-                    + self.apply_order(*bytes.get(3).unwrap()) as u64;
+                let val: u64 = ((self.apply_order(*bytes.first().expect("Unable to retrieve byte"))
+                    as u64)
+                    << 48)
+                    + ((self.apply_order(*bytes.get(1).expect("Unable to retrieve byte")) as u64)
+                        << 32)
+                    + ((self.apply_order(*bytes.get(2).expect("Unable to retrieve byte")) as u64)
+                        << 16)
+                    + self.apply_order(*bytes.get(3).expect("Unable to retrieve byte")) as u64;
                 Ok(format!("{}", val))
             }
             Format::U128 => {
-                let val: u128 = ((self.apply_order(*bytes.first().unwrap()) as u128) << 112)
-                    + ((self.apply_order(*bytes.get(1).unwrap()) as u128) << 96)
-                    + ((self.apply_order(*bytes.get(2).unwrap()) as u128) << 80)
-                    + ((self.apply_order(*bytes.get(3).unwrap()) as u128) << 64)
-                    + ((self.apply_order(*bytes.get(4).unwrap()) as u128) << 48)
-                    + ((self.apply_order(*bytes.get(5).unwrap()) as u128) << 32)
-                    + ((self.apply_order(*bytes.get(6).unwrap()) as u128) << 16)
-                    + self.apply_order(*bytes.get(7).unwrap()) as u128;
+                let val: u128 = ((self.apply_order(*bytes.first().expect("Unable to retrieve byte"))
+                    as u128)
+                    << 112)
+                    + ((self.apply_order(*bytes.get(1).expect("Unable to retrieve byte")) as u128)
+                        << 96)
+                    + ((self.apply_order(*bytes.get(2).expect("Unable to retrieve byte")) as u128)
+                        << 80)
+                    + ((self.apply_order(*bytes.get(3).expect("Unable to retrieve byte")) as u128)
+                        << 64)
+                    + ((self.apply_order(*bytes.get(4).expect("Unable to retrieve byte")) as u128)
+                        << 48)
+                    + ((self.apply_order(*bytes.get(5).expect("Unable to retrieve byte")) as u128)
+                        << 32)
+                    + ((self.apply_order(*bytes.get(6).expect("Unable to retrieve byte")) as u128)
+                        << 16)
+                    + self.apply_order(*bytes.get(7).expect("Unable to retrieve byte")) as u128;
                 Ok(format!("{}", val))
             }
             Format::I8 => {
-                let val: i8 = (self.apply_order(*bytes.first().unwrap()) & 0xFF) as i8;
+                let val: i8 = (self.apply_order(*bytes.first().expect("Unable to retrieve byte"))
+                    & 0xFF) as i8;
                 Ok(format!("{}", val))
             }
             Format::I16 => {
-                let val: i16 = self.apply_order(*bytes.first().unwrap()) as i16;
+                let val: i16 =
+                    self.apply_order(*bytes.first().expect("Unable to retrieve byte")) as i16;
                 Ok(format!("{}", val))
             }
             Format::I32 => {
-                let val: i32 = ((self.apply_order(*bytes.first().unwrap()) as i32) << 16)
-                    + (self.apply_order(*bytes.get(1).unwrap()) as i32);
+                let val: i32 = ((self.apply_order(*bytes.first().expect("Unable to retrieve byte"))
+                    as i32)
+                    << 16)
+                    + (self.apply_order(*bytes.get(1).expect("Unable to retrieve byte")) as i32);
                 Ok(format!("{}", val))
             }
             Format::I64 => {
-                let val: i64 = ((self.apply_order(*bytes.first().unwrap()) as i64) << 48)
-                    + ((self.apply_order(*bytes.get(1).unwrap()) as i64) << 32)
-                    + ((self.apply_order(*bytes.get(2).unwrap()) as i64) << 16)
-                    + self.apply_order(*bytes.get(3).unwrap()) as i64;
+                let val: i64 = ((self.apply_order(*bytes.first().expect("Unable to retrieve byte"))
+                    as i64)
+                    << 48)
+                    + ((self.apply_order(*bytes.get(1).expect("Unable to retrieve byte")) as i64)
+                        << 32)
+                    + ((self.apply_order(*bytes.get(2).expect("Unable to retrieve byte")) as i64)
+                        << 16)
+                    + self.apply_order(*bytes.get(3).expect("Unable to retrieve byte")) as i64;
                 Ok(format!("{}", val))
             }
             Format::I128 => {
-                let val: i128 = ((self.apply_order(*bytes.first().unwrap()) as i128) << 112)
-                    + ((self.apply_order(*bytes.get(1).unwrap()) as i128) << 96)
-                    + ((self.apply_order(*bytes.get(2).unwrap()) as i128) << 80)
-                    + ((self.apply_order(*bytes.get(3).unwrap()) as i128) << 64)
-                    + ((self.apply_order(*bytes.get(4).unwrap()) as i128) << 48)
-                    + ((self.apply_order(*bytes.get(5).unwrap()) as i128) << 32)
-                    + ((self.apply_order(*bytes.get(6).unwrap()) as i128) << 16)
-                    + self.apply_order(*bytes.get(7).unwrap()) as i128;
+                let val: i128 = ((self.apply_order(*bytes.first().expect("Unable to retrieve byte"))
+                    as i128)
+                    << 112)
+                    + ((self.apply_order(*bytes.get(1).expect("Unable to retrieve byte")) as i128)
+                        << 96)
+                    + ((self.apply_order(*bytes.get(2).expect("Unable to retrieve byte")) as i128)
+                        << 80)
+                    + ((self.apply_order(*bytes.get(3).expect("Unable to retrieve byte")) as i128)
+                        << 64)
+                    + ((self.apply_order(*bytes.get(4).expect("Unable to retrieve byte")) as i128)
+                        << 48)
+                    + ((self.apply_order(*bytes.get(5).expect("Unable to retrieve byte")) as i128)
+                        << 32)
+                    + ((self.apply_order(*bytes.get(6).expect("Unable to retrieve byte")) as i128)
+                        << 16)
+                    + self.apply_order(*bytes.get(7).expect("Unable to retrieve byte")) as i128;
                 Ok(format!("{}", val))
             }
             Format::U16le => {
-                let val: u16 = self.apply_order(*bytes.first().unwrap());
+                let val: u16 = self.apply_order(*bytes.first().expect("Unable to retrieve byte"));
                 Ok(format!("{}", val))
             }
             Format::U32le => {
-                let val: u32 = ((self.apply_order(*bytes.get(1).unwrap()) as u32) << 16)
-                    + (self.apply_order(*bytes.first().unwrap()) as u32);
+                let val: u32 = ((self.apply_order(*bytes.get(1).expect("Unable to retrieve byte"))
+                    as u32)
+                    << 16)
+                    + (self.apply_order(*bytes.first().expect("Unable to retrieve byte")) as u32);
                 Ok(format!("{}", val))
             }
             Format::U64le => {
-                let val: u64 = ((self.apply_order(*bytes.get(3).unwrap()) as u64) << 48)
-                    + ((self.apply_order(*bytes.get(2).unwrap()) as u64) << 32)
-                    + ((self.apply_order(*bytes.get(1).unwrap()) as u64) << 16)
-                    + self.apply_order(*bytes.first().unwrap()) as u64;
+                let val: u64 = ((self.apply_order(*bytes.get(3).expect("Unable to retrieve byte"))
+                    as u64)
+                    << 48)
+                    + ((self.apply_order(*bytes.get(2).expect("Unable to retrieve byte")) as u64)
+                        << 32)
+                    + ((self.apply_order(*bytes.get(1).expect("Unable to retrieve byte")) as u64)
+                        << 16)
+                    + self.apply_order(*bytes.first().expect("Unable to retrieve byte")) as u64;
                 Ok(format!("{}", val))
             }
             Format::U128le => {
-                let val: u128 = ((self.apply_order(*bytes.get(7).unwrap()) as u128) << 112)
-                    + ((self.apply_order(*bytes.get(6).unwrap()) as u128) << 96)
-                    + ((self.apply_order(*bytes.get(5).unwrap()) as u128) << 80)
-                    + ((self.apply_order(*bytes.get(4).unwrap()) as u128) << 64)
-                    + ((self.apply_order(*bytes.get(3).unwrap()) as u128) << 48)
-                    + ((self.apply_order(*bytes.get(2).unwrap()) as u128) << 32)
-                    + ((self.apply_order(*bytes.get(1).unwrap()) as u128) << 16)
-                    + self.apply_order(*bytes.first().unwrap()) as u128;
+                let val: u128 = ((self.apply_order(*bytes.get(7).expect("Unable to retrieve byte"))
+                    as u128)
+                    << 112)
+                    + ((self.apply_order(*bytes.get(6).expect("Unable to retrieve byte")) as u128)
+                        << 96)
+                    + ((self.apply_order(*bytes.get(5).expect("Unable to retrieve byte")) as u128)
+                        << 80)
+                    + ((self.apply_order(*bytes.get(4).expect("Unable to retrieve byte")) as u128)
+                        << 64)
+                    + ((self.apply_order(*bytes.get(3).expect("Unable to retrieve byte")) as u128)
+                        << 48)
+                    + ((self.apply_order(*bytes.get(2).expect("Unable to retrieve byte")) as u128)
+                        << 32)
+                    + ((self.apply_order(*bytes.get(1).expect("Unable to retrieve byte")) as u128)
+                        << 16)
+                    + self.apply_order(*bytes.first().expect("Unable to retrieve byte")) as u128;
                 Ok(format!("{}", val))
             }
             Format::I8le => {
-                let val: i8 = (self.apply_order(*bytes.first().unwrap()) & 0xFF) as i8;
+                let val: i8 = (self.apply_order(*bytes.first().expect("Unable to retrieve byte"))
+                    & 0xFF) as i8;
                 Ok(format!("{}", val))
             }
             Format::I16le => {
-                let val: i16 = self.apply_order(*bytes.first().unwrap()) as i16;
+                let val: i16 =
+                    self.apply_order(*bytes.first().expect("Unable to retrieve byte")) as i16;
                 Ok(format!("{}", val))
             }
             Format::I32le => {
-                let val: i32 = ((self.apply_order(*bytes.first().unwrap()) as i32) << 16)
-                    + (self.apply_order(*bytes.get(1).unwrap()) as i32);
+                let val: i32 = ((self.apply_order(*bytes.first().expect("Unable to retrieve byte"))
+                    as i32)
+                    << 16)
+                    + (self.apply_order(*bytes.get(1).expect("Unable to retrieve byte")) as i32);
                 Ok(format!("{}", val))
             }
             Format::I64le => {
-                let val: i64 = ((self.apply_order(*bytes.get(3).unwrap()) as i64) << 48)
-                    + ((self.apply_order(*bytes.get(2).unwrap()) as i64) << 32)
-                    + ((self.apply_order(*bytes.get(1).unwrap()) as i64) << 16)
-                    + self.apply_order(*bytes.first().unwrap()) as i64;
+                let val: i64 = ((self.apply_order(*bytes.get(3).expect("Unable to retrieve byte"))
+                    as i64)
+                    << 48)
+                    + ((self.apply_order(*bytes.get(2).expect("Unable to retrieve byte")) as i64)
+                        << 32)
+                    + ((self.apply_order(*bytes.get(1).expect("Unable to retrieve byte")) as i64)
+                        << 16)
+                    + self.apply_order(*bytes.first().expect("Unable to retrieve byte")) as i64;
                 Ok(format!("{}", val))
             }
             Format::I128le => {
-                let val: i128 = ((self.apply_order(*bytes.get(7).unwrap()) as i128) << 112)
-                    + ((self.apply_order(*bytes.get(6).unwrap()) as i128) << 96)
-                    + ((self.apply_order(*bytes.get(5).unwrap()) as i128) << 80)
-                    + ((self.apply_order(*bytes.get(4).unwrap()) as i128) << 64)
-                    + ((self.apply_order(*bytes.get(3).unwrap()) as i128) << 48)
-                    + ((self.apply_order(*bytes.get(2).unwrap()) as i128) << 32)
-                    + ((self.apply_order(*bytes.get(1).unwrap()) as i128) << 16)
-                    + self.apply_order(*bytes.first().unwrap()) as i128;
+                let val: i128 = ((self.apply_order(*bytes.get(7).expect("Unable to retrieve byte"))
+                    as i128)
+                    << 112)
+                    + ((self.apply_order(*bytes.get(6).expect("Unable to retrieve byte")) as i128)
+                        << 96)
+                    + ((self.apply_order(*bytes.get(5).expect("Unable to retrieve byte")) as i128)
+                        << 80)
+                    + ((self.apply_order(*bytes.get(4).expect("Unable to retrieve byte")) as i128)
+                        << 64)
+                    + ((self.apply_order(*bytes.get(3).expect("Unable to retrieve byte")) as i128)
+                        << 48)
+                    + ((self.apply_order(*bytes.get(2).expect("Unable to retrieve byte")) as i128)
+                        << 32)
+                    + ((self.apply_order(*bytes.get(1).expect("Unable to retrieve byte")) as i128)
+                        << 16)
+                    + self.apply_order(*bytes.first().expect("Unable to retrieve byte")) as i128;
                 Ok(format!("{}", val))
             }
         }
@@ -404,123 +465,184 @@ impl DataType {
                     Err(_) => Err(anyhow!("Invalid data")),
                 }),
             Format::U8 => {
-                let val: u8 = ((self.apply_order(*bytes.first().unwrap())) & 0xFF) as u8;
+                let val: u8 = ((self.apply_order(*bytes.first().expect("Unable to retrieve byte")))
+                    & 0xFF) as u8;
                 Ok(format!("{:#04X} ({})", val, val))
             }
             Format::U16 => {
-                let val: u16 = self.apply_order(*bytes.first().unwrap());
+                let val: u16 = self.apply_order(*bytes.first().expect("Unable to retrieve byte"));
                 Ok(format!("{:#06X} ({})", val, val))
             }
             Format::U32 => {
-                let val: u32 = ((self.apply_order(*bytes.first().unwrap()) as u32) << 16)
-                    + (self.apply_order(*bytes.get(1).unwrap()) as u32);
+                let val: u32 = ((self.apply_order(*bytes.first().expect("Unable to retrieve byte"))
+                    as u32)
+                    << 16)
+                    + (self.apply_order(*bytes.get(1).expect("Unable to retrieve byte")) as u32);
                 Ok(format!("0x{:02$X} ({})", val, val, 8))
             }
             Format::U64 => {
-                let val: u64 = ((self.apply_order(*bytes.first().unwrap()) as u64) << 48)
-                    + ((self.apply_order(*bytes.get(1).unwrap()) as u64) << 32)
-                    + ((self.apply_order(*bytes.get(2).unwrap()) as u64) << 16)
-                    + self.apply_order(*bytes.get(3).unwrap()) as u64;
+                let val: u64 = ((self.apply_order(*bytes.first().expect("Unable to retrieve byte"))
+                    as u64)
+                    << 48)
+                    + ((self.apply_order(*bytes.get(1).expect("Unable to retrieve byte")) as u64)
+                        << 32)
+                    + ((self.apply_order(*bytes.get(2).expect("Unable to retrieve byte")) as u64)
+                        << 16)
+                    + self.apply_order(*bytes.get(3).expect("Unable to retrieve byte")) as u64;
                 Ok(format!("0x{:02$X} ({})", val, val, 16))
             }
             Format::U128 => {
-                let val: u128 = ((self.apply_order(*bytes.first().unwrap()) as u128) << 112)
-                    + ((self.apply_order(*bytes.get(1).unwrap()) as u128) << 96)
-                    + ((self.apply_order(*bytes.get(2).unwrap()) as u128) << 80)
-                    + ((self.apply_order(*bytes.get(3).unwrap()) as u128) << 64)
-                    + ((self.apply_order(*bytes.get(4).unwrap()) as u128) << 48)
-                    + ((self.apply_order(*bytes.get(5).unwrap()) as u128) << 32)
-                    + ((self.apply_order(*bytes.get(6).unwrap()) as u128) << 16)
-                    + self.apply_order(*bytes.get(7).unwrap()) as u128;
+                let val: u128 = ((self.apply_order(*bytes.first().expect("Unable to retrieve byte"))
+                    as u128)
+                    << 112)
+                    + ((self.apply_order(*bytes.get(1).expect("Unable to retrieve byte")) as u128)
+                        << 96)
+                    + ((self.apply_order(*bytes.get(2).expect("Unable to retrieve byte")) as u128)
+                        << 80)
+                    + ((self.apply_order(*bytes.get(3).expect("Unable to retrieve byte")) as u128)
+                        << 64)
+                    + ((self.apply_order(*bytes.get(4).expect("Unable to retrieve byte")) as u128)
+                        << 48)
+                    + ((self.apply_order(*bytes.get(5).expect("Unable to retrieve byte")) as u128)
+                        << 32)
+                    + ((self.apply_order(*bytes.get(6).expect("Unable to retrieve byte")) as u128)
+                        << 16)
+                    + self.apply_order(*bytes.get(7).expect("Unable to retrieve byte")) as u128;
                 Ok(format!("0x{:02$X} ({})", val, val, 32))
             }
             Format::I8 => {
-                let val: i8 = (self.apply_order(*bytes.first().unwrap()) & 0xFF) as i8;
+                let val: i8 = (self.apply_order(*bytes.first().expect("Unable to retrieve byte"))
+                    & 0xFF) as i8;
                 Ok(format!("{:#04X} ({})", val, val))
             }
             Format::I16 => {
-                let val: i16 = self.apply_order(*bytes.first().unwrap()) as i16;
+                let val: i16 =
+                    self.apply_order(*bytes.first().expect("Unable to retrieve byte")) as i16;
                 Ok(format!("{:#06X} ({})", val, val))
             }
             Format::I32 => {
-                let val: i32 = ((self.apply_order(*bytes.first().unwrap()) as i32) << 16)
-                    + (self.apply_order(*bytes.get(1).unwrap()) as i32);
+                let val: i32 = ((self.apply_order(*bytes.first().expect("Unable to retrieve byte"))
+                    as i32)
+                    << 16)
+                    + (self.apply_order(*bytes.get(1).expect("Unable to retrieve byte")) as i32);
                 Ok(format!("0x{:02$X} ({})", val, val, 8))
             }
             Format::I64 => {
-                let val: i64 = ((self.apply_order(*bytes.first().unwrap()) as i64) << 48)
-                    + ((self.apply_order(*bytes.get(1).unwrap()) as i64) << 32)
-                    + ((self.apply_order(*bytes.get(2).unwrap()) as i64) << 16)
-                    + self.apply_order(*bytes.get(3).unwrap()) as i64;
+                let val: i64 = ((self.apply_order(*bytes.first().expect("Unable to retrieve byte"))
+                    as i64)
+                    << 48)
+                    + ((self.apply_order(*bytes.get(1).expect("Unable to retrieve byte")) as i64)
+                        << 32)
+                    + ((self.apply_order(*bytes.get(2).expect("Unable to retrieve byte")) as i64)
+                        << 16)
+                    + self.apply_order(*bytes.get(3).expect("Unable to retrieve byte")) as i64;
                 Ok(format!("0x{:02$X} ({})", val, val, 16))
             }
             Format::I128 => {
-                let val: i128 = ((self.apply_order(*bytes.first().unwrap()) as i128) << 112)
-                    + ((self.apply_order(*bytes.get(1).unwrap()) as i128) << 96)
-                    + ((self.apply_order(*bytes.get(2).unwrap()) as i128) << 80)
-                    + ((self.apply_order(*bytes.get(3).unwrap()) as i128) << 64)
-                    + ((self.apply_order(*bytes.get(4).unwrap()) as i128) << 48)
-                    + ((self.apply_order(*bytes.get(5).unwrap()) as i128) << 32)
-                    + ((self.apply_order(*bytes.get(6).unwrap()) as i128) << 16)
-                    + self.apply_order(*bytes.get(7).unwrap()) as i128;
+                let val: i128 = ((self.apply_order(*bytes.first().expect("Unable to retrieve byte"))
+                    as i128)
+                    << 112)
+                    + ((self.apply_order(*bytes.get(1).expect("Unable to retrieve byte")) as i128)
+                        << 96)
+                    + ((self.apply_order(*bytes.get(2).expect("Unable to retrieve byte")) as i128)
+                        << 80)
+                    + ((self.apply_order(*bytes.get(3).expect("Unable to retrieve byte")) as i128)
+                        << 64)
+                    + ((self.apply_order(*bytes.get(4).expect("Unable to retrieve byte")) as i128)
+                        << 48)
+                    + ((self.apply_order(*bytes.get(5).expect("Unable to retrieve byte")) as i128)
+                        << 32)
+                    + ((self.apply_order(*bytes.get(6).expect("Unable to retrieve byte")) as i128)
+                        << 16)
+                    + self.apply_order(*bytes.get(7).expect("Unable to retrieve byte")) as i128;
                 Ok(format!("0x{:02$X} ({})", val, val, 32))
             }
             Format::U16le => {
-                let val: u16 = self.apply_order(*bytes.first().unwrap());
+                let val: u16 = self.apply_order(*bytes.first().expect("Unable to retrieve byte"));
                 Ok(format!("{:#06X} ({})", val, val))
             }
             Format::U32le => {
-                let val: u32 = ((self.apply_order(*bytes.get(1).unwrap()) as u32) << 16)
-                    + (self.apply_order(*bytes.first().unwrap()) as u32);
+                let val: u32 = ((self.apply_order(*bytes.get(1).expect("Unable to retrieve byte"))
+                    as u32)
+                    << 16)
+                    + (self.apply_order(*bytes.first().expect("Unable to retrieve byte")) as u32);
                 Ok(format!("0x{:02$X} ({})", val, val, 8))
             }
             Format::U64le => {
-                let val: u64 = ((self.apply_order(*bytes.get(3).unwrap()) as u64) << 48)
-                    + ((self.apply_order(*bytes.get(2).unwrap()) as u64) << 32)
-                    + ((self.apply_order(*bytes.get(1).unwrap()) as u64) << 16)
-                    + self.apply_order(*bytes.first().unwrap()) as u64;
+                let val: u64 = ((self.apply_order(*bytes.get(3).expect("Unable to retrieve byte"))
+                    as u64)
+                    << 48)
+                    + ((self.apply_order(*bytes.get(2).expect("Unable to retrieve byte")) as u64)
+                        << 32)
+                    + ((self.apply_order(*bytes.get(1).expect("Unable to retrieve byte")) as u64)
+                        << 16)
+                    + self.apply_order(*bytes.first().expect("Unable to retrieve byte")) as u64;
                 Ok(format!("0x{:02$X} ({})", val, val, 16))
             }
             Format::U128le => {
-                let val: u128 = ((self.apply_order(*bytes.get(7).unwrap()) as u128) << 112)
-                    + ((self.apply_order(*bytes.get(6).unwrap()) as u128) << 96)
-                    + ((self.apply_order(*bytes.get(5).unwrap()) as u128) << 80)
-                    + ((self.apply_order(*bytes.get(4).unwrap()) as u128) << 64)
-                    + ((self.apply_order(*bytes.get(3).unwrap()) as u128) << 48)
-                    + ((self.apply_order(*bytes.get(2).unwrap()) as u128) << 32)
-                    + ((self.apply_order(*bytes.get(1).unwrap()) as u128) << 16)
-                    + self.apply_order(*bytes.first().unwrap()) as u128;
+                let val: u128 = ((self.apply_order(*bytes.get(7).expect("Unable to retrieve byte"))
+                    as u128)
+                    << 112)
+                    + ((self.apply_order(*bytes.get(6).expect("Unable to retrieve byte")) as u128)
+                        << 96)
+                    + ((self.apply_order(*bytes.get(5).expect("Unable to retrieve byte")) as u128)
+                        << 80)
+                    + ((self.apply_order(*bytes.get(4).expect("Unable to retrieve byte")) as u128)
+                        << 64)
+                    + ((self.apply_order(*bytes.get(3).expect("Unable to retrieve byte")) as u128)
+                        << 48)
+                    + ((self.apply_order(*bytes.get(2).expect("Unable to retrieve byte")) as u128)
+                        << 32)
+                    + ((self.apply_order(*bytes.get(1).expect("Unable to retrieve byte")) as u128)
+                        << 16)
+                    + self.apply_order(*bytes.first().expect("Unable to retrieve byte")) as u128;
                 Ok(format!("0x{:02$X} ({})", val, val, 32))
             }
             Format::I8le => {
-                let val: i8 = (self.apply_order(*bytes.first().unwrap()) & 0xFF) as i8;
+                let val: i8 = (self.apply_order(*bytes.first().expect("Unable to retrieve byte"))
+                    & 0xFF) as i8;
                 Ok(format!("{:#04X} ({})", val, val))
             }
             Format::I16le => {
-                let val: i16 = self.apply_order(*bytes.first().unwrap()) as i16;
+                let val: i16 =
+                    self.apply_order(*bytes.first().expect("Unable to retrieve byte")) as i16;
                 Ok(format!("{:#06X} ({})", val, val))
             }
             Format::I32le => {
-                let val: i32 = ((self.apply_order(*bytes.get(1).unwrap()) as i32) << 16)
-                    + (self.apply_order(*bytes.first().unwrap()) as i32);
+                let val: i32 = ((self.apply_order(*bytes.get(1).expect("Unable to retrieve byte"))
+                    as i32)
+                    << 16)
+                    + (self.apply_order(*bytes.first().expect("Unable to retrieve byte")) as i32);
                 Ok(format!("0x{:02$X} ({})", val, val, 8))
             }
             Format::I64le => {
-                let val: i64 = ((self.apply_order(*bytes.get(3).unwrap()) as i64) << 48)
-                    + ((self.apply_order(*bytes.get(2).unwrap()) as i64) << 32)
-                    + ((self.apply_order(*bytes.get(1).unwrap()) as i64) << 16)
-                    + self.apply_order(*bytes.first().unwrap()) as i64;
+                let val: i64 = ((self.apply_order(*bytes.get(3).expect("Unable to retrieve byte"))
+                    as i64)
+                    << 48)
+                    + ((self.apply_order(*bytes.get(2).expect("Unable to retrieve byte")) as i64)
+                        << 32)
+                    + ((self.apply_order(*bytes.get(1).expect("Unable to retrieve byte")) as i64)
+                        << 16)
+                    + self.apply_order(*bytes.first().expect("Unable to retrieve byte")) as i64;
                 Ok(format!("0x{:02$X} ({})", val, val, 16))
             }
             Format::I128le => {
-                let val: i128 = ((self.apply_order(*bytes.get(7).unwrap()) as i128) << 112)
-                    + ((self.apply_order(*bytes.get(6).unwrap()) as i128) << 96)
-                    + ((self.apply_order(*bytes.get(5).unwrap()) as i128) << 80)
-                    + ((self.apply_order(*bytes.get(4).unwrap()) as i128) << 64)
-                    + ((self.apply_order(*bytes.get(3).unwrap()) as i128) << 48)
-                    + ((self.apply_order(*bytes.get(2).unwrap()) as i128) << 32)
-                    + ((self.apply_order(*bytes.get(1).unwrap()) as i128) << 16)
-                    + self.apply_order(*bytes.first().unwrap()) as i128;
+                let val: i128 = ((self.apply_order(*bytes.get(7).expect("Unable to retrieve byte"))
+                    as i128)
+                    << 112)
+                    + ((self.apply_order(*bytes.get(6).expect("Unable to retrieve byte")) as i128)
+                        << 96)
+                    + ((self.apply_order(*bytes.get(5).expect("Unable to retrieve byte")) as i128)
+                        << 80)
+                    + ((self.apply_order(*bytes.get(4).expect("Unable to retrieve byte")) as i128)
+                        << 64)
+                    + ((self.apply_order(*bytes.get(3).expect("Unable to retrieve byte")) as i128)
+                        << 48)
+                    + ((self.apply_order(*bytes.get(2).expect("Unable to retrieve byte")) as i128)
+                        << 32)
+                    + ((self.apply_order(*bytes.get(1).expect("Unable to retrieve byte")) as i128)
+                        << 16)
+                    + self.apply_order(*bytes.first().expect("Unable to retrieve byte")) as i128;
                 Ok(format!("0x{:02$X} ({})", val, val, 32))
             }
         }
