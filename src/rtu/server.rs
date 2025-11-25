@@ -11,7 +11,7 @@ use std::{
 use tokio::sync::mpsc::Sender;
 use tokio_modbus::prelude::{ExceptionCode, Request, Response, SlaveRequest};
 use tokio_modbus::server::rtu::Server as RtuServer;
-use tokio_serial::SerialStream;
+use tokio_serial::{DataBits, Parity, SerialStream, StopBits};
 
 struct Service {
     memory: Arc<Mutex<Memory>>,
@@ -303,7 +303,36 @@ impl Server {
     }
 
     pub async fn run(&self) {
-        let builder = tokio_serial::new(self.config.path.clone(), self.config.baud_rate);
+        let mut builder = tokio_serial::new(self.config.path.clone(), self.config.baud_rate);
+        if let Some(v) = self.config.data_bits {
+            builder = builder.data_bits(match v {
+                5 => DataBits::Five,
+                6 => DataBits::Six,
+                7 => DataBits::Seven,
+                8 => DataBits::Eight,
+                _ => panic!("Invalid data bits specified"),
+            });
+        }
+        if let Some(v) = self.config.stop_bits {
+            builder = builder.stop_bits(match v {
+                1 => StopBits::One,
+                2 => StopBits::Two,
+                _ => panic!("Invalid stop bits specified"),
+            });
+        }
+        if let Some(ref v) = self.config.parity {
+            let v = v.to_lowercase();
+            if v == "odd" {
+                builder = builder.parity(Parity::Odd);
+            } else if v == "even" {
+                builder = builder.parity(Parity::Even);
+            } else if v == "none" {
+                builder = builder.parity(Parity::None);
+            } else {
+                panic!("Invalid parity specified");
+            }
+        }
+
         match SerialStream::open(&builder) {
             Ok(serial_stream) => {
                 let server = RtuServer::new(serial_stream);

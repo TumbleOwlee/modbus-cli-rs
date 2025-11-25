@@ -13,10 +13,10 @@ use tokio::sync::mpsc::{Receiver, Sender};
 use tokio_modbus::prelude::SlaveId;
 use tokio_modbus::prelude::{rtu, Client as ModbusClient, Reader, Slave, SlaveContext, Writer};
 use tokio_modbus::FunctionCode;
-use tokio_serial::SerialStream;
+use tokio_serial::{DataBits, Parity, SerialStream, StopBits};
 
 pub struct Client {
-    rtu_config: RtuConfig,
+    config: RtuConfig,
     memory: Arc<Mutex<Memory>>,
     operations: Vec<(SlaveId, FunctionCode, Range<usize>)>,
     status_sender: Sender<Status>,
@@ -35,7 +35,7 @@ impl Client {
     ) -> Self {
         let operations = Self::init(app_config);
         Self {
-            rtu_config,
+            config: rtu_config,
             memory,
             operations,
             status_sender,
@@ -151,10 +151,39 @@ impl Client {
     }
 
     pub async fn run(&mut self, delay_after_connect: u64, interval_ms: u64, timeout_ms: u64) {
-        let builder = tokio_serial::new(self.rtu_config.path.clone(), self.rtu_config.baud_rate);
+        let mut builder = tokio_serial::new(self.config.path.clone(), self.config.baud_rate);
+        if let Some(v) = self.config.data_bits {
+            builder = builder.data_bits(match v {
+                5 => DataBits::Five,
+                6 => DataBits::Six,
+                7 => DataBits::Seven,
+                8 => DataBits::Eight,
+                _ => panic!("Invalid data bits specified"),
+            });
+        }
+        if let Some(v) = self.config.stop_bits {
+            builder = builder.stop_bits(match v {
+                1 => StopBits::One,
+                2 => StopBits::Two,
+                _ => panic!("Invalid stop bits specified"),
+            });
+        }
+        if let Some(ref v) = self.config.parity {
+            let v = v.to_lowercase();
+            if v == "odd" {
+                builder = builder.parity(Parity::Odd);
+            } else if v == "even" {
+                builder = builder.parity(Parity::Even);
+            } else if v == "none" {
+                builder = builder.parity(Parity::None);
+            } else {
+                panic!("Invalid parity specified");
+            }
+        }
+
         let port =
             SerialStream::open(&builder).panic(|e| format!("Failed to open SerialStream ({e})"));
-        let slave = Slave(self.rtu_config.slave);
+        let slave = Slave(self.config.slave);
         let mut connection = Some(rtu::attach_slave(port, slave));
         if connection.is_some() {
             let _ = self
@@ -165,7 +194,7 @@ impl Client {
                 .log_sender
                 .send(LogMsg::ok(&format!(
                     "Modbus RTU connected to {} with rate {}",
-                    self.rtu_config.path, self.rtu_config.baud_rate
+                    self.config.path, self.config.baud_rate
                 )))
                 .await;
         } else {
@@ -177,7 +206,7 @@ impl Client {
                 .log_sender
                 .send(LogMsg::err(&format!(
                     "Modbus TCP failed to connect to {} with baud rate {}",
-                    self.rtu_config.path, self.rtu_config.baud_rate
+                    self.config.path, self.config.baud_rate
                 )))
                 .await;
         };
@@ -316,7 +345,7 @@ impl Client {
                                 .log_sender
                                 .send(LogMsg::ok(&format!(
                                     "Modbus RTU disconnected from {} with baud rate {}",
-                                    self.rtu_config.path, self.rtu_config.baud_rate
+                                    self.config.path, self.config.baud_rate
                                 )))
                                 .await;
                             disconnect = true;
@@ -436,10 +465,10 @@ impl Client {
                 // Reset connection on error
                 if reconnect {
                     let builder =
-                        tokio_serial::new(self.rtu_config.path.clone(), self.rtu_config.baud_rate);
+                        tokio_serial::new(self.config.path.clone(), self.config.baud_rate);
                     let port = SerialStream::open(&builder)
                         .panic(|e| format!("Failed to open SerialStream ({e})"));
-                    let slave = Slave(self.rtu_config.slave);
+                    let slave = Slave(self.config.slave);
                     connection = Some(rtu::attach_slave(port, slave));
                     if connection.is_some() {
                         let _ = self
@@ -450,7 +479,7 @@ impl Client {
                             .log_sender
                             .send(LogMsg::ok(&format!(
                                 "Modbus RTU reconnected successfully to {} with baud rate {}",
-                                self.rtu_config.path, self.rtu_config.baud_rate
+                                self.config.path, self.config.baud_rate
                             )))
                             .await;
                     } else {
@@ -458,17 +487,16 @@ impl Client {
                             .log_sender
                             .send(LogMsg::err(&format!(
                                 "Modbus RTU failed to reconnect to {} with baud rate {}",
-                                self.rtu_config.path, self.rtu_config.baud_rate
+                                self.config.path, self.config.baud_rate
                             )))
                             .await;
                     }
                 }
             } else if let Ok(Command::Connect) = self.cmd_receiver.try_recv() {
-                let builder =
-                    tokio_serial::new(self.rtu_config.path.clone(), self.rtu_config.baud_rate);
+                let builder = tokio_serial::new(self.config.path.clone(), self.config.baud_rate);
                 let port = SerialStream::open(&builder)
                     .panic(|e| format!("Failed to open SerialStream ({e})"));
-                let slave = Slave(self.rtu_config.slave);
+                let slave = Slave(self.config.slave);
                 connection = Some(rtu::attach_slave(port, slave));
                 if connection.is_some() {
                     let _ = self
@@ -479,7 +507,7 @@ impl Client {
                         .log_sender
                         .send(LogMsg::ok(&format!(
                             "Modbus RTU connected successfully to {} with baud rate {}",
-                            self.rtu_config.path, self.rtu_config.baud_rate
+                            self.config.path, self.config.baud_rate
                         )))
                         .await;
                 } else {
@@ -487,7 +515,7 @@ impl Client {
                         .log_sender
                         .send(LogMsg::err(&format!(
                             "Modbus RTU failed to connect to {} with baud rate {}",
-                            self.rtu_config.path, self.rtu_config.baud_rate
+                            self.config.path, self.config.baud_rate
                         )))
                         .await;
                 }
