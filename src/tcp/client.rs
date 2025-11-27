@@ -276,7 +276,7 @@ impl Client {
                             .send(LogMsg::info(&format!(
                                 "Read address space [ {start:#06X} ({start}), {end:#06X} ({end}) ) successful.",
                                 start = op.start(),
-                                end = op.start()
+                                end = op.end()
                             )))
                             .await;
                         let mut memory = self.memory.lock().expect("Unable to lock memory");
@@ -305,7 +305,7 @@ impl Client {
                             .send(LogMsg::err(&format!(
                                 "Read address space [ {start:#06X} ({start}), {end:#06X} ({end}) ) failed.",
                                 start = op.start(),
-                                end = op.start()
+                                end = op.end()
                             )))
                             .await;
                         let _ = self

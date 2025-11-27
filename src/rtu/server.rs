@@ -11,7 +11,7 @@ use std::{
 use tokio::sync::mpsc::Sender;
 use tokio_modbus::prelude::{ExceptionCode, Request, Response, SlaveRequest};
 use tokio_modbus::server::rtu::Server as RtuServer;
-use tokio_serial::{DataBits, Parity, SerialStream, StopBits};
+use tokio_serial::{DataBits, Parity, SerialPortBuilder, SerialStream, StopBits};
 
 struct Service {
     memory: Arc<Mutex<Memory>>,
@@ -302,36 +302,79 @@ impl Server {
         }
     }
 
-    pub async fn run(&self) {
+    async fn create_serial_builder(&self) -> SerialPortBuilder {
         let mut builder = tokio_serial::new(self.config.path.clone(), self.config.baud_rate);
-        if let Some(v) = self.config.data_bits {
-            builder = builder.data_bits(match v {
-                5 => DataBits::Five,
-                6 => DataBits::Six,
-                7 => DataBits::Seven,
-                8 => DataBits::Eight,
-                _ => panic!("Invalid data bits specified"),
-            });
+        let data_bits = self.config.data_bits.unwrap_or(8);
+        let stop_bits = self.config.stop_bits.unwrap_or(1);
+        let parity = self
+            .config
+            .parity
+            .as_ref()
+            .unwrap_or(&"NONE".to_string())
+            .to_uppercase();
+        let flow_control = self
+            .config
+            .flow_control
+            .as_ref()
+            .unwrap_or(&crate::rtu::FlowControl::None);
+
+        builder = builder.data_bits(match data_bits {
+            5 => DataBits::Five,
+            6 => DataBits::Six,
+            7 => DataBits::Seven,
+            8 => DataBits::Eight,
+            _ => panic!("Invalid data bits specified."),
+        });
+
+        builder = builder.stop_bits(match stop_bits {
+            1 => StopBits::One,
+            2 => StopBits::Two,
+            _ => panic!("Invalid stop bits specified"),
+        });
+
+        if parity == "ODD" {
+            builder = builder.parity(Parity::Odd);
+        } else if parity == "EVEN" {
+            builder = builder.parity(Parity::Even);
+        } else if parity == "NONE" {
+            builder = builder.parity(Parity::None);
+        } else {
+            panic!("Invalid parity specified");
         }
-        if let Some(v) = self.config.stop_bits {
-            builder = builder.stop_bits(match v {
-                1 => StopBits::One,
-                2 => StopBits::Two,
-                _ => panic!("Invalid stop bits specified"),
-            });
-        }
-        if let Some(ref v) = self.config.parity {
-            let v = v.to_lowercase();
-            if v == "odd" {
-                builder = builder.parity(Parity::Odd);
-            } else if v == "even" {
-                builder = builder.parity(Parity::Even);
-            } else if v == "none" {
-                builder = builder.parity(Parity::None);
-            } else {
-                panic!("Invalid parity specified");
-            }
-        }
+
+        builder = builder.flow_control(match flow_control {
+            crate::rtu::FlowControl::None => tokio_serial::FlowControl::None,
+            crate::rtu::FlowControl::Software => tokio_serial::FlowControl::Software,
+            crate::rtu::FlowControl::Hardware => tokio_serial::FlowControl::Hardware,
+        });
+
+        builder
+    }
+
+    fn config_as_str(&self) -> String {
+        let path = &self.config.path;
+        let baud_rate = self.config.baud_rate;
+        let data_bits = self.config.data_bits.unwrap_or(8);
+        let stop_bits = self.config.stop_bits.unwrap_or(1);
+        let parity = self
+            .config
+            .parity
+            .as_ref()
+            .unwrap_or(&"NONE".to_string())
+            .to_uppercase();
+        let flow_control = self
+            .config
+            .flow_control
+            .as_ref()
+            .unwrap_or(&crate::rtu::FlowControl::None);
+        format!(
+            "{}, baud rate: {}, data bits: {}, parity: {}, stop bits: {}, flow control: {}",
+            path, baud_rate, data_bits, parity, stop_bits, flow_control
+        )
+    }
+
+    pub async fn run(&self) {
+        let builder = self.create_serial_builder().await;
 
         match SerialStream::open(&builder) {
             Ok(serial_stream) => {
@@ -340,7 +383,10 @@ impl Server {
 
                 let _ = self
                     .log_sender
-                    .send(LogMsg::ok("Successfully attached to serial port."))
+                    .send(LogMsg::ok(&format!(
+                        "Successfully attached to serial port {}.",
+                        self.config_as_str()
+                    )))
                     .await;
 
                 if let Err(e) = server.serve_forever(service).await {
@@ -361,7 +407,11 @@ impl Server {
                     .await;
                 let _ = self
                     .log_sender
-                    .send(LogMsg::err(&format!("Failed to open SerialStream ({e})")))
+                    .send(LogMsg::err(&format!(
+                        "Failed to open SerialStream {} ({})",
+                        self.config_as_str(),
+                        e
+                    )))
                     .await;
             }
         }

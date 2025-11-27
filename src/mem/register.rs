@@ -193,7 +193,6 @@ pub struct Register {
     raw: Vec<u16>,
     r#type: DataType,
     access: AccessType,
-    r#virtual: bool,
     values: Option<Vec<Values>>,
 }
 
@@ -240,17 +239,12 @@ impl Register {
             raw: bytes,
             r#type: definition.get_type().clone(),
             access: definition.access_type(),
-            r#virtual: definition.is_virtual(),
             values: definition.values().clone(),
         }
     }
 
     pub fn values(&self) -> &Option<Vec<Values>> {
         &self.values
-    }
-
-    pub fn is_virtual(&self) -> bool {
-        self.r#virtual
     }
 
     pub fn slave_id(&self) -> SlaveId {

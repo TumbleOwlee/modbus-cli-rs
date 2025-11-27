@@ -1,8 +1,8 @@
 use crate::lua::module::Module;
-use anyhow::anyhow;
 use mlua::{Function as LuaFunction, Lua, StdLib, UserData};
 use std::collections::HashMap;
 
+#[allow(dead_code)]
 struct Error {
     error: mlua::Error,
     time: std::time::Instant,
@@ -64,26 +64,6 @@ impl Context {
         self.lua.load_std_libs(StdLib::TABLE)?;
         self.lua.load_std_libs(StdLib::ALL_SAFE)?;
         Ok(())
-    }
-
-    pub fn exec(&mut self, id: &str) -> Result<(), anyhow::Error> {
-        let now = std::time::Instant::now();
-        if let Some((_, ctx)) = self.funcs.iter_mut().find(|(i, _)| *i == id) {
-            if let State::Err(error) = &ctx.state {
-                if now.duration_since(error.time).as_secs() < 5 {
-                    return Err(anyhow!("Execute blocked because function is failing."));
-                }
-            }
-
-            if let Err(e) = ctx.func.call::<()>(()) {
-                ctx.state = State::Err(Error::new(e.clone()));
-                Err(e.into())
-            } else {
-                Ok(())
-            }
-        } else {
-            Err(anyhow!("Chunk of given id not loaded"))
-        }
     }
 
     pub fn exec_all(&mut self) -> Result<(), Vec<anyhow::Error>> {

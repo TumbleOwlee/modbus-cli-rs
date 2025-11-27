@@ -180,8 +180,8 @@ impl WidgetRef for Selection {
             .filter(|(i, _)| *i >= start && *i < (start + count))
             .enumerate()
         {
-            let mut bg = self.colors.row_color.bg.get(i % 2);
-            let mut fg = self.colors.row_color.fg;
+            let bg = self.colors.row_color.bg.get(i % 2);
+            let fg = self.colors.row_color.fg;
             let mut style = Style::new().fg(fg).bg(bg);
             if i == selection {
                 style = self.style.focused.reversed();
