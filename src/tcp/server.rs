@@ -219,13 +219,13 @@ impl tokio_modbus::server::Service for Service {
                     self.memory
                         .lock()
                         .expect("Unable to lock memory")
-                        .write(slave, Range::new(addr, addr + 1), &values)
+                        .write(slave, Range::new(addr, addr + values.len() as u16), &values)
                         .map_err(|e| {
                             let _ = self.log_sender.try_send(LogMsg::err(&format!(
                                 "Slave: {}, WriteMultipleCoils: [{:#06X}, {:#06X}) ({})",
                                 slave,
                                 addr,
-                                addr + 1,
+                                addr + values.len() as u16,
                                 e
                             )));
                             Self::Exception::IllegalDataAddress
@@ -235,7 +235,7 @@ impl tokio_modbus::server::Service for Service {
                                 "Slave: {}, WriteMultipleCoils: [{:#06X}, {:#06X}) = {}",
                                 slave,
                                 addr,
-                                addr + 1,
+                                addr + values.len() as u16,
                                 to_str(&values)
                             )));
                             Response::WriteMultipleCoils(addr, values.len() as u16)
