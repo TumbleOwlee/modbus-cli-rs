@@ -7,6 +7,7 @@ use crate::AppConfig;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::Display;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use tokio_modbus::prelude::SlaveId;
 use tokio_modbus::FunctionCode;
@@ -88,6 +89,12 @@ pub enum Values {
     Value(Value),
 }
 
+static GLOBAL_COUNTER: AtomicUsize = AtomicUsize::new(0);
+
+pub fn next_counter() -> usize {
+    GLOBAL_COUNTER.fetch_add(1, Ordering::SeqCst)
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Definition {
     id: Option<String>,
@@ -102,6 +109,8 @@ pub struct Definition {
     on_update: Option<String>,
     r#virtual: Option<bool>,
     values: Option<Vec<Values>>,
+    #[serde(skip, default = "next_counter")]
+    index: usize,
 }
 
 impl Definition {
@@ -131,6 +140,7 @@ impl Definition {
             on_update,
             r#virtual,
             values,
+            index: next_counter(),
         }
     }
 
@@ -181,6 +191,10 @@ impl Definition {
     pub fn on_update(&self) -> &Option<String> {
         &self.on_update
     }
+
+    pub fn get_index(&self) -> usize {
+        self.index
+    }
 }
 
 #[derive(Clone)]
@@ -194,6 +208,7 @@ pub struct Register {
     r#type: DataType,
     access: AccessType,
     values: Option<Vec<Values>>,
+    index: usize,
 }
 
 impl Register {
@@ -240,6 +255,7 @@ impl Register {
             r#type: definition.get_type().clone(),
             access: definition.access_type(),
             values: definition.values().clone(),
+            index: definition.get_index(),
         }
     }
 
@@ -277,6 +293,10 @@ impl Register {
 
     pub fn access_type(&self) -> AccessType {
         self.access.clone()
+    }
+
+    pub fn get_index(&self) -> usize {
+        self.index
     }
 }
 

@@ -145,6 +145,7 @@ pub enum Popup {
 }
 
 pub enum Order {
+    Default,
     NameAsc,
     NameDesc,
     AddressAsc,
@@ -152,8 +153,19 @@ pub enum Order {
 }
 
 impl Order {
+    fn to_string(&self) -> &'static str {
+        match self {
+            Order::Default => "Default Ordering",
+            Order::NameAsc => "Order by Name (Ascending)",
+            Order::NameDesc => "Order by Name (Descending)",
+            Order::AddressAsc => "Order by Address (Ascending)",
+            Order::AddressDesc => "Order by Address (Descending)",
+        }
+    }
+
     fn apply(&self, a: &(&String, &Register), b: &(&String, &Register)) -> std::cmp::Ordering {
         match self {
+            Order::Default => Ord::cmp(&a.1.get_index(), &b.1.get_index()),
             Order::NameAsc => Ord::cmp(&a.1.slave_id(), &b.1.slave_id())
                 .then(a.0.cmp(b.0))
                 .then(a.1.address().cmp(&b.1.address())),
@@ -171,10 +183,11 @@ impl Order {
 
     fn next(&self) -> Self {
         match self {
+            Order::Default => Order::NameAsc,
             Order::NameAsc => Order::NameDesc,
             Order::NameDesc => Order::AddressAsc,
             Order::AddressAsc => Order::AddressDesc,
-            Order::AddressDesc => Order::NameAsc,
+            Order::AddressDesc => Order::Default,
         }
     }
 }
@@ -244,7 +257,7 @@ impl App {
             is_compact: false,
             exec_lua: true,
             mode,
-            ordering: Order::AddressAsc,
+            ordering: Order::Default,
             register_handler,
             register_table: UiTable::new(len, ITEM_HEIGHT),
             log_entries: Vec::new(),
@@ -886,9 +899,9 @@ fn render_register_footer(f: &mut Frame, app: &App, area: Rect, status: String) 
     ])
     .split(area);
     let message = if let Mode::Client = app.mode {
-        Line::from(str!("CLIENT MODE: ") + &status)
+        Line::from(str!("CLIENT MODE: ") + &status + " | " + app.ordering.to_string())
     } else {
-        Line::from(str!("SERVER MODE"))
+        Line::from(str!("SERVER MODE") + " | " + app.ordering.to_string())
     };
     let status_footer = Paragraph::new(message)
         .style(
