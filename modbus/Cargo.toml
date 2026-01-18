@@ -1,0 +1,25 @@
+[package]
+name = "modbus-cli-rs"
+version = "0.3.0"
+edition = "2021"
+authors = ["David Loewe <49597367+TumbleOwlee@users.noreply.github.com>"]
+
+[dependencies]
+anyhow = "1.0.97"
+async-trait = "0.1.88"
+byteorder = "1.5.0"
+chrono = "0.4.40"
+clap = { version = "4.5.34", features = ["derive"] }
+crossterm = "0.29.0"
+futures-util = "0.3.31"
+itertools = "0.14.0"
+lua = { path = "../lua" }
+once_cell = "1.21.1"
+ratatui = { version = "0.29.0", features = ["all-widgets", "unstable-widget-ref"] }
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.140"
+tokio = { version = "1.44.1", features = ["time"] }
+tokio-modbus = { version = "0.16.1", features = ["tcp-server", "rtu-server", "futures-util"] }
+tokio-serial = "5.4.5"
+toml = "0.9.8"
+unicode-width = "0.2.0"

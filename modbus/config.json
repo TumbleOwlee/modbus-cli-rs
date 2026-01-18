@@ -1,0 +1,52 @@
+{
+    "ui": {
+        "history_length": 30,
+    },
+    "net": {
+        "delay_afer_connect": 500,
+        "interval_ms": 500,
+    },
+    "memory": [
+        {
+            "slave_id": 0,
+            "range": {
+                "start": 0,
+                "end": 100
+            }
+        }
+    ],
+    "definitions": {
+        "coil": {
+            "slave_id": 1,
+            "read_code": 1,
+            "address": 0,
+            "length": 1,
+            "access": "ReadWrite",
+            "type": "U16"
+        },
+        "discrete_input": {
+            "slave_id": 1,
+            "read_code": 2,
+            "address": 1,
+            "length": 1,
+            "access": "ReadWrite",
+            "type": "U16"
+        },
+        "input_register": {
+            "slave_id": 1,
+            "read_code": 3,
+            "address": 2,
+            "length": 1,
+            "access": "ReadWrite",
+            "type": "U16"
+        },
+        "holding_register": {
+            "slave_id": 1,
+            "read_code": 4,
+            "address": 3,
+            "length": 1,
+            "access": "ReadWrite",
+            "type": "U16"
+        }
+    }
+}

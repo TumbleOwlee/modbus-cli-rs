@@ -1,0 +1,15 @@
+[package]
+name = "net"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+memory = { path = "../memory" }
+
+anyhow = "1.0.100"
+itertools = "0.14.0"
+serde = { version = "1.0.228", features = ["derive"] }
+tokio = { version = "1.48.0", features = ["time"] }
+tokio-modbus = { version = "0.17.0", features = ["futures-util", "rtu-server", "tcp-server"] }
+tokio-serial = "5.4.5"
+clap = { version = "4.5.51", features = ["derive"] }

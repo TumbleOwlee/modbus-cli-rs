@@ -1,0 +1,8 @@
+[package]
+name = "lua"
+version = "0.1.0"
+edition = "2021"
+authors = ["David Loewe <49597367+TumbleOwlee@users.noreply.github.com>"]
+
+[dependencies]
+mlua = { version = "0.11.4", features = ["anyhow", "lua54", "vendored"] }
