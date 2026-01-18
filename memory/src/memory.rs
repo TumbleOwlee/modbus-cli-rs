@@ -250,7 +250,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::{Kind, Memory, Type, Value, ValueRange};
+    use crate::{Kind, Type, Value};
 
     #[test]
     fn ut_memory() {
