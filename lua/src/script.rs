@@ -35,3 +35,24 @@ impl Script {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::Script;
+    use mlua::Lua;
+
+    #[test]
+    fn ut_script() {
+        let lua = Lua::new();
+
+        let func = lua.load("local test = 1").into_function().unwrap();
+        let mut script = Script::init(func);
+        let result = script.exec();
+        assert_eq!(result.is_ok(), true);
+
+        let func = lua.load("func()").into_function().unwrap();
+        let mut script = Script::init(func);
+        let result = script.exec();
+        assert_eq!(result.is_err(), true);
+    }
+}

@@ -30,8 +30,8 @@ struct Context(HashMap<&'static str, Vec<Box<dyn Joinable>>>);
 
 /// Name of the global context
 ///
-/// A task spawned by `crate::tokio::spawn_detach()` or `crate::tokio::spawn()` will be part of
-/// the global context. These tasks can be joined using `crate::tokio::join_all()`.
+/// A task spawned by `util::tokio::spawn_detach()` or `util::tokio::spawn()` will be part of
+/// the global context. These tasks can be joined using `util::tokio::join_all()`.
 #[allow(dead_code)]
 pub static GLOBAL_CONTEXT: &str = "";
 
@@ -51,7 +51,7 @@ static CONTEXT: Lazy<Mutex<RefCell<Context>>> = Lazy::new(|| Mutex::new(RefCell:
 /// # Examples
 ///
 /// ```rust
-/// use crate::tokio::spawn_detach;
+/// use util::tokio::spawn_detach;
 ///
 /// #[tokio::main]
 /// async fn main() {
@@ -86,7 +86,7 @@ where
 /// # Examples
 ///
 /// ```rust
-/// use crate::tokio::spawn_detach_with_context;
+/// use util::tokio::spawn_detach_with_context;
 ///
 /// #[tokio::main]
 /// async fn main() {
@@ -96,7 +96,6 @@ where
 ///     }).await;
 /// }
 /// ```
-#[allow(dead_code)]
 pub async fn spawn_detach_with_context<F: Send + IntoFuture + Future + 'static>(
     ctx: &'static str,
     future: F,
@@ -125,7 +124,7 @@ pub async fn spawn_detach_with_context<F: Send + IntoFuture + Future + 'static>(
 /// # Example
 ///
 /// ```rust
-/// use crate::tokio::{spawn_detach, spawn_detach_with_context, join_all};
+/// use util::tokio::{spawn_detach, spawn_detach_with_context, join_all};
 ///
 /// #[tokio::main]
 /// async fn main() {
@@ -172,7 +171,7 @@ pub async fn join_all() {
 /// # Example
 ///
 /// ```rust
-/// use crate::tokio::{spawn_detach, spawn_detach_with_context, join_all_of_context};
+/// use util::tokio::{spawn_detach, spawn_detach_with_context, join_all_of_context};
 ///
 /// #[tokio::main]
 /// async fn main() {

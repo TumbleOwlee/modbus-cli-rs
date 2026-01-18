@@ -27,9 +27,10 @@ macro_rules! str {
 /// error available to include the error into the panic message.
 ///
 /// ```rust
-/// use crate::util::Expect;
+/// #[should_panic]
+/// use util::Expect;
 ///
-/// let result = Err("Something");
+/// let result: Result<(), &'static str> = Ok(());
 /// result.panic(|e| format!("{} just happened", e));
 /// ```
 pub trait Expect<F: FnOnce(Self::Error) -> String> {

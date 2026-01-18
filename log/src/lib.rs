@@ -69,25 +69,25 @@ mod tests {
     use super::Log;
 
     #[test]
-    fn it_log() {
+    fn ut_log() {
         let mut log: Log<10, 5> = Log::init();
-        log.write("Some Message");
+        log.write("some message");
 
         let peak = log.peak();
         assert!(peak.is_some());
-        assert_eq!(peak.unwrap(), "Some Messa");
+        assert_eq!(peak.unwrap(), "some messa");
 
         let take = log.take();
         assert!(take.is_some());
-        assert_eq!(take.unwrap(), "Some Messa");
+        assert_eq!(take.unwrap(), "some messa");
 
         let take = log.take();
         assert!(take.is_none());
 
-        log.write("Message 1");
-        log.write("Message 2");
-        log.write("Message 3");
-        log.write("Message 4");
+        log.write("message 1");
+        log.write("message 2");
+        log.write("message 3");
+        log.write("message 4");
 
         let peak = log.peak_n(3);
         assert!(peak.is_some());
