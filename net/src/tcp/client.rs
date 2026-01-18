@@ -1,10 +1,12 @@
 use crate::tcp::Config;
-use crate::{Command, Error, Key};
+use crate::{Command, Error, Key, Operation};
 
-use memory::{Range, memory::Memory};
+use memory::{Memory, Type};
 use tokio::task::JoinHandle;
 
 use anyhow::anyhow;
+use std::fmt::Debug;
+use std::hash::Hash;
 use std::net::SocketAddr;
 use std::sync::mpsc::Receiver;
 use std::sync::{Arc, RwLock};
@@ -12,29 +14,30 @@ use std::time::{Duration, Instant};
 use tokio::time::sleep;
 use tokio_modbus::FunctionCode;
 use tokio_modbus::client::Context;
-use tokio_modbus::prelude::SlaveId;
 use tokio_modbus::prelude::{Client as ModbusClient, Reader, Slave, SlaveContext, Writer};
 
-#[derive(Debug, Clone)]
-pub struct Operation {
-    pub slave_id: SlaveId,
-    pub fn_code: FunctionCode,
-    pub range: Range,
-}
-
-pub struct ClientBuilder {
+pub struct ClientBuilder<T>
+where
+    T: Hash + Debug + PartialEq + Eq + Clone + Default + Send + Sync + 'static,
+{
+    id: T,
     config: Arc<RwLock<Config>>,
     operations: Arc<RwLock<Vec<Operation>>>,
-    memory: Arc<RwLock<Memory<Key>>>,
+    memory: Arc<RwLock<Memory<Key<T>>>>,
 }
 
-impl ClientBuilder {
+impl<T> ClientBuilder<T>
+where
+    T: Hash + Debug + PartialEq + Eq + Clone + Default + Send + Sync + 'static,
+{
     pub fn new(
+        id: T,
         config: Arc<RwLock<Config>>,
         operations: Arc<RwLock<Vec<Operation>>>,
-        memory: Arc<RwLock<Memory<Key>>>,
+        memory: Arc<RwLock<Memory<Key<T>>>>,
     ) -> Self {
         Self {
+            id,
             config,
             operations,
             memory,
@@ -55,9 +58,11 @@ impl ClientBuilder {
                 let timeout_ms = guard.timeout_ms;
                 let delay_ms = guard.delay_ms;
                 let interval_ms = guard.interval_ms;
+                let id = self.id.clone();
                 Ok(tokio::task::spawn(async move {
                     client
                         .run(
+                            id,
                             operations,
                             memory,
                             receiver,
@@ -177,17 +182,21 @@ impl Client {
         }
     }
 
-    pub async fn run(
+    pub async fn run<T>(
         mut self,
+        id: T,
         operations: Arc<RwLock<Vec<Operation>>>,
-        memory: Arc<RwLock<Memory<Key>>>,
+        memory: Arc<RwLock<Memory<Key<T>>>>,
         receiver: Receiver<Command>,
         log: fn(&str) -> (),
         status: fn(&str) -> (),
         timeout_ms: usize,
         delay_ms: usize,
         interval_ms: usize,
-    ) -> Result<(), Error> {
+    ) -> Result<(), Error>
+    where
+        T: Hash + Debug + PartialEq + Eq + Clone + Default + Send + Sync + 'static,
+    {
         let mut time: Option<Instant> = None;
 
         // Wait timeout until first operation
@@ -220,10 +229,17 @@ impl Client {
                             match memory.write() {
                                 Ok(mut guard) => {
                                     let key = Key {
+                                        id: id.clone(),
                                         slave_id: operation.slave_id,
-                                        fn_code: fc.value(),
                                     };
-                                    if !guard.write(key, &range, &values) {
+                                    let ty = if fc == FunctionCode::ReadDiscreteInputs
+                                        || fc == FunctionCode::ReadHoldingRegisters
+                                    {
+                                        Type::Register
+                                    } else {
+                                        Type::Coil
+                                    };
+                                    if !guard.write(key, &ty, &range, &values) {
                                         log(&format!(
                                             "Failed to to update memory for [{start}, {end})."
                                         ))

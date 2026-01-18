@@ -1,6 +1,6 @@
 use crate::range::Range;
 use crate::slice::Slice;
-use crate::value::Kind;
+use crate::value::{Kind, Type};
 use std::collections::BTreeMap;
 use std::{collections::HashMap, fmt::Debug, hash::Hash};
 
@@ -54,8 +54,8 @@ where
         true
     }
 
-    pub fn write(&mut self, id: K, range: &Range, values: &[u16]) -> bool {
-        if range.length() != values.len() || !self.writable(&id, range) {
+    pub fn write(&mut self, id: K, ty: &Type, range: &Range, values: &[u16]) -> bool {
+        if range.length() != values.len() || !self.writable(&id, ty, range) {
             return false;
         }
 
@@ -102,7 +102,7 @@ where
         }
     }
 
-    pub fn writable(&mut self, id: &K, range: &Range) -> bool {
+    pub fn writable(&mut self, id: &K, ty: &Type, range: &Range) -> bool {
         let mut range = range.clone();
         match self.slices.get_mut(id) {
             Some(map) => {
@@ -113,7 +113,7 @@ where
                     let count = end - start;
 
                     if count != 0 {
-                        if !slice.writable(&Range::new(start, count)) {
+                        if !slice.writable(ty, &Range::new(start, count)) {
                             return false;
                         }
                         range = Range::new(range.start + count, range.length() - count);
@@ -130,7 +130,7 @@ where
                         let count = end - start;
 
                         if count != 0 {
-                            if !slice.writable(&Range::new(start, count)) {
+                            if !slice.writable(ty, &Range::new(start, count)) {
                                 return false;
                             }
                             range = Range::new(range.start + count, range.length() - count);
@@ -147,8 +147,8 @@ where
         }
     }
 
-    pub fn read(&self, id: K, range: &Range) -> Option<Vec<u16>> {
-        if !self.readable(&id, range) {
+    pub fn read(&self, id: K, ty: &Type, range: &Range) -> Option<Vec<u16>> {
+        if !self.readable(&id, ty, range) {
             return None;
         }
 
@@ -202,7 +202,7 @@ where
         }
     }
 
-    pub fn readable(&self, id: &K, range: &Range) -> bool {
+    pub fn readable(&self, id: &K, ty: &Type, range: &Range) -> bool {
         let mut range = range.clone();
         match self.slices.get(id) {
             Some(map) => {
@@ -213,7 +213,7 @@ where
                     let count = end - start;
 
                     if count != 0 {
-                        if !slice.readable(&Range::new(start, count)) {
+                        if !slice.readable(ty, &Range::new(start, count)) {
                             return false;
                         };
                         range = Range::new(range.start + count, range.length() - count);
@@ -230,7 +230,7 @@ where
                         let count = end - start;
 
                         if count != 0 {
-                            if !slice.readable(&Range::new(start, count)) {
+                            if !slice.readable(ty, &Range::new(start, count)) {
                                 return false;
                             };
                             range = Range::new(range.start + count, range.length() - count);
@@ -245,5 +245,30 @@ where
             }
             _ => false,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{Kind, Memory, Type, Value, ValueRange};
+
+    #[test]
+    fn ut_memory() {
+        assert_eq!(
+            Value::default(&Kind::Read(Type::Coil)),
+            Value::Read(Type::Coil, 0)
+        );
+        assert_eq!(
+            Value::default(&Kind::Write(Type::Coil)),
+            Value::Write(Type::Coil, 0)
+        );
+        assert_eq!(
+            Value::default(&Kind::Combined(Type::Coil)),
+            Value::Combined(Type::Coil, 0)
+        );
+        assert_eq!(
+            Value::default(&Kind::Separated(Type::Coil)),
+            Value::Separated(Type::Coil, (0, 0))
+        );
     }
 }

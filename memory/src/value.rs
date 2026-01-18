@@ -2,19 +2,25 @@ use crate::range::Range;
 use std::fmt::Debug;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Type {
+    Coil,
+    Register,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Value {
-    Read(u16),
-    Write(u16),
-    Combined(u16),
-    Separated((u16, u16)),
+    Read(Type, u16),
+    Write(Type, u16),
+    Combined(Type, u16),
+    Separated(Type, (u16, u16)),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Kind {
-    Read,
-    Write,
-    Combined,
-    Separated,
+    Read(Type),
+    Write(Type),
+    Combined(Type),
+    Separated(Type),
 }
 
 impl Value {
@@ -24,10 +30,10 @@ impl Value {
 
     pub fn from_u16(kind: &Kind, init: u16) -> Self {
         match kind {
-            Kind::Read => Value::Read(init),
-            Kind::Write => Value::Write(init),
-            Kind::Combined => Value::Combined(init),
-            Kind::Separated => Value::Separated((init, init)),
+            Kind::Read(t) => Value::Read(t.clone(), init),
+            Kind::Write(t) => Value::Write(t.clone(), init),
+            Kind::Combined(t) => Value::Combined(t.clone(), init),
+            Kind::Separated(t) => Value::Separated(t.clone(), (init, init)),
         }
     }
 }
@@ -57,28 +63,49 @@ impl<'a> ValueRange<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Kind, Value, ValueRange};
+    use super::{Kind, Type, Value, ValueRange};
 
     #[test]
     fn ut_value_default() {
-        assert_eq!(Value::default(&Kind::Read), Value::Read(0));
-        assert_eq!(Value::default(&Kind::Write), Value::Write(0));
-        assert_eq!(Value::default(&Kind::Combined), Value::Combined(0));
-        assert_eq!(Value::default(&Kind::Separated), Value::Separated((0, 0)));
+        assert_eq!(
+            Value::default(&Kind::Read(Type::Coil)),
+            Value::Read(Type::Coil, 0)
+        );
+        assert_eq!(
+            Value::default(&Kind::Write(Type::Coil)),
+            Value::Write(Type::Coil, 0)
+        );
+        assert_eq!(
+            Value::default(&Kind::Combined(Type::Coil)),
+            Value::Combined(Type::Coil, 0)
+        );
+        assert_eq!(
+            Value::default(&Kind::Separated(Type::Coil)),
+            Value::Separated(Type::Coil, (0, 0))
+        );
     }
 
     #[test]
     fn ut_value_from_u16() {
-        assert_eq!(Value::from_u16(&Kind::Read, 1), Value::Read(1));
-        assert_eq!(Value::from_u16(&Kind::Write, 2), Value::Write(2));
-        assert_eq!(Value::from_u16(&Kind::Combined, 3), Value::Combined(3));
         assert_eq!(
-            Value::from_u16(&Kind::Separated, 4),
-            Value::Separated((4, 4))
+            Value::from_u16(&Kind::Read(Type::Coil), 1),
+            Value::Read(Type::Coil, 1)
+        );
+        assert_eq!(
+            Value::from_u16(&Kind::Write(Type::Coil), 2),
+            Value::Write(Type::Coil, 2)
+        );
+        assert_eq!(
+            Value::from_u16(&Kind::Combined(Type::Coil), 3),
+            Value::Combined(Type::Coil, 3)
+        );
+        assert_eq!(
+            Value::from_u16(&Kind::Separated(Type::Coil), 4),
+            Value::Separated(Type::Coil, (4, 4))
         );
         assert_ne!(
-            Value::from_u16(&Kind::Separated, 4),
-            Value::Separated((4, 5))
+            Value::from_u16(&Kind::Separated(Type::Coil), 4),
+            Value::Separated(Type::Coil, (4, 5))
         );
     }
 

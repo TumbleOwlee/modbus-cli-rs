@@ -1,12 +1,25 @@
-use tokio_modbus::SlaveId;
-
 pub mod rtu;
 pub mod tcp;
 
+use memory::Range;
+use std::fmt::Debug;
+use std::hash::Hash;
+use tokio_modbus::{FunctionCode, SlaveId};
+
+#[derive(Debug, Clone)]
+pub struct Operation {
+    pub slave_id: SlaveId,
+    pub fn_code: FunctionCode,
+    pub range: Range,
+}
+
 #[derive(Hash, Debug, PartialEq, Eq, Clone, Default)]
-pub struct Key {
+pub struct Key<T>
+where
+    T: Hash + Debug + PartialEq + Eq + Clone + Default + Send + Sync,
+{
+    id: T,
     slave_id: SlaveId,
-    fn_code: u8,
 }
 
 pub enum Error {
