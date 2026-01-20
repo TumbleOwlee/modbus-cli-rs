@@ -1,9 +1,13 @@
-pub mod client;
-pub mod server;
+mod client;
+mod server;
 
 use clap::Args;
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Default, Args)]
+pub use client::{Client, ClientBuilder};
+pub use server::{Server, ServerBuilder};
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default, Args)]
 pub struct Config {
     /// The device path to use for communication.
     pub path: String,
@@ -37,6 +41,6 @@ pub struct Config {
     pub delay_ms: usize,
 
     /// The interval in milliseconds between successive operations
-    #[arg(id = "interval", short, long, default_value_t = 0)]
+    #[arg(id = "interval", short('I'), long, default_value_t = 0)]
     pub interval_ms: usize,
 }

@@ -49,7 +49,7 @@ where
         receiver: Receiver<Command>,
         log: fn(&str) -> (),
         status: fn(&str) -> (),
-    ) -> Result<JoinHandle<Result<(), Error>>, anyhow::Error> {
+    ) -> Result<JoinHandle<Result<(), anyhow::Error>>, anyhow::Error> {
         match self.config.read() {
             Ok(guard) => {
                 let client = Client::connect(&guard).await?;
@@ -73,6 +73,7 @@ where
                             interval_ms,
                         )
                         .await
+                        .map_err(|e| anyhow!("{:?}", e))
                 }))
             }
             Err(e) => Err(anyhow!("{}", e)),

@@ -1,0 +1,18 @@
+[package]
+name = "cli"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.100"
+clap = { version = "4.5.54", features = ["derive"] }
+log = { path = "../log" }
+lua = { path = "../lua" }
+memory = { path = "../memory" }
+net = { path = "../net" }
+register = { path = "../register" }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+tokio = { version = "1.49.0", features = ["sync", "time", "rt"] }
+toml = "0.9.11"
+util = { path = "../util" }

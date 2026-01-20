@@ -22,6 +22,7 @@ where
     slave_id: SlaveId,
 }
 
+#[derive(Debug)]
 pub enum Error {
     TimedOut,
 }

@@ -45,7 +45,7 @@ impl Builder {
     }
 }
 
-#[derive(Getters, Setters, Serialize, Deserialize)]
+#[derive(Getters, Setters, Serialize, Deserialize, Debug, Clone)]
 pub struct Register {
     #[setters(borrow_self, into, prefix = "set_")]
     slave_id: SlaveId,

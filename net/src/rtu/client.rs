@@ -12,7 +12,7 @@ use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
 use tokio_modbus::FunctionCode;
-use tokio_modbus::client::Context;
+use tokio_modbus::client::Context as ClientContext;
 use tokio_modbus::prelude::{Client as ModbusClient, Reader, Slave, SlaveContext, Writer, rtu};
 use tokio_serial::{DataBits, Parity, SerialStream, StopBits};
 
@@ -49,7 +49,7 @@ where
         receiver: Receiver<Command>,
         log: fn(&str) -> (),
         status: fn(&str) -> (),
-    ) -> Result<JoinHandle<Result<(), Error>>, anyhow::Error> {
+    ) -> Result<JoinHandle<Result<(), anyhow::Error>>, anyhow::Error> {
         match self.config.read() {
             Ok(guard) => {
                 let client = Client::connect(&guard).await?;
@@ -73,6 +73,7 @@ where
                             interval_ms,
                         )
                         .await
+                        .map_err(|e| anyhow!("{:?}", e))
                 }))
             }
             Err(e) => Err(anyhow!("{}", e)),
@@ -81,7 +82,7 @@ where
 }
 
 pub struct Client {
-    context: Context,
+    context: ClientContext,
 }
 
 impl Client {
