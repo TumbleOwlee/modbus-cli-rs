@@ -44,12 +44,16 @@ where
         }
     }
 
-    pub async fn spawn(
+    pub async fn spawn<L, S>(
         &self,
         receiver: Receiver<Command>,
-        log: fn(&str) -> (),
-        status: fn(&str) -> (),
-    ) -> Result<JoinHandle<Result<(), anyhow::Error>>, anyhow::Error> {
+        log: L,
+        status: S,
+    ) -> Result<JoinHandle<Result<(), anyhow::Error>>, anyhow::Error>
+    where
+        L: Fn(String) -> () + Send + 'static,
+        S: Fn(String) -> () + Send + 'static,
+    {
         match self.config.read() {
             Ok(guard) => {
                 let client = Client::connect(&guard).await?;
@@ -94,14 +98,14 @@ impl Client {
                 6 => DataBits::Six,
                 7 => DataBits::Seven,
                 8 => DataBits::Eight,
-                _ => panic!("Invalid data bits specified"),
+                _ => return Err(anyhow!("Invalid data bits specified")),
             });
         }
         if let Some(v) = config.stop_bits {
             builder = builder.stop_bits(match v {
                 1 => StopBits::One,
                 2 => StopBits::Two,
-                _ => panic!("Invalid stop bits specified"),
+                _ => return Err(anyhow!("Invalid stop bits specified")),
             });
         }
         if let Some(ref v) = config.parity {
@@ -113,7 +117,7 @@ impl Client {
             } else if v == "none" {
                 builder = builder.parity(Parity::None);
             } else {
-                panic!("Invalid parity specified");
+                return Err(anyhow!("Invalid parity specified"));
             }
         }
 
@@ -204,20 +208,22 @@ impl Client {
         }
     }
 
-    pub async fn run<T>(
+    pub async fn run<T, L, S>(
         mut self,
         id: T,
         operations: Arc<RwLock<Vec<Operation>>>,
         memory: Arc<RwLock<Memory<Key<T>>>>,
         receiver: Receiver<Command>,
-        log: fn(&str) -> (),
-        status: fn(&str) -> (),
+        log: L,
+        status: S,
         timeout_ms: usize,
         delay_ms: usize,
         interval_ms: usize,
     ) -> Result<(), Error>
     where
         T: Hash + Debug + PartialEq + Eq + Clone + Default + Send + Sync + 'static,
+        L: Fn(String) -> () + Send + 'static,
+        S: Fn(String) -> () + Send + 'static,
     {
         let mut time: Option<Instant> = None;
 
@@ -247,7 +253,7 @@ impl Client {
                     let end = range.end;
                     match self.read(&operation, timeout_ms).await {
                         Ok(values) => {
-                            log(&format!("Perform read operation {fc} on [{start}, {end})."));
+                            log(format!("Perform read operation {fc} on [{start}, {end})."));
                             match memory.write() {
                                 Ok(mut guard) => {
                                     let key = Key {
@@ -262,12 +268,12 @@ impl Client {
                                         Type::Coil
                                     };
                                     if !guard.write(key, &ty, &range, &values) {
-                                        log(&format!(
+                                        log(format!(
                                             "Failed to to update memory for [{start}, {end})."
                                         ))
                                     }
                                 }
-                                Err(e) => log(&format!(
+                                Err(e) => log(format!(
                                     "Unable to access memory for [{start}, {end}). [{e}]"
                                 )),
                             }
@@ -277,7 +283,7 @@ impl Client {
                         Err(e) => {
                             retries += 1;
                             if retries > 3 {
-                                log(&format!(
+                                log(format!(
                                     "Perform read operation failed for {fc} on [{start}, {end}). [{e}]"
                                 ));
                                 return Err(Error::TimedOut);
@@ -292,8 +298,8 @@ impl Client {
                 match cmd {
                     Command::Terminate => {
                         let _ = self.context.disconnect().await;
-                        log("Client gracefully terminated.");
-                        status("Client disconnected");
+                        log("Client gracefully terminated.".to_string());
+                        status("Client disconnected".to_string());
                         return Ok(());
                     }
                     Command::WriteSingleCoil(slave, addr, coil) => {
@@ -306,13 +312,15 @@ impl Client {
                         {
                             Err(e) => {
                                 let _ = self.context.disconnect().await;
-                                log(&format!(
+                                log(format!(
                                     "WriteSingleCoil request to {addr} with {coil} timed out. Disconnecting client. [{e:?}]"
                                 ));
                                 return Err(Error::TimedOut);
                             }
                             Ok(_) => {
-                                log("WriteSingleCoil request successfully executed.");
+                                log(format!(
+                                    "WriteSingleCoil request to {addr} with {coil} successfully executed."
+                                ));
                             }
                         }
                     }
@@ -326,13 +334,13 @@ impl Client {
                         {
                             Err(e) => {
                                 let _ = self.context.disconnect().await;
-                                log(&format!(
+                                log(format!(
                                     "WriteMultipleCoils request to {addr} with {coils:?} timed out. Disconnecting client. [{e:?}]"
                                 ));
                                 return Err(Error::TimedOut);
                             }
                             Ok(_) => {
-                                log(&format!(
+                                log(format!(
                                     "WriteMultipleCoils request to {addr} with {coils:?} successfully executed."
                                 ));
                             }
@@ -348,13 +356,13 @@ impl Client {
                         {
                             Err(e) => {
                                 let _ = self.context.disconnect().await;
-                                log(&format!(
+                                log(format!(
                                     "WriteSingleRegister request to {addr} with {value} timed out. Disconnecting client. [{e:?}]"
                                 ));
                                 return Err(Error::TimedOut);
                             }
                             Ok(_) => {
-                                log(&format!(
+                                log(format!(
                                     "WriteMultipleCoils request to {addr} with {value} successfully executed."
                                 ));
                             }
@@ -370,13 +378,13 @@ impl Client {
                         {
                             Err(e) => {
                                 let _ = self.context.disconnect().await;
-                                log(&format!(
+                                log(format!(
                                     "WriteSingleRegister request to {addr} with {values:?} timed out. Disconnecting client. [{e:?}]"
                                 ));
                                 return Err(Error::TimedOut);
                             }
                             Ok(_) => {
-                                log(&format!(
+                                log(format!(
                                     "WriteMultipleCoils request to {addr} with {values:?} successfully executed."
                                 ));
                             }

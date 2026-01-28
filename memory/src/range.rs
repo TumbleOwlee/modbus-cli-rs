@@ -1,10 +1,19 @@
 use serde::{Deserialize, Serialize};
-use std::{cmp::Ordering, fmt::Debug};
+use std::{
+    cmp::Ordering,
+    fmt::{Debug, Display},
+};
 
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct Range {
     pub start: usize,
     pub end: usize,
+}
+
+impl Display for Range {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[{}, {})", self.start, self.end)
+    }
 }
 
 impl Range {

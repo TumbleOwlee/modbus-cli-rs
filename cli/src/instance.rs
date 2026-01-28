@@ -6,7 +6,7 @@ use std::fmt::Debug;
 use std::hash::Hash;
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, RwLock};
-use tokio::task::{JoinError, JoinHandle};
+use tokio::task::JoinHandle;
 
 #[derive(Clone)]
 pub struct ClientConfig<T, Config>
@@ -55,12 +55,13 @@ enum Client {
     Rtu(rtu::Client),
 }
 
-enum Server<T>
+enum Server<T, L>
 where
     T: Hash + Debug + PartialEq + Eq + Clone + Default + Send + Sync + 'static,
+    L: Fn(String) -> () + Clone + Send + Sync + 'static,
 {
-    Tcp(tcp::Server<T>),
-    Rtu(rtu::Server<T>),
+    Tcp(tcp::Server<T, L>),
+    Rtu(rtu::Server<T, L>),
 }
 
 struct ClientHandle {
@@ -135,7 +136,11 @@ where
         }
     }
 
-    pub async fn start(&mut self) -> Result<(), anyhow::Error> {
+    pub async fn start<L, S>(&mut self, log: L, status: S) -> Result<(), anyhow::Error>
+    where
+        L: Fn(String) -> () + Clone + Send + Sync + 'static,
+        S: Fn(String) -> () + Clone + Send + Sync + 'static,
+    {
         if self.handle.is_some() {
             return Err(anyhow!("instance already active"));
         }
@@ -143,9 +148,7 @@ where
         match &self.builder {
             Builder::TcpClient(builder) => {
                 let (sender, receiver) = std::sync::mpsc::channel();
-                let res = builder
-                    .spawn(receiver, |s| println!("{}", s), |s| println!("{}", s))
-                    .await;
+                let res = builder.spawn(receiver, log, status).await;
                 match res {
                     Err(e) => {
                         return Err(anyhow!("{}", e));
@@ -156,7 +159,7 @@ where
                 }
             }
             Builder::TcpServer(builder) => {
-                let res = builder.spawn(|s| println!("{}", s)).await;
+                let res = builder.spawn(log).await;
                 match res {
                     Err(e) => {
                         return Err(anyhow!("{}", e));
@@ -168,9 +171,7 @@ where
             }
             Builder::RtuClient(builder) => {
                 let (sender, receiver) = std::sync::mpsc::channel();
-                let res = builder
-                    .spawn(receiver, |s| println!("{}", s), |s| println!("{}", s))
-                    .await;
+                let res = builder.spawn(receiver, log, status).await;
                 match res {
                     Err(e) => {
                         return Err(anyhow!("{}", e));
@@ -181,7 +182,7 @@ where
                 }
             }
             Builder::RtuServer(builder) => {
-                let res = builder.spawn().await;
+                let res = builder.spawn(log).await;
                 match res {
                     Err(e) => {
                         return Err(anyhow!("{}", e));
