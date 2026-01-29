@@ -257,12 +257,20 @@ where
 
         let res = match handle {
             Some(Handle::Client(h)) => {
-                h.handle.abort();
-                h.handle.await
+                if h.handle.is_finished() {
+                    Ok(Ok(()))
+                } else {
+                    h.handle.abort();
+                    h.handle.await
+                }
             }
             Some(Handle::Server(h)) => {
-                h.handle.abort();
-                h.handle.await
+                if h.handle.is_finished() {
+                    Ok(Ok(()))
+                } else {
+                    h.handle.abort();
+                    h.handle.await
+                }
             }
             _ => {
                 unreachable!("case is unreachable");

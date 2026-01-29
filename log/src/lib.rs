@@ -1,12 +1,12 @@
-pub struct Log<const LEN: usize, const SIZE: usize> {
-    buffer: [[char; LEN]; SIZE],
+pub struct Log<const MAX_LINE_LENGTH: usize, const LOG_SIZE: usize> {
+    buffer: [[char; MAX_LINE_LENGTH]; LOG_SIZE],
     write: usize,
     read: usize,
 }
 
-impl<const LEN: usize, const SIZE: usize> Log<LEN, SIZE> {
+impl<const MAX_LINE_LENGTH: usize, const LOG_SIZE: usize> Log<MAX_LINE_LENGTH, LOG_SIZE> {
     pub fn init() -> Self {
-        let buffer = [['\0'; LEN]; SIZE];
+        let buffer = [['\0'; MAX_LINE_LENGTH]; LOG_SIZE];
 
         Self {
             buffer,
@@ -19,7 +19,7 @@ impl<const LEN: usize, const SIZE: usize> Log<LEN, SIZE> {
         for (dst, src) in self.buffer[self.write].iter_mut().zip(msg.chars()) {
             *dst = src;
         }
-        let next = (self.write + 1) % SIZE;
+        let next = (self.write + 1) % LOG_SIZE;
         if next == self.read {
             self.read += 1;
         }
@@ -39,7 +39,7 @@ impl<const LEN: usize, const SIZE: usize> Log<LEN, SIZE> {
         let mut msgs = Vec::with_capacity(cnt);
         while read != self.write && msgs.len() < cnt {
             msgs.push(self.buffer[self.read].iter().collect::<String>());
-            read = (read + 1) % SIZE;
+            read = (read + 1) % LOG_SIZE;
         }
         if msgs.is_empty() { None } else { Some(msgs) }
     }
@@ -58,7 +58,7 @@ impl<const LEN: usize, const SIZE: usize> Log<LEN, SIZE> {
         let mut msgs = Vec::with_capacity(cnt);
         while self.read != self.write && msgs.len() < cnt {
             msgs.push(self.buffer[self.read].iter().collect::<String>());
-            self.read = (self.read + 1) % SIZE;
+            self.read = (self.read + 1) % LOG_SIZE;
         }
         if msgs.is_empty() { None } else { Some(msgs) }
     }

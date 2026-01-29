@@ -103,11 +103,25 @@ impl Client {
         }
     }
 
-    async fn read(&mut self, op: &Operation, timeout_ms: usize) -> Result<Vec<u16>, Error> {
+    async fn read<L>(
+        &mut self,
+        op: &Operation,
+        timeout_ms: usize,
+        log: &L,
+    ) -> (&'static str, Result<Vec<u16>, ModbusError>)
+    where
+        L: AsyncFn(String) -> () + Send + 'static,
+        for<'a> L::CallRefFuture<'a>: Send,
+    {
         let result = match op.fn_code {
             FunctionCode::ReadCoils => {
+                (log)(format!(
+                    "Perform ReadCoils request for slave ID {} and range [{}, {})",
+                    op.slave_id, op.range.start, op.range.end,
+                ))
+                .await;
                 self.context.set_slave(Slave(op.slave_id));
-                tokio::time::timeout(
+                let res = tokio::time::timeout(
                     Duration::from_millis(timeout_ms as u64),
                     self.context.read_coils(
                         op.range.start as u16,
@@ -117,11 +131,17 @@ impl Client {
                 .await
                 .map(|r| {
                     r.map(|v| v.map(|b| b.into_iter().map(|e| if e { 1 } else { 0 }).collect()))
-                })
+                });
+                ("ReadCoils", res)
             }
             FunctionCode::ReadDiscreteInputs => {
+                (log)(format!(
+                    "Perform ReadDiscreteInputs request for slave ID {} and range [{}, {})",
+                    op.slave_id, op.range.start, op.range.end,
+                ))
+                .await;
                 self.context.set_slave(Slave(op.slave_id));
-                tokio::time::timeout(
+                let res = tokio::time::timeout(
                     Duration::from_millis(timeout_ms as u64),
                     self.context.read_discrete_inputs(
                         op.range.start as u16,
@@ -131,37 +151,50 @@ impl Client {
                 .await
                 .map(|r| {
                     r.map(|v| v.map(|b| b.into_iter().map(|e| if e { 1 } else { 0 }).collect()))
-                })
+                });
+                ("ReadDiscreteInputs", res)
             }
             FunctionCode::ReadInputRegisters => {
+                (log)(format!(
+                    "Perform ReadInputRegisters request for slave ID {} and range [{}, {})",
+                    op.slave_id, op.range.start, op.range.end,
+                ))
+                .await;
                 self.context.set_slave(Slave(op.slave_id));
-                tokio::time::timeout(
+                let res = tokio::time::timeout(
                     Duration::from_millis(timeout_ms as u64),
                     self.context.read_input_registers(
                         op.range.start as u16,
                         (op.range.end - op.range.start) as u16,
                     ),
                 )
-                .await
+                .await;
+                ("ReadInputRegisters", res)
             }
             FunctionCode::ReadHoldingRegisters => {
+                (log)(format!(
+                    "Perform ReadHoldingRegisters request for slave ID {} and range [{}, {})",
+                    op.slave_id, op.range.start, op.range.end,
+                ))
+                .await;
                 self.context.set_slave(Slave(op.slave_id));
-                tokio::time::timeout(
+                let res = tokio::time::timeout(
                     Duration::from_millis(timeout_ms as u64),
                     self.context.read_holding_registers(
                         op.range.start as u16,
                         (op.range.end - op.range.start) as u16,
                     ),
                 )
-                .await
+                .await;
+                ("ReadHoldingRegisters", res)
             }
             _ => panic!("Invalid function code in operation."),
         };
         match result {
-            Ok(Ok(Ok(v))) => Ok(v),
-            Ok(Ok(Err(e))) => Err(ModbusError::Exception(e).into()),
-            Ok(Err(e)) => Err(ModbusError::Error(e).into()),
-            Err(e) => Err(ModbusError::Timeout(e).into()),
+            (s, Ok(Ok(Ok(v)))) => (s, Ok(v)),
+            (s, Ok(Ok(Err(e)))) => (s, Err(ModbusError::Exception(e))),
+            (s, Ok(Err(e))) => (s, Err(ModbusError::Error(e))),
+            (s, Err(e)) => (s, Err(ModbusError::Timeout(e))),
         }
     }
 
@@ -225,9 +258,9 @@ impl Client {
                     let range = operation.range.clone();
                     let start = range.start;
                     let end = range.end;
-                    match self.read(&operation, timeout_ms).await {
-                        Ok(values) => {
-                            log(format!("Perform read operation {fc} on [{start}, {end}).")).await;
+                    match self.read(&operation, timeout_ms, &log).await {
+                        (s, Ok(values)) => {
+                            let fc = FunctionCode::from(fc);
                             let mut guard = memory.write().await;
                             let key = Key {
                                 id: id.clone(),
@@ -241,19 +274,38 @@ impl Client {
                                 Type::Coil
                             };
                             if !guard.write(key, &ty, &range, &values) {
-                                log(format!("Failed to to update memory for [{start}, {end})."))
+                                log(format!("{s} Failed because of failing memory update for [{start}, {end})."))
+                                    .await;
+                            } else {
+                                log(format!("{s} request to read [{start}, {end}) successful. Received values {values:?}."))
                                     .await;
                             }
                             index = (index + 1) % count;
                             retries = 0;
                         }
-                        Err(e) => {
+                        (s, Err(ModbusError::Timeout(e))) => {
+                            let _ = self.context.disconnect().await;
+                            log(format!(
+                                    "{s} request to read [{start}, {end}) timed out. Disconnecting client. [{e:?}]"
+                                )).await;
+                            return Err(ModbusError::Timeout(e).into());
+                        }
+                        (s, Err(ModbusError::Error(e))) => {
+                            let _ = self.context.disconnect().await;
+                            log(format!(
+                                    "{s} request to read [{start}, {end}) failed. Disconnecting client. [{e:?}]"
+                                )).await;
+                            return Err(ModbusError::Error(e).into());
+                        }
+                        (s, Err(ModbusError::Exception(e))) => {
                             retries += 1;
                             if retries > 3 {
                                 log(format!(
-                                    "Perform read operation failed for {fc} on [{start}, {end}). [{e}]"
-                                )).await;
-                                return Err(e);
+                                    "{s} request to read [{start}, {end}) invalid. [{e}]"
+                                ))
+                                .await;
+                                index = (index + 1) % count;
+                                retries = 0;
                             }
                         }
                     }
@@ -292,11 +344,10 @@ impl Client {
                                 return Err(ModbusError::Error(e).into());
                             }
                             Ok(Ok(Err(e))) => {
-                                let _ = self.context.disconnect().await;
                                 log(format!(
-                                    "WriteSingleCoil request to {addr} with {coil} exception. Disconnecting client. [{e:?}]"
-                                )).await;
-                                return Err(ModbusError::Exception(e).into());
+                                    "WriteSingleCoil request to {addr} with {coil} invalid. [{e:?}]"
+                                ))
+                                .await;
                             }
                             Ok(Ok(Ok(_))) => {
                                 log(format!(
@@ -328,11 +379,9 @@ impl Client {
                                 return Err(ModbusError::Error(e).into());
                             }
                             Ok(Ok(Err(e))) => {
-                                let _ = self.context.disconnect().await;
                                 log(format!(
-                                    "WriteMultipleCoils request to {addr} with {coils:?} failed. Disconnecting client. [{e:?}]"
+                                    "WriteMultipleCoils request to {addr} with {coils:?} failed. [{e:?}]"
                                 )).await;
-                                return Err(ModbusError::Exception(e).into());
                             }
                             Ok(_) => {
                                 log(format!(
@@ -364,11 +413,9 @@ impl Client {
                                 return Err(ModbusError::Error(e).into());
                             }
                             Ok(Ok(Err(e))) => {
-                                let _ = self.context.disconnect().await;
                                 log(format!(
-                                    "WriteSingleRegister request to {addr} with {value} exception. Disconnecting client. [{e:?}]"
+                                    "WriteSingleRegister request to {addr} with {value} invalid. [{e:?}]"
                                 )).await;
-                                return Err(ModbusError::Exception(e).into());
                             }
                             Ok(_) => {
                                 log(format!(
@@ -400,11 +447,9 @@ impl Client {
                                 return Err(ModbusError::Error(e).into());
                             }
                             Ok(Ok(Err(e))) => {
-                                let _ = self.context.disconnect().await;
                                 log(format!(
-                                    "WriteMultipleRegister request to {addr} with {values:?} exception. Disconnecting client. [{e:?}]"
+                                    "WriteMultipleRegister request to {addr} with {values:?} invalid. [{e:?}]"
                                 )).await;
-                                return Err(ModbusError::Exception(e).into());
                             }
                             Ok(_) => {
                                 log(format!(
