@@ -86,7 +86,11 @@ fn main() {
         })
         .panic(|e| format!("Failed to start instance. [{}]", e));
 
-    instance2.send_command(Command::WriteSingleRegister(net::SlaveId::from(1), 0, 1234));
+    runtime.block_on(async {
+        instance2
+            .send_command(Command::WriteSingleRegister(net::SlaveId::from(1), 0, 1234))
+            .await;
+    });
 
     runtime.block_on(async {
         tokio::time::sleep(std::time::Duration::from_secs(5)).await;

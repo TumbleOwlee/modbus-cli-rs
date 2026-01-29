@@ -1,13 +1,61 @@
 use memory::Memory;
 use net::*;
+use tokio::sync::mpsc::error::SendError;
 
-use anyhow::anyhow;
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::hash::Hash;
 use std::sync::Arc;
-use std::sync::mpsc::Sender;
 use tokio::sync::RwLock;
+use tokio::sync::mpsc::Sender;
 use tokio::task::JoinHandle;
+
+pub enum InstanceError {
+    AlreadyActive,
+    NotRunning,
+    CancelFailed,
+    SendError(SendError<Command>),
+    InvalidOperation,
+}
+
+impl Display for InstanceError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            InstanceError::AlreadyActive => write!(f, "Instance is already active"),
+            InstanceError::NotRunning => write!(f, "Instance is not running"),
+            InstanceError::CancelFailed => write!(f, "Failed to cancel instance"),
+            InstanceError::SendError(e) => {
+                write!(f, "Failed to send command to instance: {}", e)
+            }
+            InstanceError::InvalidOperation => write!(f, "Invalid operation specified"),
+        }
+    }
+}
+
+pub enum Error {
+    Net(net::Error),
+    Instance(InstanceError),
+}
+
+impl From<InstanceError> for Error {
+    fn from(e: InstanceError) -> Self {
+        Error::Instance(e)
+    }
+}
+
+impl From<net::Error> for Error {
+    fn from(e: net::Error) -> Self {
+        Error::Net(e)
+    }
+}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::Net(e) => write!(f, "Network error: {}", e),
+            Error::Instance(s) => write!(f, "Instance error: {}", s),
+        }
+    }
+}
 
 #[derive(Clone)]
 pub struct ClientConfig<T, Config>
@@ -67,12 +115,12 @@ where
 }
 
 struct ClientHandle {
-    handle: JoinHandle<Result<(), anyhow::Error>>,
+    handle: JoinHandle<Result<(), net::Error>>,
     sender: Sender<Command>,
 }
 
 struct ServerHandle {
-    handle: JoinHandle<Result<(), anyhow::Error>>,
+    handle: JoinHandle<Result<(), net::Error>>,
 }
 
 pub enum Handle {
@@ -138,7 +186,7 @@ where
         }
     }
 
-    pub async fn start<L, S>(&mut self, log: L, status: S) -> Result<(), anyhow::Error>
+    pub async fn start<L, S>(&mut self, log: L, status: S) -> Result<(), Error>
     where
         L: AsyncFn(String) -> () + Clone + Send + Sync + 'static,
         S: AsyncFn(String) -> () + Clone + Send + Sync + 'static,
@@ -146,16 +194,16 @@ where
         for<'a> S::CallRefFuture<'a>: Send,
     {
         if self.handle.is_some() {
-            return Err(anyhow!("instance already active"));
+            return Err(InstanceError::AlreadyActive.into());
         }
 
         match &self.builder {
             Builder::TcpClient(builder) => {
-                let (sender, receiver) = std::sync::mpsc::channel();
+                let (sender, receiver) = tokio::sync::mpsc::channel(10);
                 let res = builder.spawn(receiver, log, status).await;
                 match res {
                     Err(e) => {
-                        return Err(anyhow!("{}", e));
+                        return Err(e.into());
                     }
                     Ok(handle) => {
                         self.handle = Some(Handle::Client(ClientHandle { handle, sender }));
@@ -166,7 +214,7 @@ where
                 let res = builder.spawn(log).await;
                 match res {
                     Err(e) => {
-                        return Err(anyhow!("{}", e));
+                        return Err(e.into());
                     }
                     Ok(handle) => {
                         self.handle = Some(Handle::Server(ServerHandle { handle }));
@@ -174,11 +222,11 @@ where
                 }
             }
             Builder::RtuClient(builder) => {
-                let (sender, receiver) = std::sync::mpsc::channel();
+                let (sender, receiver) = tokio::sync::mpsc::channel(10);
                 let res = builder.spawn(receiver, log, status).await;
                 match res {
                     Err(e) => {
-                        return Err(anyhow!("{}", e));
+                        return Err(e.into());
                     }
                     Ok(handle) => {
                         self.handle = Some(Handle::Client(ClientHandle { handle, sender }));
@@ -189,7 +237,7 @@ where
                 let res = builder.spawn(log).await;
                 match res {
                     Err(e) => {
-                        return Err(anyhow!("{}", e));
+                        return Err(e.into());
                     }
                     Ok(handle) => {
                         self.handle = Some(Handle::Server(ServerHandle { handle }));
@@ -200,9 +248,9 @@ where
         Ok(())
     }
 
-    pub async fn stop(&mut self) -> Result<(), anyhow::Error> {
+    pub async fn stop(&mut self) -> Result<(), Error> {
         if self.handle.is_none() {
-            return Err(anyhow!("instance not running"));
+            return Err(InstanceError::NotRunning.into());
         }
 
         let handle = self.handle.take();
@@ -222,29 +270,29 @@ where
         };
 
         match res {
-            Ok(r) => r,
+            Ok(Ok(_)) => Ok(()),
+            Ok(Err(e)) => Err(e.into()),
             Err(e) => {
                 if e.is_cancelled() {
                     Ok(())
                 } else {
-                    Err(anyhow!("{}", e))
+                    Err(InstanceError::CancelFailed.into())
                 }
             }
         }
     }
 
-    pub fn send_command(&self, command: Command) -> Result<(), anyhow::Error> {
+    pub async fn send_command(&self, command: Command) -> Result<(), Error> {
         if self.handle.is_none() {
-            return Err(anyhow!("instance not running"));
+            return Err(InstanceError::NotRunning.into());
         }
         match &self.handle {
-            Some(Handle::Client(handle)) => handle.sender.send(command).map_err(|e| {
-                anyhow!(
-                    "failed to send command to client instance. [{}]",
-                    e.to_string()
-                )
-            }),
-            _ => Err(anyhow!("read operation not supported for server instances")),
+            Some(Handle::Client(handle)) => handle
+                .sender
+                .send(command)
+                .await
+                .map_err(|e| InstanceError::SendError(e).into()),
+            _ => Err(InstanceError::InvalidOperation.into()),
         }
     }
 }

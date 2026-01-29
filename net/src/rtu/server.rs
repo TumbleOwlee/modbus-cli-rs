@@ -1,12 +1,11 @@
 // Crate
-use crate::Key;
 use crate::rtu::Config;
+use crate::{Error, Key, SerialError};
 
 // Workspace
 use memory::{Memory, Range, Type};
 
 // External
-use anyhow::anyhow;
 use std::fmt::Debug;
 use std::future;
 use std::hash::Hash;
@@ -35,10 +34,7 @@ where
         Self { id, config, memory }
     }
 
-    pub async fn spawn<L>(
-        &self,
-        log: L,
-    ) -> Result<JoinHandle<Result<(), anyhow::Error>>, anyhow::Error>
+    pub async fn spawn<L>(&self, log: L) -> Result<JoinHandle<Result<(), Error>>, Error>
     where
         L: AsyncFn(String) -> () + Clone + Send + Sync + 'static,
         for<'a> L::CallRefFuture<'a>: Send,
@@ -74,7 +70,7 @@ where
         config: &Config,
         memory: Arc<RwLock<Memory<Key<T>>>>,
         log: L,
-    ) -> Result<JoinHandle<Result<(), anyhow::Error>>, anyhow::Error> {
+    ) -> Result<JoinHandle<Result<(), Error>>, Error> {
         let mut builder = tokio_serial::new(&config.path, config.baud_rate);
         if let Some(v) = config.data_bits {
             builder = builder.data_bits(match v {
@@ -82,14 +78,24 @@ where
                 6 => DataBits::Six,
                 7 => DataBits::Seven,
                 8 => DataBits::Eight,
-                _ => return Err(anyhow!("Invalid data bits specified")),
+                _ => {
+                    return Err(SerialError::Configuration(
+                        "Invalid data bits specified".to_string(),
+                    )
+                    .into());
+                }
             });
         }
         if let Some(v) = config.stop_bits {
             builder = builder.stop_bits(match v {
                 1 => StopBits::One,
                 2 => StopBits::Two,
-                _ => return Err(anyhow!("Invalid stop bits specified")),
+                _ => {
+                    return Err(SerialError::Configuration(
+                        "Invalid stop bits specified".to_string(),
+                    )
+                    .into());
+                }
             });
         }
         if let Some(ref v) = config.parity {
@@ -101,7 +107,9 @@ where
             } else if v == "none" {
                 builder = builder.parity(Parity::None);
             } else {
-                return Err(anyhow!("Invalid parity specified"));
+                return Err(
+                    SerialError::Configuration("Invalid parity specified".to_string()).into(),
+                );
             }
         }
 
@@ -113,10 +121,10 @@ where
                     rtu_server
                         .serve_forever(server)
                         .await
-                        .map_err(|e| anyhow!("{}", e))
+                        .map_err(|e| Error::Server(e))
                 }))
             }
-            Err(e) => Err(anyhow!("{}", e)),
+            Err(e) => Err(SerialError::Error(e).into()),
         }
     }
 }

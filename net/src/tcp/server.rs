@@ -1,12 +1,11 @@
 // Crate
-use crate::Key;
 use crate::tcp::Config;
+use crate::{Error, Key, TcpError};
 
 // Workspace
 use memory::{Memory, Range, Type};
 
 // External
-use anyhow::anyhow;
 use std::fmt::Debug;
 use std::future;
 use std::hash::Hash;
@@ -36,10 +35,7 @@ where
         Self { id, config, memory }
     }
 
-    pub async fn spawn<L>(
-        &self,
-        log: L,
-    ) -> Result<JoinHandle<Result<(), anyhow::Error>>, anyhow::Error>
+    pub async fn spawn<L>(&self, log: L) -> Result<JoinHandle<Result<(), Error>>, Error>
     where
         L: AsyncFn(String) -> () + Clone + Send + Sync + 'static,
         for<'a> L::CallRefFuture<'a>: Send,
@@ -75,10 +71,10 @@ where
         config: &Config,
         memory: Arc<RwLock<Memory<Key<T>>>>,
         log: L,
-    ) -> Result<JoinHandle<Result<(), anyhow::Error>>, anyhow::Error> {
+    ) -> Result<JoinHandle<Result<(), Error>>, Error> {
         let addr: SocketAddr = format!("{}:{}", config.ip, config.port)
             .parse()
-            .map_err(|e| anyhow!("{e}"))?;
+            .map_err(|e| Error::Tcp(TcpError::Address(e)))?;
         match TcpListener::bind(addr).await {
             Ok(listener) => {
                 let server = TcpServer::new(listener);
@@ -104,10 +100,10 @@ where
                     server
                         .serve(&on_connected, on_process_error)
                         .await
-                        .map_err(|e| anyhow!("{}", e))
+                        .map_err(|e| Error::Server(e))
                 }))
             }
-            Err(e) => Err(anyhow!("{}", e)),
+            Err(e) => Err(Error::Server(e).into()),
         }
     }
 }

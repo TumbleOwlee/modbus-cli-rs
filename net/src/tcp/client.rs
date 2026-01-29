@@ -1,17 +1,16 @@
 use crate::tcp::Config;
-use crate::{Command, Error, Key, Operation};
+use crate::{Command, Error, Key, ModbusError, Operation, TcpError};
 
 use memory::{Memory, Type};
 use tokio::task::JoinHandle;
 
-use anyhow::anyhow;
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::sync::mpsc::Receiver;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
+use tokio::sync::mpsc::Receiver;
 use tokio::time::sleep;
 use tokio_modbus::FunctionCode;
 use tokio_modbus::client::Context;
@@ -50,7 +49,7 @@ where
         receiver: Receiver<Command>,
         log: L,
         status: S,
-    ) -> Result<JoinHandle<Result<(), anyhow::Error>>, anyhow::Error>
+    ) -> Result<JoinHandle<Result<(), Error>>, Error>
     where
         L: AsyncFn(String) -> () + Send + Sync + 'static,
         S: AsyncFn(String) -> () + Send + Sync + 'static,
@@ -79,7 +78,6 @@ where
                     interval_ms,
                 )
                 .await
-                .map_err(|e| anyhow!("{:?}", e))
         }))
     }
 }
@@ -89,10 +87,10 @@ pub struct Client {
 }
 
 impl Client {
-    pub async fn connect(config: &Config) -> Result<Self, anyhow::Error> {
+    pub async fn connect(config: &Config) -> Result<Self, Error> {
         let addr: SocketAddr = format!("{}:{}", config.ip, config.port)
             .parse()
-            .map_err(|e| anyhow!(format!("Failed to create SocketAddr ({e})")))?;
+            .map_err(|e| Error::Tcp(TcpError::Address(e)))?;
         match tokio::time::timeout(
             std::time::Duration::from_millis(config.timeout_ms as u64),
             tokio_modbus::client::tcp::connect(addr),
@@ -100,12 +98,12 @@ impl Client {
         .await
         {
             Ok(Ok(context)) => Ok(Self { context }),
-            Ok(Err(e)) => Err(anyhow!("{e}")),
-            Err(e) => Err(anyhow!("{e}")),
+            Ok(Err(e)) => Err(TcpError::Error(e).into()),
+            Err(e) => Err(TcpError::Timeout(e).into()),
         }
     }
 
-    async fn read(&mut self, op: &Operation, timeout_ms: usize) -> Result<Vec<u16>, anyhow::Error> {
+    async fn read(&mut self, op: &Operation, timeout_ms: usize) -> Result<Vec<u16>, Error> {
         let result = match op.fn_code {
             FunctionCode::ReadCoils => {
                 self.context.set_slave(Slave(op.slave_id));
@@ -161,9 +159,9 @@ impl Client {
         };
         match result {
             Ok(Ok(Ok(v))) => Ok(v),
-            Ok(Ok(Err(e))) => Err(anyhow!("{}", e)),
-            Ok(Err(e)) => Err(anyhow!("{}", e)),
-            Err(e) => Err(anyhow!("{}", e)),
+            Ok(Ok(Err(e))) => Err(ModbusError::Exception(e).into()),
+            Ok(Err(e)) => Err(ModbusError::Error(e).into()),
+            Err(e) => Err(ModbusError::Timeout(e).into()),
         }
     }
 
@@ -191,17 +189,17 @@ impl Client {
         id: T,
         operations: Arc<RwLock<Vec<Operation>>>,
         memory: Arc<RwLock<Memory<Key<T>>>>,
-        receiver: Receiver<Command>,
+        mut receiver: Receiver<Command>,
         log: L,
         status: S,
         timeout_ms: usize,
         delay_ms: usize,
         interval_ms: usize,
-    ) -> Result<(), anyhow::Error>
+    ) -> Result<(), Error>
     where
         T: Hash + Debug + PartialEq + Eq + Clone + Default + Send + Sync + 'static,
-        L: AsyncFn(String) -> () + Send + Sync + 'static,
-        S: AsyncFn(String) -> () + Send + Sync + 'static,
+        L: AsyncFn(String) -> () + Send + 'static,
+        S: AsyncFn(String) -> () + Send + 'static,
         for<'a> L::CallRefFuture<'a>: Send,
         for<'a> S::CallRefFuture<'a>: Send,
     {
@@ -255,9 +253,7 @@ impl Client {
                                 log(format!(
                                     "Perform read operation failed for {fc} on [{start}, {end}). [{e}]"
                                 )).await;
-                                return Err(anyhow!(format!(
-                                    "Read operation failed for {fc} on [{start}, {end}). [{e}]"
-                                )));
+                                return Err(e);
                             }
                         }
                     }
@@ -286,16 +282,23 @@ impl Client {
                                 log(format!(
                                     "WriteSingleCoil request to {addr} with {coil} timed out. Disconnecting client. [{e:?}]"
                                 )).await;
-                                return Err(anyhow!("Error::TimedOut"));
+                                return Err(ModbusError::Timeout(e).into());
                             }
                             Ok(Err(e)) => {
                                 let _ = self.context.disconnect().await;
                                 log(format!(
-                                    "WriteSingleCoil request to {addr} with {coil} timed out. Disconnecting client. [{e:?}]"
+                                    "WriteSingleCoil request to {addr} with {coil} failed. Disconnecting client. [{e:?}]"
                                 )).await;
-                                return Err(anyhow!("Error::TimedOut"));
+                                return Err(ModbusError::Error(e).into());
                             }
-                            Ok(Ok(_)) => {
+                            Ok(Ok(Err(e))) => {
+                                let _ = self.context.disconnect().await;
+                                log(format!(
+                                    "WriteSingleCoil request to {addr} with {coil} exception. Disconnecting client. [{e:?}]"
+                                )).await;
+                                return Err(ModbusError::Exception(e).into());
+                            }
+                            Ok(Ok(Ok(_))) => {
                                 log(format!(
                                     "WriteSingleCoil request to {addr} with {coil} successfully executed."
                                 )).await;
@@ -315,16 +318,23 @@ impl Client {
                                 log(format!(
                                     "WriteMultipleCoils request to {addr} with {coils:?} timed out. Disconnecting client. [{e:?}]"
                                 )).await;
-                                return Err(anyhow!("Error::TimedOut"));
+                                return Err(ModbusError::Timeout(e).into());
                             }
                             Ok(Err(e)) => {
                                 let _ = self.context.disconnect().await;
                                 log(format!(
-                                    "WriteMultipleCoils request to {addr} with {coils:?} timed out. Disconnecting client. [{e:?}]"
+                                    "WriteMultipleCoils request to {addr} with {coils:?} failed. Disconnecting client. [{e:?}]"
                                 )).await;
-                                return Err(anyhow!("Error::TimedOut"));
+                                return Err(ModbusError::Error(e).into());
                             }
-                            Ok(Ok(_)) => {
+                            Ok(Ok(Err(e))) => {
+                                let _ = self.context.disconnect().await;
+                                log(format!(
+                                    "WriteMultipleCoils request to {addr} with {coils:?} failed. Disconnecting client. [{e:?}]"
+                                )).await;
+                                return Err(ModbusError::Exception(e).into());
+                            }
+                            Ok(_) => {
                                 log(format!(
                                     "WriteMultipleCoils request to {addr} with {coils:?} successfully executed."
                                 )).await;
@@ -344,23 +354,23 @@ impl Client {
                                 log(format!(
                                     "WriteSingleRegister request to {addr} with {value} timed out. Disconnecting client. [{e:?}]"
                                 )).await;
-                                return Err(anyhow!("Error::TimedOut"));
+                                return Err(ModbusError::Timeout(e).into());
                             }
                             Ok(Err(e)) => {
                                 let _ = self.context.disconnect().await;
                                 log(format!(
                                     "WriteSingleRegister request to {addr} with {value} failed. Disconnecting client. [{e:?}]"
                                 )).await;
-                                return Err(anyhow!("Error::TimedOut"));
+                                return Err(ModbusError::Error(e).into());
                             }
                             Ok(Ok(Err(e))) => {
                                 let _ = self.context.disconnect().await;
                                 log(format!(
-                                    "WriteSingleRegister request to {addr} with {value} failed. Disconnecting client. [{e:?}]"
+                                    "WriteSingleRegister request to {addr} with {value} exception. Disconnecting client. [{e:?}]"
                                 )).await;
-                                return Err(anyhow!("Error::TimedOut"));
+                                return Err(ModbusError::Exception(e).into());
                             }
-                            Ok(Ok(Ok(_))) => {
+                            Ok(_) => {
                                 log(format!(
                                     "WriteSingleRegister request to {addr} with {value} successfully executed."
                                 )).await;
@@ -380,16 +390,23 @@ impl Client {
                                 log(format!(
                                     "WriteMultipleRegister request to {addr} with {values:?} timed out. Disconnecting client. [{e:?}]"
                                 )).await;
-                                return Err(anyhow!("Error::TimedOut"));
+                                return Err(ModbusError::Timeout(e).into());
                             }
                             Ok(Err(e)) => {
                                 let _ = self.context.disconnect().await;
                                 log(format!(
-                                    "WriteMultipleRegister request to {addr} with {values:?} timed out. Disconnecting client. [{e:?}]"
+                                    "WriteMultipleRegister request to {addr} with {values:?} failed. Disconnecting client. [{e:?}]"
                                 )).await;
-                                return Err(anyhow!("Error::TimedOut"));
+                                return Err(ModbusError::Error(e).into());
                             }
-                            Ok(Ok(_)) => {
+                            Ok(Ok(Err(e))) => {
+                                let _ = self.context.disconnect().await;
+                                log(format!(
+                                    "WriteMultipleRegister request to {addr} with {values:?} exception. Disconnecting client. [{e:?}]"
+                                )).await;
+                                return Err(ModbusError::Exception(e).into());
+                            }
+                            Ok(_) => {
                                 log(format!(
                                     "WriteMultipleRegister request to {addr} with {values:?} successfully executed."
                                 )).await;
