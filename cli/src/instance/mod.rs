@@ -1,132 +1,15 @@
-use memory::Memory;
-use net::*;
-use tokio::sync::mpsc::error::SendError;
+pub mod builder;
+pub mod config;
+pub mod error;
+pub mod handle;
 
-use std::fmt::{Debug, Display};
+use builder::Builder;
+use config::{ClientConfig, ServerConfig};
+use error::{Error, InstanceError};
+use handle::Handle;
+
+use std::fmt::Debug;
 use std::hash::Hash;
-use std::sync::Arc;
-use tokio::sync::RwLock;
-use tokio::sync::mpsc::Sender;
-use tokio::task::JoinHandle;
-
-pub enum InstanceError {
-    AlreadyActive,
-    NotRunning,
-    CancelFailed,
-    SendError(SendError<Command>),
-    InvalidOperation,
-}
-
-impl Display for InstanceError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            InstanceError::AlreadyActive => write!(f, "Instance is already active"),
-            InstanceError::NotRunning => write!(f, "Instance is not running"),
-            InstanceError::CancelFailed => write!(f, "Failed to cancel instance"),
-            InstanceError::SendError(e) => {
-                write!(f, "Failed to send command to instance: {}", e)
-            }
-            InstanceError::InvalidOperation => write!(f, "Invalid operation specified"),
-        }
-    }
-}
-
-pub enum Error {
-    Net(net::Error),
-    Instance(InstanceError),
-}
-
-impl From<InstanceError> for Error {
-    fn from(e: InstanceError) -> Self {
-        Error::Instance(e)
-    }
-}
-
-impl From<net::Error> for Error {
-    fn from(e: net::Error) -> Self {
-        Error::Net(e)
-    }
-}
-
-impl Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Error::Net(e) => write!(f, "Network error: {}", e),
-            Error::Instance(s) => write!(f, "Instance error: {}", s),
-        }
-    }
-}
-
-#[derive(Clone)]
-pub struct ClientConfig<T, Config>
-where
-    T: Hash + Debug + PartialEq + Eq + Clone + Default + Send + Sync + 'static,
-{
-    pub id: T,
-    pub config: Arc<RwLock<Config>>,
-    pub operations: Arc<RwLock<Vec<Operation>>>,
-    pub memory: Arc<RwLock<Memory<Key<T>>>>,
-}
-
-#[derive(Clone)]
-pub struct ServerConfig<T, Config>
-where
-    T: Hash + Debug + PartialEq + Eq + Clone + Default + Send + Sync + 'static,
-{
-    pub id: T,
-    pub config: Arc<RwLock<Config>>,
-    pub memory: Arc<RwLock<Memory<Key<T>>>>,
-}
-
-#[derive(Clone)]
-enum Type<T>
-where
-    T: Hash + Debug + PartialEq + Eq + Clone + Default + Send + Sync + 'static,
-{
-    TcpClient(ClientConfig<T, net::tcp::Config>),
-    RtuClient(ClientConfig<T, net::rtu::Config>),
-    TcpServer(ServerConfig<T, net::tcp::Config>),
-    RtuServer(ServerConfig<T, net::rtu::Config>),
-}
-
-enum Builder<T>
-where
-    T: Hash + Debug + PartialEq + Eq + Clone + Default + Send + Sync + 'static,
-{
-    TcpClient(tcp::ClientBuilder<T>),
-    TcpServer(tcp::ServerBuilder<T>),
-    RtuClient(rtu::ClientBuilder<T>),
-    RtuServer(rtu::ServerBuilder<T>),
-}
-
-enum Client {
-    Tcp(tcp::Client),
-    Rtu(rtu::Client),
-}
-
-enum Server<T, L>
-where
-    T: Hash + Debug + PartialEq + Eq + Clone + Default + Send + Sync + 'static,
-    L: AsyncFn(String) -> () + Clone + Send + Sync + 'static,
-    for<'a> L::CallRefFuture<'a>: Send,
-{
-    Tcp(tcp::Server<T, L>),
-    Rtu(rtu::Server<T, L>),
-}
-
-struct ClientHandle {
-    handle: JoinHandle<Result<(), net::Error>>,
-    sender: Sender<Command>,
-}
-
-struct ServerHandle {
-    handle: JoinHandle<Result<(), net::Error>>,
-}
-
-pub enum Handle {
-    Server(ServerHandle),
-    Client(ClientHandle),
-}
 
 pub struct Instance<T>
 where
@@ -142,7 +25,7 @@ where
 {
     pub fn with_tcp_client(config: ClientConfig<T, net::tcp::Config>) -> Self {
         Self {
-            builder: Builder::TcpClient(tcp::ClientBuilder::new(
+            builder: Builder::TcpClient(net::tcp::ClientBuilder::new(
                 config.id,
                 config.config,
                 config.operations,
@@ -154,7 +37,7 @@ where
 
     pub fn with_rtu_client(config: ClientConfig<T, net::rtu::Config>) -> Self {
         Self {
-            builder: Builder::RtuClient(rtu::ClientBuilder::new(
+            builder: Builder::RtuClient(net::rtu::ClientBuilder::new(
                 config.id,
                 config.config,
                 config.operations,
@@ -166,7 +49,7 @@ where
 
     pub fn with_tcp_server(config: ServerConfig<T, net::tcp::Config>) -> Self {
         Self {
-            builder: Builder::TcpServer(tcp::ServerBuilder::new(
+            builder: Builder::TcpServer(net::tcp::ServerBuilder::new(
                 config.id,
                 config.config,
                 config.memory,
@@ -177,7 +60,7 @@ where
 
     pub fn with_rtu_server(config: ServerConfig<T, net::rtu::Config>) -> Self {
         Self {
-            builder: Builder::RtuServer(rtu::ServerBuilder::new(
+            builder: Builder::RtuServer(net::rtu::ServerBuilder::new(
                 config.id,
                 config.config,
                 config.memory,
@@ -206,7 +89,7 @@ where
                         return Err(e.into());
                     }
                     Ok(handle) => {
-                        self.handle = Some(Handle::Client(ClientHandle { handle, sender }));
+                        self.handle = Some(Handle::Client(handle::ClientHandle { handle, sender }));
                     }
                 }
             }
@@ -217,7 +100,7 @@ where
                         return Err(e.into());
                     }
                     Ok(handle) => {
-                        self.handle = Some(Handle::Server(ServerHandle { handle }));
+                        self.handle = Some(Handle::Server(handle::ServerHandle { handle }));
                     }
                 }
             }
@@ -229,7 +112,7 @@ where
                         return Err(e.into());
                     }
                     Ok(handle) => {
-                        self.handle = Some(Handle::Client(ClientHandle { handle, sender }));
+                        self.handle = Some(Handle::Client(handle::ClientHandle { handle, sender }));
                     }
                 }
             }
@@ -240,7 +123,7 @@ where
                         return Err(e.into());
                     }
                     Ok(handle) => {
-                        self.handle = Some(Handle::Server(ServerHandle { handle }));
+                        self.handle = Some(Handle::Server(handle::ServerHandle { handle }));
                     }
                 }
             }
@@ -290,7 +173,7 @@ where
         }
     }
 
-    pub async fn send_command(&self, command: Command) -> Result<(), Error> {
+    pub async fn send_command(&self, command: net::Command) -> Result<(), Error> {
         if self.handle.is_none() {
             return Err(InstanceError::NotRunning.into());
         }

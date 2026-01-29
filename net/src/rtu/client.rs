@@ -149,7 +149,7 @@ impl Client {
         let result = match op.fn_code {
             FunctionCode::ReadCoils => {
                 (log)(format!(
-                    "Perform ReadCoils request for slave ID {} and range [{}, {})",
+                    "Perform ReadCoils request for slave ID {} and range [{}, {}).",
                     op.slave_id, op.range.start, op.range.end,
                 ))
                 .await;
@@ -169,7 +169,7 @@ impl Client {
             }
             FunctionCode::ReadDiscreteInputs => {
                 (log)(format!(
-                    "Perform ReadDiscreteInputs request for slave ID {} and range [{}, {})",
+                    "Perform ReadDiscreteInputs request for slave ID {} and range [{}, {}).",
                     op.slave_id, op.range.start, op.range.end,
                 ))
                 .await;
@@ -189,7 +189,7 @@ impl Client {
             }
             FunctionCode::ReadInputRegisters => {
                 (log)(format!(
-                    "Perform ReadInputRegisters request for slave ID {} and range [{}, {})",
+                    "Perform ReadInputRegisters request for slave ID {} and range [{}, {}).",
                     op.slave_id, op.range.start, op.range.end,
                 ))
                 .await;
@@ -206,7 +206,7 @@ impl Client {
             }
             FunctionCode::ReadHoldingRegisters => {
                 (log)(format!(
-                    "Perform ReadHoldingRegisters request for slave ID {} and range [{}, {})",
+                    "Perform ReadHoldingRegisters request for slave ID {} and range [{}, {}).",
                     op.slave_id, op.range.start, op.range.end,
                 ))
                 .await;

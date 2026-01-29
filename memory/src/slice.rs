@@ -54,7 +54,7 @@ impl Slice {
     }
 
     pub fn writable(&mut self, ty: &Type, range: &Range) -> bool {
-        let in_range = range.start >= self.range.start && range.end < self.range.end;
+        let in_range = range.start >= self.range.start && range.end <= self.range.end;
         if in_range {
             self.buffer
                 .iter()
@@ -75,7 +75,7 @@ impl Slice {
     }
 
     pub fn write(&mut self, range: &Range, values: &[u16]) -> bool {
-        let in_range = range.start >= self.range.start && range.end < self.range.end;
+        let in_range = range.start >= self.range.start && range.end <= self.range.end;
         let writable = range.length() == values.len() && in_range;
         if writable {
             for (mem, val) in self
@@ -97,7 +97,7 @@ impl Slice {
     }
 
     pub fn read(&self, range: &Range) -> Option<Vec<u16>> {
-        let readable = range.start >= self.range.start && range.end < self.range.end;
+        let readable = range.start >= self.range.start && range.end <= self.range.end;
         if readable {
             self.buffer
                 .iter()
@@ -123,7 +123,7 @@ impl Slice {
     }
 
     pub fn readable(&self, ty: &Type, range: &Range) -> bool {
-        let in_range = range.start >= self.range.start && range.end < self.range.end;
+        let in_range = range.start >= self.range.start && range.end <= self.range.end;
         if in_range {
             self.buffer
                 .iter()

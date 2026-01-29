@@ -152,7 +152,7 @@ where
                 match request {
                     Request::ReadCoils(addr, cnt) => {
                         (self.log)(format!(
-                            "ReadCoils request received for slave ID {} and range [{}, {})",
+                            "ReadCoils request received for slave ID {} and range [{}, {}).",
                             slave,
                             addr,
                             addr + cnt
@@ -167,7 +167,7 @@ where
                     }
                     Request::ReadDiscreteInputs(addr, cnt) => {
                         (self.log)(format!(
-                            "ReadDiscreteInputs request received for slave ID {} and range [{}, {})",
+                            "ReadDiscreteInputs request received for slave ID {} and range [{}, {}).",
                             slave,
                             addr,
                             addr + cnt
@@ -182,7 +182,7 @@ where
                     }
                     Request::ReadInputRegisters(addr, cnt) => {
                         (self.log)(format!(
-                            "ReadInputRegisters request received for slave ID {} and range [{}, {})",
+                            "ReadInputRegisters request received for slave ID {} and range [{}, {}).",
                             slave,
                             addr,
                             addr + cnt
@@ -199,7 +199,7 @@ where
                     }
                     Request::ReadHoldingRegisters(addr, cnt) => {
                         (self.log)(format!(
-                            "ReadHoldingRegisters request received for slave ID {} and range [{}, {})",
+                            "ReadHoldingRegisters request received for slave ID {} and range [{}, {}).",
                             slave,
                             addr,
                             addr + cnt

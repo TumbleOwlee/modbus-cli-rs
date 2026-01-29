@@ -10,6 +10,12 @@ use tokio_modbus::ExceptionCode;
 pub use tokio_modbus::{FunctionCode, SlaveId};
 
 #[derive(Debug, Clone)]
+pub enum Config {
+    Tcp(tcp::Config),
+    Rtu(rtu::Config),
+}
+
+#[derive(Debug, Clone)]
 pub struct Operation {
     pub slave_id: SlaveId,
     pub fn_code: FunctionCode,
@@ -21,8 +27,8 @@ pub struct Key<T>
 where
     T: Hash + Debug + PartialEq + Eq + Clone + Default + Send + Sync,
 {
-    id: T,
-    slave_id: SlaveId,
+    pub id: T,
+    pub slave_id: SlaveId,
 }
 
 impl<T> Key<T>
