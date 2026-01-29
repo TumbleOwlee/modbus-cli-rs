@@ -31,24 +31,16 @@ where
 
         let m = self.slices.get_mut(&id).unwrap();
         for r in ranges {
-            if let Some((_, slice)) = m
-                .iter_mut()
-                .find(|(range, _)| r.start == range.end || r.end == range.start)
-            {
-                if !slice.extend(kind, r) {
-                    // Failed to extend slice, abort
-                    return false;
-                }
+            let val = m.iter_mut().find(|(range, _)| r.intersect(range).is_some());
+            if let Some((range, _)) = val {
+                let range = range.clone();
+                let end = std::cmp::max(r.end, range.end);
+                let start = std::cmp::min(r.start, range.start);
+                let mut slice = m.remove(&range).unwrap();
+                slice.extend(kind, &Range::new(range.end, end - range.end));
+                m.insert(Range::new(start, end - start), slice);
             } else {
-                match m.iter().find(|(range, _)| {
-                    (r.start > range.start && r.start < range.end)
-                        || (r.end < range.end && r.end > range.start)
-                }) {
-                    Some(_) => return false,
-                    None => {
-                        m.insert(r.clone(), Slice::from_range(kind, r.clone()));
-                    }
-                }
+                m.insert(r.clone(), Slice::from_range(kind, r.clone()));
             }
         }
         true
@@ -250,7 +242,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::{Kind, Type, Value};
+    use crate::{Kind, Memory, Type, Value, range::Range};
 
     #[test]
     fn ut_memory() {
@@ -270,5 +262,54 @@ mod tests {
             Value::default(&Kind::Separated(Type::Coil)),
             Value::Separated(Type::Coil, (0, 0))
         );
+    }
+
+    #[test]
+    fn ut_memory_add_ranges_1() {
+        let mut memory = Memory::default();
+        memory.add_ranges(1, &Kind::Read(Type::Coil), &[Range::new(0, 10)]);
+        memory.add_ranges(1, &Kind::Read(Type::Coil), &[Range::new(5, 10)]);
+        assert_eq!(memory.slices.len(), 1);
+        let slices = memory.slices.get(&1);
+        assert!(slices.is_some());
+        let slices = slices.unwrap();
+        assert!(slices.get(&Range::new(0, 15)).is_some());
+    }
+
+    #[test]
+    fn ut_memory_add_ranges_2() {
+        let mut memory = Memory::default();
+        memory.add_ranges(1, &Kind::Read(Type::Coil), &[Range::new(0, 10)]);
+        memory.add_ranges(1, &Kind::Read(Type::Coil), &[Range::new(5, 3)]);
+        assert_eq!(memory.slices.len(), 1);
+        let slices = memory.slices.get(&1);
+        assert!(slices.is_some());
+        let slices = slices.unwrap();
+        assert!(slices.get(&Range::new(0, 10)).is_some());
+    }
+
+    #[test]
+    fn ut_memory_add_ranges_3() {
+        let mut memory = Memory::default();
+        memory.add_ranges(1, &Kind::Read(Type::Coil), &[Range::new(10, 10)]);
+        memory.add_ranges(1, &Kind::Read(Type::Coil), &[Range::new(5, 10)]);
+        assert_eq!(memory.slices.len(), 1);
+        let slices = memory.slices.get(&1);
+        assert!(slices.is_some());
+        let slices = slices.unwrap();
+        assert!(slices.get(&Range::new(5, 15)).is_some());
+    }
+
+    #[test]
+    fn ut_memory_add_ranges_4() {
+        let mut memory = Memory::default();
+        memory.add_ranges(1, &Kind::Read(Type::Coil), &[Range::new(15, 10)]);
+        memory.add_ranges(1, &Kind::Read(Type::Coil), &[Range::new(5, 5)]);
+        assert_eq!(memory.slices.len(), 1);
+        let slices = memory.slices.get(&1);
+        assert!(slices.is_some());
+        let slices = slices.unwrap();
+        assert!(slices.get(&Range::new(15, 10)).is_some());
+        assert!(slices.get(&Range::new(5, 5)).is_some());
     }
 }

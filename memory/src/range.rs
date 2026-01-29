@@ -23,8 +23,19 @@ impl Range {
             end: start + size,
         }
     }
+
     pub fn length(&self) -> usize {
         self.end - self.start
+    }
+
+    pub fn intersect(&self, range: &Range) -> Option<Range> {
+        let start = std::cmp::max(self.start, range.start);
+        let end = std::cmp::min(self.end, range.end);
+        if start > end {
+            None
+        } else {
+            Some(Range::new(start, end - start))
+        }
     }
 }
 

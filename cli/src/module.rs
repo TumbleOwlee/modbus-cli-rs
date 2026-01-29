@@ -27,6 +27,7 @@ pub struct Config {
 
 pub struct Module {
     instance: Instance<Key>,
+    definitions: Vec<Definition>,
     log: Arc<RwLock<Log<MAX_LINE_LENGTH, LOG_SIZE>>>,
 }
 
@@ -104,7 +105,11 @@ impl Module {
             }
         };
 
-        Self { instance, log }
+        Self {
+            instance,
+            log,
+            definitions: config.definitions,
+        }
     }
 
     pub async fn start(&mut self) -> Result<(), crate::instance::error::Error> {
