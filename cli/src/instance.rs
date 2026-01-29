@@ -4,8 +4,9 @@ use net::*;
 use anyhow::anyhow;
 use std::fmt::Debug;
 use std::hash::Hash;
+use std::sync::Arc;
 use std::sync::mpsc::Sender;
-use std::sync::{Arc, RwLock};
+use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 
 #[derive(Clone)]
@@ -58,7 +59,8 @@ enum Client {
 enum Server<T, L>
 where
     T: Hash + Debug + PartialEq + Eq + Clone + Default + Send + Sync + 'static,
-    L: Fn(String) -> () + Clone + Send + Sync + 'static,
+    L: AsyncFn(String) -> () + Clone + Send + Sync + 'static,
+    for<'a> L::CallRefFuture<'a>: Send,
 {
     Tcp(tcp::Server<T, L>),
     Rtu(rtu::Server<T, L>),
@@ -138,8 +140,10 @@ where
 
     pub async fn start<L, S>(&mut self, log: L, status: S) -> Result<(), anyhow::Error>
     where
-        L: Fn(String) -> () + Clone + Send + Sync + 'static,
-        S: Fn(String) -> () + Clone + Send + Sync + 'static,
+        L: AsyncFn(String) -> () + Clone + Send + Sync + 'static,
+        S: AsyncFn(String) -> () + Clone + Send + Sync + 'static,
+        for<'a> L::CallRefFuture<'a>: Send,
+        for<'a> S::CallRefFuture<'a>: Send,
     {
         if self.handle.is_some() {
             return Err(anyhow!("instance already active"));
@@ -226,6 +230,21 @@ where
                     Err(anyhow!("{}", e))
                 }
             }
+        }
+    }
+
+    pub fn send_command(&self, command: Command) -> Result<(), anyhow::Error> {
+        if self.handle.is_none() {
+            return Err(anyhow!("instance not running"));
+        }
+        match &self.handle {
+            Some(Handle::Client(handle)) => handle.sender.send(command).map_err(|e| {
+                anyhow!(
+                    "failed to send command to client instance. [{}]",
+                    e.to_string()
+                )
+            }),
+            _ => Err(anyhow!("read operation not supported for server instances")),
         }
     }
 }

@@ -8,11 +8,12 @@ use memory::{Memory, Range, Type};
 // External
 use anyhow::anyhow;
 use std::fmt::Debug;
+use std::future;
 use std::hash::Hash;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::{future, sync::RwLock};
 use tokio::net::TcpListener;
+use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 use tokio_modbus::Request;
 use tokio_modbus::prelude::{ExceptionCode, Response, SlaveRequest};
@@ -40,19 +41,19 @@ where
         log: L,
     ) -> Result<JoinHandle<Result<(), anyhow::Error>>, anyhow::Error>
     where
-        L: Fn(String) -> () + Clone + Send + Sync + 'static,
+        L: AsyncFn(String) -> () + Clone + Send + Sync + 'static,
+        for<'a> L::CallRefFuture<'a>: Send,
     {
-        match self.config.read() {
-            Ok(guard) => Server::run(self.id.clone(), &guard, self.memory.clone(), log).await,
-            Err(e) => Err(anyhow!("{}", e)),
-        }
+        let guard = self.config.read().await;
+        Server::run(self.id.clone(), &guard, self.memory.clone(), log).await
     }
 }
 
 pub struct Server<T, L>
 where
     T: Hash + Debug + PartialEq + Eq + Clone + Default + Send + Sync + 'static,
-    L: Fn(String) -> () + Clone + Send + Sync + 'static,
+    L: AsyncFn(String) -> () + Clone + Send + Sync + 'static,
+    for<'a> L::CallRefFuture<'a>: Send,
 {
     id: T,
     memory: Arc<RwLock<Memory<Key<T>>>>,
@@ -62,7 +63,8 @@ where
 impl<T, L> Server<T, L>
 where
     T: Hash + Debug + PartialEq + Eq + Clone + Default + Send + Sync + 'static,
-    L: Fn(String) -> () + Clone + Send + Sync + 'static,
+    L: AsyncFn(String) -> () + Clone + Send + Sync + 'static,
+    for<'a> L::CallRefFuture<'a>: Send,
 {
     fn new(id: T, memory: Arc<RwLock<Memory<Key<T>>>>, log: L) -> Self {
         Self { id, memory, log }
@@ -92,7 +94,12 @@ where
                     };
                     let on_process_log = log.clone();
                     let on_process_error = move |err| {
-                        on_process_log(format!("Server processing failed. [{}]", err));
+                        tokio::task::block_in_place(|| {
+                            tokio::runtime::Handle::current().block_on(async {
+                                on_process_log(format!("Server processing failed. [{}]", err))
+                                    .await;
+                            })
+                        })
                     };
                     server
                         .serve(&on_connected, on_process_error)
@@ -108,7 +115,8 @@ where
 impl<T, L> tokio_modbus::server::Service for Server<T, L>
 where
     T: Hash + Debug + PartialEq + Eq + Clone + Default + Send + Sync,
-    L: Fn(String) -> () + Clone + Send + Sync + 'static,
+    L: AsyncFn(String) -> () + Clone + Send + Sync + 'static,
+    for<'a> L::CallRefFuture<'a>: Send,
 {
     type Request = SlaveRequest<'static>;
     type Exception = ExceptionCode;
@@ -121,94 +129,83 @@ where
             id: self.id.clone(),
             slave_id: slave,
         };
-        match request {
-            Request::ReadCoils(addr, cnt) => {
-                (self.log)(format!(
-                    "ReadCoils request received for slave ID {} and range [{}, {})",
-                    slave,
-                    addr,
-                    addr + cnt
-                ));
-                match self.memory.read() {
-                    Ok(guard) => {
-                        match guard.read(key, &Type::Coil, &Range::new(addr as usize, cnt as usize))
-                        {
+
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async {
+                match request {
+                    Request::ReadCoils(addr, cnt) => {
+                        (self.log)(format!(
+                            "ReadCoils request received for slave ID {} and range [{}, {})",
+                            slave,
+                            addr,
+                            addr + cnt
+                        )).await;
+                        let guard = self.memory.read().await;
+                        match guard.read(key, &Type::Coil, &Range::new(addr as usize, cnt as usize)) {
                             Some(v) => future::ready(Ok(Response::ReadCoils(
                                 v.into_iter().map(|b| b != 0).collect(),
                             ))),
                             None => future::ready(Err(ExceptionCode::IllegalFunction)),
                         }
                     }
-                    _ => future::ready(Err(Self::Exception::ServerDeviceFailure)),
-                }
-            }
-            Request::ReadDiscreteInputs(addr, cnt) => {
-                (self.log)(format!(
-                    "ReadDiscreteInputs request received for slave ID {} and range [{}, {})",
-                    slave,
-                    addr,
-                    addr + cnt
-                ));
-                match self.memory.read() {
-                    Ok(guard) => {
-                        match guard.read(key, &Type::Coil, &Range::new(addr as usize, cnt as usize))
-                        {
+                    Request::ReadDiscreteInputs(addr, cnt) => {
+                        (self.log)(format!(
+                            "ReadDiscreteInputs request received for slave ID {} and range [{}, {})",
+                            slave,
+                            addr,
+                            addr + cnt
+                        )).await;
+                        let guard = self.memory.read().await;
+                        match guard.read(key, &Type::Coil, &Range::new(addr as usize, cnt as usize)) {
                             Some(v) => future::ready(Ok(Response::ReadDiscreteInputs(
                                 v.into_iter().map(|b| b != 0).collect(),
                             ))),
                             None => future::ready(Err(ExceptionCode::IllegalFunction)),
                         }
                     }
-                    _ => future::ready(Err(Self::Exception::ServerDeviceFailure)),
-                }
-            }
-            Request::ReadInputRegisters(addr, cnt) => {
-                (self.log)(format!(
-                    "ReadInputRegisters request received for slave ID {} and range [{}, {})",
-                    slave,
-                    addr,
-                    addr + cnt
-                ));
-                match self.memory.read() {
-                    Ok(guard) => match guard.read(
-                        key,
-                        &Type::Register,
-                        &Range::new(addr as usize, cnt as usize),
-                    ) {
-                        Some(v) => future::ready(Ok(Response::ReadInputRegisters(v))),
-                        None => future::ready(Err(ExceptionCode::IllegalFunction)),
-                    },
-                    _ => future::ready(Err(Self::Exception::ServerDeviceFailure)),
-                }
-            }
-            Request::ReadHoldingRegisters(addr, cnt) => {
-                (self.log)(format!(
-                    "ReadHoldingRegisters request received for slave ID {} and range [{}, {})",
-                    slave,
-                    addr,
-                    addr + cnt
-                ));
-                match self.memory.read() {
-                    Ok(guard) => match guard.read(
-                        key,
-                        &Type::Register,
-                        &Range::new(addr as usize, cnt as usize),
-                    ) {
-                        Some(v) => future::ready(Ok(Response::ReadHoldingRegisters(v))),
-                        None => future::ready(Err(ExceptionCode::IllegalFunction)),
-                    },
-                    _ => future::ready(Err(Self::Exception::ServerDeviceFailure)),
-                }
-            }
-            Request::WriteMultipleRegisters(addr, values) => {
-                (self.log)(format!(
-                    "WriteMultipleRegisters request received for slave ID {} and range [{}, {})",
-                    slave,
-                    addr,
-                    addr as usize + values.len()
-                ));
-                match self.memory.write() {
-                    Ok(mut guard) => {
+                    Request::ReadInputRegisters(addr, cnt) => {
+                        (self.log)(format!(
+                            "ReadInputRegisters request received for slave ID {} and range [{}, {})",
+                            slave,
+                            addr,
+                            addr + cnt
+                        )).await;
+                        let guard = self.memory.read().await;
+                        match guard.read(
+                            key,
+                            &Type::Register,
+                            &Range::new(addr as usize, cnt as usize),
+                        ) {
+                            Some(v) => future::ready(Ok(Response::ReadInputRegisters(v))),
+                            None => future::ready(Err(ExceptionCode::IllegalFunction)),
+                        }
+                    }
+                    Request::ReadHoldingRegisters(addr, cnt) => {
+                        (self.log)(format!(
+                            "ReadHoldingRegisters request received for slave ID {} and range [{}, {})",
+                            slave,
+                            addr,
+                            addr + cnt
+                        )).await;
+                        let guard = self.memory.read().await;
+                        match guard.read(
+                            key,
+                            &Type::Register,
+                            &Range::new(addr as usize, cnt as usize),
+                        ) {
+                            Some(v) => future::ready(Ok(Response::ReadHoldingRegisters(v))),
+                            None => future::ready(Err(ExceptionCode::IllegalFunction)),
+                        }
+                    }
+                    Request::WriteMultipleRegisters(addr, values) => {
+                        (self.log)(format!(
+                            "WriteMultipleRegisters request received for slave ID {}, range [{}, {}), and values {:?}.",
+                            slave,
+                            addr,
+                            addr as usize + values.len(),
+                            values
+                        )).await;
+                        let mut guard = self.memory.write().await;
                         match guard.write(
                             key,
                             &Type::Register,
@@ -222,86 +219,70 @@ where
                             false => future::ready(Err(ExceptionCode::IllegalFunction)),
                         }
                     }
-                    _ => future::ready(Err(Self::Exception::ServerDeviceFailure)),
-                }
-            }
-            Request::WriteSingleRegister(addr, value) => {
-                (self.log)(format!(
-                    "WriteSingleRegister request received for slave ID {} and address {}.",
-                    slave, addr,
-                ));
-                match self.memory.write() {
-                    Ok(mut guard) => match guard.write(
-                        key,
-                        &Type::Register,
-                        &Range::new(addr as usize, 1),
-                        &[value],
-                    ) {
-                        true => future::ready(Ok(Response::WriteSingleRegister(addr, value))),
-                        false => future::ready(Err(ExceptionCode::IllegalFunction)),
-                    },
-                    _ => future::ready(Err(Self::Exception::ServerDeviceFailure)),
-                }
-            }
-            Request::WriteMultipleCoils(addr, values) => {
-                (self.log)(format!(
-                    "WriteMultipleCoils request received for slave ID {} and range [{}, {}).",
-                    slave,
-                    addr,
-                    addr as usize + values.len()
-                ));
-                match self.memory.write() {
-                    Ok(mut guard) => {
-                        let values: Vec<u16> = values.iter().map(|v| *v as u16).collect();
-                        match guard.write(key, &Type::Coil, &Range::new(addr as usize, 1), &values)
-                        {
-                            true => future::ready(Ok(Response::WriteMultipleCoils(
-                                addr,
-                                values.len() as u16,
-                            ))),
+                    Request::WriteSingleRegister(addr, value) => {
+                        (self.log)(format!(
+                            "WriteSingleRegister request received for slave ID {}, address {}, and value {}.",
+                            slave, addr, value
+                        )).await;
+                        let mut guard = self.memory.write().await;
+                        match guard.write(
+                            key,
+                            &Type::Register,
+                            &Range::new(addr as usize, 1),
+                            &[value],
+                        ) {
+                            true => future::ready(Ok(Response::WriteSingleRegister(addr, value))),
                             false => future::ready(Err(ExceptionCode::IllegalFunction)),
                         }
                     }
-                    _ => future::ready(Err(Self::Exception::ServerDeviceFailure)),
-                }
-            }
-            Request::WriteSingleCoil(addr, value) => {
-                (self.log)(format!(
-                    "WriteSingleCoil request received for slave ID {} and address {}.",
-                    slave, addr,
-                ));
-                match self.memory.write() {
-                    Ok(mut guard) => {
+                    Request::WriteMultipleCoils(addr, values) => {
+                        (self.log)(format!(
+                            "WriteMultipleCoils request received for slave ID {}, range [{}, {}), and values {:?}.",
+                            slave,
+                            addr,
+                            addr as usize + values.len(), values
+                        )).await;
+                        let mut guard = self.memory.write().await;
+                        let values: Vec<u16> = values.iter().map(|v| *v as u16).collect();
+                        match guard.write(key, &Type::Coil, &Range::new(addr as usize, 1), &values) {
+                            true => {
+                                future::ready(Ok(Response::WriteMultipleCoils(addr, values.len() as u16)))
+                            }
+                            false => future::ready(Err(ExceptionCode::IllegalFunction)),
+                        }
+                    }
+                    Request::WriteSingleCoil(addr, value) => {
+                        (self.log)(format!(
+                            "WriteSingleCoil request received for slave ID {}, address {}, and value {}.",
+                            slave, addr, value
+                        )).await;
+                        let mut guard = self.memory.write().await;
                         let val = value as u16;
                         match guard.write(key, &Type::Coil, &Range::new(addr as usize, 1), &[val]) {
                             true => future::ready(Ok(Response::WriteSingleCoil(addr, value))),
                             false => future::ready(Err(ExceptionCode::IllegalFunction)),
                         }
                     }
-                    _ => future::ready(Err(Self::Exception::ServerDeviceFailure)),
-                }
-            }
-            Request::ReportServerId => {
-                (self.log)(format!(
-                    "ReportServerId request received for slave ID {}. Unsupported function.",
-                    slave,
-                ));
-                future::ready(Err(ExceptionCode::IllegalFunction))
-            }
-            Request::MaskWriteRegister(_, _, _) => {
-                (self.log)(format!(
-                    "MaskWriteRegister request received for slave ID {}. Unsupported function.",
-                    slave,
-                ));
-                future::ready(Err(ExceptionCode::IllegalFunction))
-            }
-            Request::ReadWriteMultipleRegisters(read_addr, cnt, write_addr, values) => {
-                (self.log)(format!(
-                    "ReadWriteMultipleRegisrters request received for slave ID {}. Unsupported function.",
-                    slave,
-                ));
-                match self.memory.write() {
-                    Ok(mut guard) => {
+                    Request::ReportServerId => {
+                        (self.log)(format!(
+                            "ReportServerId request received for slave ID {}. Unsupported function.",
+                            slave,
+                        )).await;
+                        future::ready(Err(ExceptionCode::IllegalFunction))
+                    }
+                    Request::MaskWriteRegister(_, _, _) => {
+                        (self.log)(format!(
+                            "MaskWriteRegister request received for slave ID {}. Unsupported function.",
+                            slave,
+                        )).await;
+                        future::ready(Err(ExceptionCode::IllegalFunction))
+                    }
+                    Request::ReadWriteMultipleRegisters(read_addr, cnt, write_addr, values) => {
+                        (self.log)(format!(
+                            "ReadWriteMultipleRegisrters request received for slave ID {}, read address {}, count {}, write address {}, and values {:?}.",
+                            slave, read_addr, cnt, write_addr, values
+                        )).await;
+                        let mut guard = self.memory.write().await;
                         let readable = guard.readable(
                             &key,
                             &Type::Register,
@@ -333,23 +314,22 @@ where
                         }
                         future::ready(Ok(Response::ReadWriteMultipleRegisters(v)))
                     }
-                    _ => return future::ready(Err(Self::Exception::ServerDeviceFailure)),
+                    Request::ReadDeviceIdentification(_, _) => {
+                        (self.log)(format!(
+                            "ReadDeviceIdentification request received for slave ID {}. Unsupported function.",
+                            slave,
+                        )).await;
+                        future::ready(Err(ExceptionCode::IllegalFunction))
+                    }
+                    Request::Custom(func, _) => {
+                        (self.log)(format!(
+                            "Custom function {} request received for slave ID {}. Unsupported function.",
+                            func, slave,
+                        )).await;
+                        future::ready(Err(ExceptionCode::IllegalFunction))
+                    }
                 }
-            }
-            Request::ReadDeviceIdentification(_, _) => {
-                (self.log)(format!(
-                    "ReadDeviceIdentification request received for slave ID {}. Unsupported function.",
-                    slave,
-                ));
-                future::ready(Err(ExceptionCode::IllegalFunction))
-            }
-            Request::Custom(func, _) => {
-                (self.log)(format!(
-                    "Custom function {} request received for slave ID {}. Unsupported function.",
-                    func, slave,
-                ));
-                future::ready(Err(ExceptionCode::IllegalFunction))
-            }
-        }
+            })
+        })
     }
 }

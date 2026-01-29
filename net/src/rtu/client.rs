@@ -7,9 +7,10 @@ use tokio::task::JoinHandle;
 use anyhow::anyhow;
 use std::fmt::Debug;
 use std::hash::Hash;
+use std::sync::Arc;
 use std::sync::mpsc::Receiver;
-use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
+use tokio::sync::RwLock;
 use tokio::time::sleep;
 use tokio_modbus::FunctionCode;
 use tokio_modbus::client::Context as ClientContext;
@@ -51,37 +52,35 @@ where
         status: S,
     ) -> Result<JoinHandle<Result<(), anyhow::Error>>, anyhow::Error>
     where
-        L: Fn(String) -> () + Send + 'static,
-        S: Fn(String) -> () + Send + 'static,
+        L: AsyncFn(String) -> () + Send + 'static,
+        S: AsyncFn(String) -> () + Send + 'static,
+        for<'a> L::CallRefFuture<'a>: Send,
+        for<'a> S::CallRefFuture<'a>: Send,
     {
-        match self.config.read() {
-            Ok(guard) => {
-                let client = Client::connect(&guard).await?;
-                let operations = self.operations.clone();
-                let memory = self.memory.clone();
-                let timeout_ms = guard.timeout_ms;
-                let delay_ms = guard.delay_ms;
-                let interval_ms = guard.interval_ms;
-                let id = self.id.clone();
-                Ok(tokio::task::spawn(async move {
-                    client
-                        .run(
-                            id,
-                            operations,
-                            memory,
-                            receiver,
-                            log,
-                            status,
-                            timeout_ms,
-                            delay_ms,
-                            interval_ms,
-                        )
-                        .await
-                        .map_err(|e| anyhow!("{:?}", e))
-                }))
-            }
-            Err(e) => Err(anyhow!("{}", e)),
-        }
+        let guard = self.config.read().await;
+        let client = Client::connect(&guard).await?;
+        let operations = self.operations.clone();
+        let memory = self.memory.clone();
+        let timeout_ms = guard.timeout_ms;
+        let delay_ms = guard.delay_ms;
+        let interval_ms = guard.interval_ms;
+        let id = self.id.clone();
+        Ok(tokio::task::spawn(async move {
+            client
+                .run(
+                    id,
+                    operations,
+                    memory,
+                    receiver,
+                    log,
+                    status,
+                    timeout_ms,
+                    delay_ms,
+                    interval_ms,
+                )
+                .await
+                .map_err(|e| anyhow!("{:?}", e))
+        }))
     }
 }
 
@@ -222,8 +221,10 @@ impl Client {
     ) -> Result<(), Error>
     where
         T: Hash + Debug + PartialEq + Eq + Clone + Default + Send + Sync + 'static,
-        L: Fn(String) -> () + Send + 'static,
-        S: Fn(String) -> () + Send + 'static,
+        L: AsyncFn(String) -> () + Send + 'static,
+        S: AsyncFn(String) -> () + Send + 'static,
+        for<'a> L::CallRefFuture<'a>: Send,
+        for<'a> S::CallRefFuture<'a>: Send,
     {
         let mut time: Option<Instant> = None;
 
@@ -235,16 +236,12 @@ impl Client {
         loop {
             // Perform next read of registers
             if self.interval_elapsed(&mut time, interval_ms) {
-                let mut operation: Option<Operation> = None;
-                let mut count = 0;
-
-                if let Ok(operations) = operations.read() {
-                    count = operations.len();
-                    if index >= count {
-                        index = 0;
-                    }
-                    operation = operations.get(index).map(|v| (*v).clone());
+                let operations = operations.read().await;
+                let count = operations.len();
+                if index >= count {
+                    index = 0;
                 }
+                let operation = operations.get(index).map(|v| (*v).clone());
 
                 if let Some(operation) = operation {
                     let fc = operation.fn_code;
@@ -253,29 +250,22 @@ impl Client {
                     let end = range.end;
                     match self.read(&operation, timeout_ms).await {
                         Ok(values) => {
-                            log(format!("Perform read operation {fc} on [{start}, {end})."));
-                            match memory.write() {
-                                Ok(mut guard) => {
-                                    let key = Key {
-                                        id: id.clone(),
-                                        slave_id: operation.slave_id,
-                                    };
-                                    let ty = if fc == FunctionCode::ReadDiscreteInputs
-                                        || fc == FunctionCode::ReadHoldingRegisters
-                                    {
-                                        Type::Register
-                                    } else {
-                                        Type::Coil
-                                    };
-                                    if !guard.write(key, &ty, &range, &values) {
-                                        log(format!(
-                                            "Failed to to update memory for [{start}, {end})."
-                                        ))
-                                    }
-                                }
-                                Err(e) => log(format!(
-                                    "Unable to access memory for [{start}, {end}). [{e}]"
-                                )),
+                            log(format!("Perform read operation {fc} on [{start}, {end}).")).await;
+                            let mut guard = memory.write().await;
+                            let key = Key {
+                                id: id.clone(),
+                                slave_id: operation.slave_id,
+                            };
+                            let ty = if fc == FunctionCode::ReadDiscreteInputs
+                                || fc == FunctionCode::ReadHoldingRegisters
+                            {
+                                Type::Register
+                            } else {
+                                Type::Coil
+                            };
+                            if !guard.write(key, &ty, &range, &values) {
+                                log(format!("Failed to to update memory for [{start}, {end})."))
+                                    .await;
                             }
                             index = (index + 1) % count;
                             retries = 0;
@@ -285,7 +275,7 @@ impl Client {
                             if retries > 3 {
                                 log(format!(
                                     "Perform read operation failed for {fc} on [{start}, {end}). [{e}]"
-                                ));
+                                )).await;
                                 return Err(Error::TimedOut);
                             }
                         }
@@ -298,8 +288,8 @@ impl Client {
                 match cmd {
                     Command::Terminate => {
                         let _ = self.context.disconnect().await;
-                        log("Client gracefully terminated.".to_string());
-                        status("Client disconnected".to_string());
+                        log("Client gracefully terminated.".to_string()).await;
+                        status("Client disconnected".to_string()).await;
                         return Ok(());
                     }
                     Command::WriteSingleCoil(slave, addr, coil) => {
@@ -314,13 +304,13 @@ impl Client {
                                 let _ = self.context.disconnect().await;
                                 log(format!(
                                     "WriteSingleCoil request to {addr} with {coil} timed out. Disconnecting client. [{e:?}]"
-                                ));
+                                )).await;
                                 return Err(Error::TimedOut);
                             }
                             Ok(_) => {
                                 log(format!(
                                     "WriteSingleCoil request to {addr} with {coil} successfully executed."
-                                ));
+                                )).await;
                             }
                         }
                     }
@@ -336,13 +326,13 @@ impl Client {
                                 let _ = self.context.disconnect().await;
                                 log(format!(
                                     "WriteMultipleCoils request to {addr} with {coils:?} timed out. Disconnecting client. [{e:?}]"
-                                ));
+                                )).await;
                                 return Err(Error::TimedOut);
                             }
                             Ok(_) => {
                                 log(format!(
                                     "WriteMultipleCoils request to {addr} with {coils:?} successfully executed."
-                                ));
+                                )).await;
                             }
                         }
                     }
@@ -358,13 +348,13 @@ impl Client {
                                 let _ = self.context.disconnect().await;
                                 log(format!(
                                     "WriteSingleRegister request to {addr} with {value} timed out. Disconnecting client. [{e:?}]"
-                                ));
+                                )).await;
                                 return Err(Error::TimedOut);
                             }
                             Ok(_) => {
                                 log(format!(
                                     "WriteMultipleCoils request to {addr} with {value} successfully executed."
-                                ));
+                                )).await;
                             }
                         }
                     }
@@ -380,13 +370,13 @@ impl Client {
                                 let _ = self.context.disconnect().await;
                                 log(format!(
                                     "WriteSingleRegister request to {addr} with {values:?} timed out. Disconnecting client. [{e:?}]"
-                                ));
+                                )).await;
                                 return Err(Error::TimedOut);
                             }
                             Ok(_) => {
                                 log(format!(
                                     "WriteMultipleCoils request to {addr} with {values:?} successfully executed."
-                                ));
+                                )).await;
                             }
                         }
                     }

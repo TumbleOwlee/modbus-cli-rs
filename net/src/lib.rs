@@ -1,10 +1,12 @@
+#![feature(async_fn_traits)]
+
 pub mod rtu;
 pub mod tcp;
 
 use memory::Range;
 use std::fmt::Debug;
 use std::hash::Hash;
-use tokio_modbus::{FunctionCode, SlaveId};
+pub use tokio_modbus::{FunctionCode, SlaveId};
 
 #[derive(Debug, Clone)]
 pub struct Operation {
@@ -22,14 +24,32 @@ where
     slave_id: SlaveId,
 }
 
+impl<T> Key<T>
+where
+    T: Hash + Debug + PartialEq + Eq + Clone + Default + Send + Sync,
+{
+    pub fn from(id: T, slave_id: SlaveId) -> Self {
+        Self { id, slave_id }
+    }
+
+    pub fn create(slave_id: SlaveId) -> Self {
+        Self {
+            id: T::default(),
+            slave_id,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum Error {
     TimedOut,
 }
 
-type Address = u16;
-type Value = u16;
-type Coil = bool;
+unsafe impl Send for Error {}
+
+pub type Address = u16;
+pub type Value = u16;
+pub type Coil = bool;
 
 pub enum Command {
     Terminate,
