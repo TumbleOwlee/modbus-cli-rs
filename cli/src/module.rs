@@ -6,7 +6,6 @@ use log::Log;
 use memory::Memory;
 use memory::Range;
 use memory::Type;
-use std::marker::PhantomData;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 

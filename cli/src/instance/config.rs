@@ -25,14 +25,3 @@ where
     pub config: Arc<RwLock<Config>>,
     pub memory: Arc<RwLock<Memory<net::Key<T>>>>,
 }
-
-#[derive(Clone)]
-pub enum Config<T>
-where
-    T: Hash + Debug + PartialEq + Eq + Clone + Default + Send + Sync + 'static,
-{
-    TcpClient(ClientConfig<T, net::tcp::Config>),
-    RtuClient(ClientConfig<T, net::rtu::Config>),
-    TcpServer(ServerConfig<T, net::tcp::Config>),
-    RtuServer(ServerConfig<T, net::rtu::Config>),
-}
