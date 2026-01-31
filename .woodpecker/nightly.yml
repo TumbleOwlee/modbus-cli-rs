@@ -3,6 +3,8 @@ steps:
     image: rust:latest
     commands:
       - apt-get update && apt-get install -y mingw-w64 zip
+      - rustup toolchain install nightly
+      - rustup default nightly
       - rustup target add x86_64-pc-windows-gnu
       - cargo check
       - cargo build --release
