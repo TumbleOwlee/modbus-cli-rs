@@ -6,10 +6,12 @@ edition = "2024"
 [dependencies]
 anyhow = "1.0.100"
 clap = { version = "4.5.54", features = ["derive"] }
+crossterm = "0.29.0"
 log = { path = "../log" }
 lua = { path = "../lua" }
 memory = { path = "../memory" }
 net = { path = "../net" }
+ratatui = { version = "0.30.0", features = ["all-widgets", "unstable-widget-ref"] }
 register = { path = "../register" }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"

@@ -2,6 +2,7 @@
 
 mod instance;
 mod module;
+mod widgets;
 
 use clap::Parser;
 use tokio::runtime::Runtime;
