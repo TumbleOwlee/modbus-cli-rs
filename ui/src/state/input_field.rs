@@ -5,7 +5,7 @@ use crate::{EventResult, Transition};
 
 #[derive(Debug, Default)]
 pub struct InputFieldState {
-    input: Option<String>,
+    input: String,
     cursor: usize,
     pub focused: bool,
     pub disabled: bool,
@@ -14,21 +14,25 @@ pub struct InputFieldState {
 impl InputFieldState {
     pub fn set_input(&mut self, value: &str) {
         let len = value.len();
-        self.input = Some(value.to_string());
+        self.input = value.to_string();
         self.cursor = std::cmp::min(self.cursor, len);
     }
 
     pub fn clear(&mut self) {
-        self.input = None;
+        self.input.clear();
         self.cursor = 0;
     }
 
     pub fn get_input(&self) -> Option<String> {
-        self.input.clone()
+        if self.input.is_empty() {
+            None
+        } else {
+            Some(self.input.clone())
+        }
     }
 
     pub fn set_cursor(&mut self, cursor: usize) {
-        let len = self.input.as_ref().map(|s| s.len()).unwrap_or(0);
+        let len = self.input.len();
         self.cursor = std::cmp::min(cursor, len);
     }
 
@@ -70,43 +74,26 @@ impl HandleEvents for InputFieldState {
                 EventResult::Consumed
             }
             (_, KeyCode::End) => {
-                if let Some(input) = &self.input {
-                    self.cursor = input.len();
-                } else {
-                    self.cursor = 0;
-                }
+                self.cursor = self.input.len();
                 EventResult::Consumed
             }
             (_, KeyCode::Char(c)) => {
-                if let Some(input) = &mut self.input {
-                    input.insert(self.cursor, c);
-                } else {
-                    self.input = Some(String::from(c));
-                }
+                self.input.insert(self.cursor, c);
                 self.cursor += 1;
                 EventResult::Consumed
             }
             (_, KeyCode::Backspace) => {
                 if self.cursor > 0 {
-                    if let Some(input) = &mut self.input {
-                        if input.len() > 0 {
-                            input.remove(self.cursor - 1);
-                        } else {
-                            self.input = None;
-                        }
-                        self.cursor -= 1;
+                    if self.input.len() >= self.cursor {
+                        self.input.remove(self.cursor - 1);
                     }
+                    self.cursor -= 1;
                 }
                 EventResult::Consumed
             }
             (_, KeyCode::Delete) => {
-                if let Some(input) = &mut self.input {
-                    if input.len() > self.cursor {
-                        input.remove(self.cursor);
-                    }
-                    if input.len() == 0 {
-                        self.input = None;
-                    }
+                if self.input.len() > self.cursor {
+                    self.input.remove(self.cursor);
                 }
                 EventResult::Consumed
             }
@@ -117,11 +104,7 @@ impl HandleEvents for InputFieldState {
                 EventResult::Consumed
             }
             (_, KeyCode::Right) => {
-                if let Some(input) = &self.input {
-                    self.cursor = std::cmp::min(self.cursor + 1, input.len());
-                } else {
-                    self.cursor = 0;
-                }
+                self.cursor = std::cmp::min(self.cursor + 1, self.input.len());
                 EventResult::Consumed
             }
             (KeyModifiers::SHIFT, KeyCode::Tab) => {

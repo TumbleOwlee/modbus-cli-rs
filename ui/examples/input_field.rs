@@ -2,7 +2,8 @@ use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::{Frame, layout::Margin, style::palette::tailwind};
 use std::{io::Stdout, time::Duration};
 use ui::{
-    AlternateScreen, Style, state::InputFieldState, traits::HandleEvents, widget::InputField,
+    AlternateScreen, EventResult, Style, state::InputFieldState, traits::HandleEvents,
+    widget::InputField,
 };
 
 // Simple app consisting of single input field
@@ -28,9 +29,9 @@ fn ui(f: &mut Frame, app: &mut App) {
             horizontal: 1,
         })
         .style(Style {
-            focused: ratatui::prelude::Style::default(),
+            focused: ratatui::prelude::Style::default().fg(tailwind::INDIGO.c400),
             cursor: ratatui::prelude::Style::default()
-                .bg(tailwind::BLUE.c400)
+                .bg(tailwind::INDIGO.c400)
                 .fg(tailwind::WHITE),
             ..Style::default()
         });
@@ -39,6 +40,7 @@ fn ui(f: &mut Frame, app: &mut App) {
 }
 
 fn main() {
+    let mut input = None;
     let mut screen: AlternateScreen<Stdout> =
         AlternateScreen::new().expect("Failed to create alternate screen.");
 
@@ -56,10 +58,18 @@ fn main() {
                     if let KeyCode::Esc = key.code {
                         break;
                     } else {
-                        app.state.handle_events(key.modifiers, key.code);
+                        let event_result: EventResult =
+                            app.state.handle_events(key.modifiers, key.code);
+                        if let EventResult::Unhandled(_, KeyCode::Enter) = event_result {
+                            input = app.state.get_input();
+                            break;
+                        }
                     }
                 }
             }
         }
     }
+
+    drop(screen);
+    println!("Input: {:?}", input);
 }

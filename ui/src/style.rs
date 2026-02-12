@@ -1,5 +1,5 @@
-use ratatui::style::Style as UiStyle;
 use ratatui::style::palette::tailwind;
+use ratatui::style::{Color, Style as UiStyle};
 
 #[derive(Clone)]
 pub struct Style {
@@ -11,9 +11,7 @@ pub struct Style {
 impl Default for Style {
     fn default() -> Self {
         Style {
-            default: UiStyle::default()
-                .fg(tailwind::WHITE)
-                .bg(tailwind::SLATE.c950),
+            default: UiStyle::default().fg(tailwind::WHITE).bg(Color::default()),
             focused: UiStyle::default()
                 .fg(tailwind::INDIGO.c400)
                 .bg(tailwind::SLATE.c950),

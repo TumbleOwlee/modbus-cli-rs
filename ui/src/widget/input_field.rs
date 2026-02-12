@@ -79,9 +79,7 @@ impl StatefulWidget for &InputField {
 
         let mut text = state
             .get_input()
-            .as_ref()
-            .map(|s| s.clone())
-            .unwrap_or(self.placeholder.clone().unwrap_or(String::new()).clone());
+            .unwrap_or(self.placeholder.clone().unwrap_or_default());
 
         let mut x_start = 0;
         let cursor = state.get_cursor();
