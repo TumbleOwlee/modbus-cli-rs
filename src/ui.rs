@@ -1,3 +1,4 @@
+use crate::mem::register::Values::ValueDef;
 use crate::mem::register::{Handler, Register};
 use crate::util::str;
 use crate::widgets::{EditDialog, EditFieldType};
@@ -502,10 +503,11 @@ impl App {
                             Some(entry.1.r#type().label().to_string()),
                             None,
                         );
+                        let e = entry.1.value().clone();
                         self.edit_dialog.set(
                             EditFieldType::Value,
                             None,
-                            Some(entry.1.value().clone()),
+                            Some(format!("{} ({})", e.0, e.1)),
                         );
                         self.edit_dialog.focus();
                         self.popup = Popup::Edit(entry.1.clone());
@@ -763,14 +765,30 @@ fn render_register(f: &mut Frame, app: &mut App, area: Rect) {
         .filter(|(n, _)| !n.starts_with("hide_"))
         .sorted_by(|a, b| app.ordering.apply(a, b))
         .map(|(n, r)| {
-            [
-                format!("{}", r.access_type()),
-                format!("{}", r.slave_id()),
-                str!(n),
-                format!("{:#06X} ({})", r.address(), r.address()),
-                r.r#type().label().to_string(),
-                r.raw().len().to_string(),
-                r.value()
+            let mut alias = String::new();
+            let value = r.value();
+            if let Some(values) = r.values() {
+                if let Some(v) = values.iter().find(|v| {
+                    if let ValueDef(value_def) = v {
+                        let s = format!("{}", value_def.value);
+                        s == value.0 || s == value.1
+                    } else {
+                        false
+                    }
+                }) {
+                    if let ValueDef(v) = v {
+                        alias = v.name.clone();
+                    }
+                }
+            }
+            let value: String = {
+                let (v1, v2) = value;
+                let value = if v2.is_empty() {
+                    v1.clone()
+                } else {
+                    format!("{} ({})", v1, v2)
+                };
+                value
                     .chars()
                     .map(|c| {
                         if c as u8 >= 0x20 && c as u8 <= 126 {
@@ -779,7 +797,20 @@ fn render_register(f: &mut Frame, app: &mut App, area: Rect) {
                             '.'
                         }
                     })
-                    .collect(),
+                    .collect()
+            };
+            [
+                format!("{}", r.access_type()),
+                format!("{}", r.slave_id()),
+                str!(n),
+                format!("{:#06X} ({})", r.address(), r.address()),
+                r.r#type().label().to_string(),
+                r.raw().len().to_string(),
+                if alias.is_empty() {
+                    format!("{}", value)
+                } else {
+                    format!("{} [{}]", alias, value)
+                },
                 if app.show_as_hex {
                     format!("[ {:#06X} ]", r.raw().iter().format(", "))
                 } else {

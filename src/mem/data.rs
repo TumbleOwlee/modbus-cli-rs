@@ -358,7 +358,7 @@ impl DataType {
         }
     }
 
-    pub fn as_str(&self, bytes: &[u16]) -> anyhow::Result<String> {
+    pub fn as_str(&self, bytes: &[u16]) -> anyhow::Result<(String, String)> {
         match self.format {
             Format::F32 => {
                 if let (Some(b1), Some(b2)) = (
@@ -367,7 +367,7 @@ impl DataType {
                 ) {
                     let uval: u32 = ((b1 as u32) << 16) + (b2 as u32);
                     let val = f32::from_bits(uval);
-                    Ok(format!("0x{:02$X} ({})", uval, val, 8))
+                    Ok((format!("0x{:01$X}", uval, 8), format!("{}", val)))
                 } else {
                     Err(anyhow!("Not enough bytes"))
                 }
@@ -379,7 +379,7 @@ impl DataType {
                 ) {
                     let uval: u32 = ((b2 as u32) << 16) + (b1 as u32);
                     let val = f32::from_bits(uval);
-                    Ok(format!("0x{:02$X} ({})", uval, val, 8))
+                    Ok((format!("0x{:01$X}", uval, 8), format!("{}", val)))
                 } else {
                     Err(anyhow!("Not enough bytes"))
                 }
@@ -396,7 +396,7 @@ impl DataType {
                         + ((b3 as u64) << 16)
                         + (b4 as u64);
                     let val = f64::from_bits(uval);
-                    Ok(format!("0x{:02$X} ({})", uval, val, 16))
+                    Ok((format!("0x{:01$X}", uval, 16), format!("{}", val)))
                 } else {
                     Err(anyhow!("Not enough bytes"))
                 }
@@ -413,7 +413,7 @@ impl DataType {
                         + ((b2 as u64) << 16)
                         + (b1 as u64);
                     let val = f64::from_bits(uval);
-                    Ok(format!("0x{:02$X} ({})", uval, val, 16))
+                    Ok((format!("0x{:01$X}", uval, 16), format!("{}", val)))
                 } else {
                     Err(anyhow!("Not enough bytes"))
                 }
@@ -425,7 +425,8 @@ impl DataType {
                     .flat_map(|v| vec![((v & 0xFF00) >> 8) as u8, (v & 0xFF) as u8])
                     .collect(),
             )
-            .map_err(|e| e.into()),
+            .map_err(|e| e.into())
+            .map(|s| (s, String::new())),
             Format::LooseAscii => String::from_utf8(
                 bytes
                     .iter()
@@ -433,7 +434,8 @@ impl DataType {
                     .map(|v| (v & 0xFF) as u8)
                     .collect(),
             )
-            .map_err(|e| e.into()),
+            .map_err(|e| e.into())
+            .map(|s| (s, String::new())),
             Format::PackedUtf8 => String::from_utf8(
                 bytes
                     .iter()
@@ -441,7 +443,8 @@ impl DataType {
                     .flat_map(|v| vec![((v >> 8) & 0xFF) as u8, (v & 0xFF) as u8])
                     .collect(),
             )
-            .map_err(|e| e.into()),
+            .map_err(|e| e.into())
+            .map(|s| (s, String::new())),
             Format::LooseUtf8 => bytes
                 .iter()
                 .map(|v| self.apply_order(*v))
@@ -463,22 +466,23 @@ impl DataType {
                         Ok(s)
                     }
                     Err(_) => Err(anyhow!("Invalid data")),
-                }),
+                })
+                .map(|s| (s, String::new())),
             Format::U8 => {
                 let val: u8 = ((self.apply_order(*bytes.first().expect("Unable to retrieve byte")))
                     & 0xFF) as u8;
-                Ok(format!("{:#04X} ({})", val, val))
+                Ok((format!("{:#04X}", val), format!("{}", val)))
             }
             Format::U16 => {
                 let val: u16 = self.apply_order(*bytes.first().expect("Unable to retrieve byte"));
-                Ok(format!("{:#06X} ({})", val, val))
+                Ok((format!("{:#06X}", val), format!("{}", val)))
             }
             Format::U32 => {
                 let val: u32 = ((self.apply_order(*bytes.first().expect("Unable to retrieve byte"))
                     as u32)
                     << 16)
                     + (self.apply_order(*bytes.get(1).expect("Unable to retrieve byte")) as u32);
-                Ok(format!("0x{:02$X} ({})", val, val, 8))
+                Ok((format!("0x{:01$X}", val, 8), format!("{}", val)))
             }
             Format::U64 => {
                 let val: u64 = ((self.apply_order(*bytes.first().expect("Unable to retrieve byte"))
@@ -489,7 +493,7 @@ impl DataType {
                     + ((self.apply_order(*bytes.get(2).expect("Unable to retrieve byte")) as u64)
                         << 16)
                     + self.apply_order(*bytes.get(3).expect("Unable to retrieve byte")) as u64;
-                Ok(format!("0x{:02$X} ({})", val, val, 16))
+                Ok((format!("0x{:01$X}", val, 16), format!("{}", val)))
             }
             Format::U128 => {
                 let val: u128 = ((self.apply_order(*bytes.first().expect("Unable to retrieve byte"))
@@ -508,24 +512,24 @@ impl DataType {
                     + ((self.apply_order(*bytes.get(6).expect("Unable to retrieve byte")) as u128)
                         << 16)
                     + self.apply_order(*bytes.get(7).expect("Unable to retrieve byte")) as u128;
-                Ok(format!("0x{:02$X} ({})", val, val, 32))
+                Ok((format!("0x{:01$X}", val, 32), format!("{}", val)))
             }
             Format::I8 => {
                 let val: i8 = (self.apply_order(*bytes.first().expect("Unable to retrieve byte"))
                     & 0xFF) as i8;
-                Ok(format!("{:#04X} ({})", val, val))
+                Ok((format!("{:#04X}", val), format!("{}", val)))
             }
             Format::I16 => {
                 let val: i16 =
                     self.apply_order(*bytes.first().expect("Unable to retrieve byte")) as i16;
-                Ok(format!("{:#06X} ({})", val, val))
+                Ok((format!("{:#06X}", val), format!("{}", val)))
             }
             Format::I32 => {
                 let val: i32 = ((self.apply_order(*bytes.first().expect("Unable to retrieve byte"))
                     as i32)
                     << 16)
                     + (self.apply_order(*bytes.get(1).expect("Unable to retrieve byte")) as i32);
-                Ok(format!("0x{:02$X} ({})", val, val, 8))
+                Ok((format!("0x{:01$X}", val, 8), format!("{}", val)))
             }
             Format::I64 => {
                 let val: i64 = ((self.apply_order(*bytes.first().expect("Unable to retrieve byte"))
@@ -536,7 +540,7 @@ impl DataType {
                     + ((self.apply_order(*bytes.get(2).expect("Unable to retrieve byte")) as i64)
                         << 16)
                     + self.apply_order(*bytes.get(3).expect("Unable to retrieve byte")) as i64;
-                Ok(format!("0x{:02$X} ({})", val, val, 16))
+                Ok((format!("0x{:01$X}", val, 16), format!("{}", val)))
             }
             Format::I128 => {
                 let val: i128 = ((self.apply_order(*bytes.first().expect("Unable to retrieve byte"))
@@ -555,18 +559,18 @@ impl DataType {
                     + ((self.apply_order(*bytes.get(6).expect("Unable to retrieve byte")) as i128)
                         << 16)
                     + self.apply_order(*bytes.get(7).expect("Unable to retrieve byte")) as i128;
-                Ok(format!("0x{:02$X} ({})", val, val, 32))
+                Ok((format!("0x{:01$X}", val, 32), format!("{}", val)))
             }
             Format::U16le => {
                 let val: u16 = self.apply_order(*bytes.first().expect("Unable to retrieve byte"));
-                Ok(format!("{:#06X} ({})", val, val))
+                Ok((format!("{:#06X}", val), format!("{}", val)))
             }
             Format::U32le => {
                 let val: u32 = ((self.apply_order(*bytes.get(1).expect("Unable to retrieve byte"))
                     as u32)
                     << 16)
                     + (self.apply_order(*bytes.first().expect("Unable to retrieve byte")) as u32);
-                Ok(format!("0x{:02$X} ({})", val, val, 8))
+                Ok((format!("0x{:01$X}", val, 8), format!("{}", val)))
             }
             Format::U64le => {
                 let val: u64 = ((self.apply_order(*bytes.get(3).expect("Unable to retrieve byte"))
@@ -577,7 +581,7 @@ impl DataType {
                     + ((self.apply_order(*bytes.get(1).expect("Unable to retrieve byte")) as u64)
                         << 16)
                     + self.apply_order(*bytes.first().expect("Unable to retrieve byte")) as u64;
-                Ok(format!("0x{:02$X} ({})", val, val, 16))
+                Ok((format!("0x{:01$X}", val, 16), format!("{}", val)))
             }
             Format::U128le => {
                 let val: u128 = ((self.apply_order(*bytes.get(7).expect("Unable to retrieve byte"))
@@ -596,24 +600,24 @@ impl DataType {
                     + ((self.apply_order(*bytes.get(1).expect("Unable to retrieve byte")) as u128)
                         << 16)
                     + self.apply_order(*bytes.first().expect("Unable to retrieve byte")) as u128;
-                Ok(format!("0x{:02$X} ({})", val, val, 32))
+                Ok((format!("0x{:01$X}", val, 32), format!("{}", val)))
             }
             Format::I8le => {
                 let val: i8 = (self.apply_order(*bytes.first().expect("Unable to retrieve byte"))
                     & 0xFF) as i8;
-                Ok(format!("{:#04X} ({})", val, val))
+                Ok((format!("{:#04X}", val), format!("{}", val)))
             }
             Format::I16le => {
                 let val: i16 =
                     self.apply_order(*bytes.first().expect("Unable to retrieve byte")) as i16;
-                Ok(format!("{:#06X} ({})", val, val))
+                Ok((format!("{:#06X}", val), format!("{}", val)))
             }
             Format::I32le => {
                 let val: i32 = ((self.apply_order(*bytes.get(1).expect("Unable to retrieve byte"))
                     as i32)
                     << 16)
                     + (self.apply_order(*bytes.first().expect("Unable to retrieve byte")) as i32);
-                Ok(format!("0x{:02$X} ({})", val, val, 8))
+                Ok((format!("0x{:01$X}", val, 8), format!("{}", val)))
             }
             Format::I64le => {
                 let val: i64 = ((self.apply_order(*bytes.get(3).expect("Unable to retrieve byte"))
@@ -624,7 +628,7 @@ impl DataType {
                     + ((self.apply_order(*bytes.get(1).expect("Unable to retrieve byte")) as i64)
                         << 16)
                     + self.apply_order(*bytes.first().expect("Unable to retrieve byte")) as i64;
-                Ok(format!("0x{:02$X} ({})", val, val, 16))
+                Ok((format!("0x{:01$X}", val, 16), format!("{}", val)))
             }
             Format::I128le => {
                 let val: i128 = ((self.apply_order(*bytes.get(7).expect("Unable to retrieve byte"))
@@ -643,7 +647,7 @@ impl DataType {
                     + ((self.apply_order(*bytes.get(1).expect("Unable to retrieve byte")) as i128)
                         << 16)
                     + self.apply_order(*bytes.first().expect("Unable to retrieve byte")) as i128;
-                Ok(format!("0x{:02$X} ({})", val, val, 32))
+                Ok((format!("0x{:01$X}", val, 32), format!("{}", val)))
             }
         }
     }
