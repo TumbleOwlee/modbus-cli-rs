@@ -1,6 +1,4 @@
-use crate::mem::data::DataType;
 use crate::mem::memory::{Memory, Range};
-use crate::mem::register::{AccessType, Definition};
 use crate::msg::LogMsg;
 use crate::rtu::RtuConfig;
 use crate::util::{str, Expect};
@@ -18,7 +16,7 @@ use tokio_serial::{DataBits, Parity, SerialPortBuilder, SerialStream, StopBits};
 pub struct Client {
     config: RtuConfig,
     memory: Arc<Mutex<Memory>>,
-    operations: Vec<(SlaveId, FunctionCode, Range<usize>)>,
+    operations: Vec<(SlaveId, FunctionCode, Range<u16>)>,
     status_sender: Sender<Status>,
     cmd_receiver: Receiver<Command>,
     log_sender: Sender<LogMsg>,
@@ -44,16 +42,16 @@ impl Client {
         }
     }
 
-    fn init(app_config: Arc<Mutex<AppConfig>>) -> Vec<(SlaveId, FunctionCode, Range<usize>)> {
+    fn init(app_config: Arc<Mutex<AppConfig>>) -> Vec<(SlaveId, FunctionCode, Range<u16>)> {
         let config = app_config.lock().expect("Unable to lock configuration");
-        let mut sorted_defs = config
+        let sorted_defs = config
             .definitions
             .iter()
             .filter(|d| !d.1.is_virtual())
             .sorted_by(|a, b| {
                 a.1.get_slave_id()
-                    .unwrap_or(0)
-                    .cmp(&b.1.get_slave_id().unwrap_or(0))
+                    .unwrap_or(1)
+                    .cmp(&b.1.get_slave_id().unwrap_or(1))
                     .then(
                         a.1.read_code()
                             .cmp(&b.1.read_code())
@@ -62,27 +60,10 @@ impl Client {
             })
             .collect::<Vec<_>>();
 
-        let marker = (
-            str!(""),
-            Definition::new(
-                None,
-                None,
-                0,
-                0,
-                DataType::default(),
-                0,
-                AccessType::ReadOnly,
-                None,
-                None,
-                None,
-                None,
-            ),
-        );
-        sorted_defs.push((&marker.0, &marker.1));
-
-        let is_allowed = |fc: u8, addr: u16, end: usize| {
+        let is_allowed = |slave: SlaveId, fc: u8, addr: u16, end: usize| {
             for mem in config.contiguous_memory.iter() {
-                if mem.read_code == fc
+                if mem.slave_id.unwrap_or(1) == slave
+                    && mem.read_code == fc
                     && addr as usize >= mem.range.start()
                     && addr as usize <= mem.range.end()
                     && end >= mem.range.start()
@@ -94,60 +75,60 @@ impl Client {
             false
         };
 
-        let mut fc: i16 = -1;
-        let mut slave: i16 = -1;
         let mut operations = Vec::new();
-        let mut range: Option<Range<u16>> = None;
-        for (name, def) in sorted_defs.into_iter() {
-            if let Some(ref mut range) = range {
-                let (def_slave, def_addr, def_fc, def_range) = (
-                    def.get_slave_id(),
-                    def.get_address(),
-                    def.read_code(),
-                    def.get_range(),
-                );
-                if (fc != -1 && fc != (def_fc as i16))
-                    || (slave != (def_slave.unwrap_or(0) as i16))
-                    || ((range.length() + def_addr as usize + def_range.length())
-                        > (range.start() + 127))
-                    || (def_addr >= range.end() as u16
-                        && !is_allowed(fc as u8, def_addr, range.end()))
-                {
-                    let fc = FunctionCode::new(fc as u8);
-                    match fc {
-                        FunctionCode::ReadCoils
-                        | FunctionCode::ReadDiscreteInputs
-                        | FunctionCode::ReadInputRegisters
-                        | FunctionCode::ReadHoldingRegisters => {
-                            let len = range.length();
-                            if len > 0 {
-                                let mut addr = range.start();
-                                loop {
-                                    operations.push((
-                                        slave as SlaveId,
-                                        fc,
-                                        Range::new(addr, std::cmp::min(addr + 127, range.end())),
-                                    ));
-                                    addr = std::cmp::min(addr + 127, range.end());
-                                    if addr == range.end() {
-                                        break;
-                                    }
-                                }
-                            }
+        if sorted_defs.len() > 0 {
+            let mut op: Option<(SlaveId, u8, Range<u16>)> = None;
+            for i in 0..sorted_defs.len() {
+                let (_, def) = sorted_defs.get(i).unwrap();
+                match op {
+                    None => {
+                        op = Some((
+                            def.get_slave_id().unwrap_or(1),
+                            def.read_code(),
+                            def.get_range(),
+                        ));
+                    }
+                    Some((slave, fc, range)) => {
+                        if slave != def.get_slave_id().unwrap_or(1)
+                            || fc != def.read_code()
+                            || def.get_range().start() + def.get_range().length() - range.start()
+                                > 126
+                            || !is_allowed(
+                                slave,
+                                fc,
+                                range.start() as u16,
+                                def.get_range().start() + def.get_range().length(),
+                            )
+                        {
+                            operations.push((slave, fc, range));
+                            op = Some((
+                                def.get_slave_id().unwrap_or(1),
+                                def.read_code(),
+                                def.get_range(),
+                            ));
+                        } else {
+                            op = Some((
+                                slave,
+                                fc,
+                                Range::new(
+                                    range.start() as u16,
+                                    def.get_range().start() as u16
+                                        + def.get_range().length() as u16,
+                                ),
+                            ));
                         }
-                        _ => panic!("Invalid read function code for register {}", name),
-                    };
-                    Range::new(def_addr, def_addr).clone_into(range);
+                    }
                 }
             }
-            fc = def.read_code() as i16;
-            slave = def.get_slave_id().unwrap_or(0) as i16;
-            range = match range {
-                None => Some(def.get_range()),
-                Some(v) => Some(Range::new(v.start() as u16, def.get_range().end() as u16)),
-            };
+            if let Some((slave, fc, range)) = op {
+                operations.push((slave, fc, range));
+            }
         }
+
         operations
+            .into_iter()
+            .map(|(s, f, r)| (s, FunctionCode::new(f), r))
+            .collect()
     }
 
     async fn create_serial_builder(&self) -> SerialPortBuilder {
