@@ -201,7 +201,7 @@ impl Definition {
 pub struct Register {
     slave: SlaveId,
     address: u16,
-    value: String,
+    value: (String, String),
     length: u16,
     function_code: FunctionCode,
     raw: Vec<u16>,
@@ -243,7 +243,7 @@ impl Register {
         let value = definition
             .get_type()
             .as_str(&bytes)
-            .unwrap_or(str!("Invalid data"));
+            .unwrap_or((str!("Invalid data"), String::new()));
 
         Self {
             slave: definition.get_slave_id().unwrap_or(0),
@@ -271,7 +271,7 @@ impl Register {
         self.address
     }
 
-    pub fn value(&self) -> &String {
+    pub fn value(&self) -> &(String, String) {
         &self.value
     }
 
