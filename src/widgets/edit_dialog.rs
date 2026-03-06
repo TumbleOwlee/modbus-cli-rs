@@ -8,7 +8,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::prelude::{Alignment, Color, Constraint, Layout, Margin, Style, Stylize};
 use ratatui::style::palette::tailwind;
-use ratatui::widgets::{Block, Clear, Widget, WidgetRef};
+use ratatui::widgets::{Block, Clear, Paragraph, Widget, WidgetRef, Wrap};
 
 pub enum FieldType {
     Name,
@@ -25,6 +25,7 @@ pub struct EditDialog {
     input: InputField,
     selection: Selection,
     values: Vec<Values>,
+    description: Option<String>,
 }
 
 impl EditDialog {
@@ -80,6 +81,7 @@ impl EditDialog {
                     cursor: Style::default().bg(focus_color).fg(bg_color),
                     ..InputStyle::default()
                 }),
+            description: None,
         }
     }
 
@@ -117,6 +119,10 @@ impl EditDialog {
         self.values = values;
     }
 
+    pub fn set_description(&mut self, description: Option<String>) {
+        self.description = description;
+    }
+
     pub fn focus(&mut self) {
         self.input.focus();
     }
@@ -151,7 +157,10 @@ impl EditDialog {
 
 impl WidgetRef for EditDialog {
     fn render_ref(&self, area: Rect, buf: &mut Buffer) {
-        let min_height = if self.values.is_empty() { 19 } else { 27 };
+        let mut min_height = if self.values.is_empty() { 19 } else { 27 };
+        if self.description.is_some() {
+            min_height += 9;
+        }
         // Center dialog
         let width = std::cmp::min(area.width, 50);
         let height = std::cmp::min(area.height, min_height);
@@ -185,19 +194,37 @@ impl WidgetRef for EditDialog {
             Constraint::Length(11)
         };
 
-        let area = Layout::vertical([
-            Constraint::Length(3),
-            Constraint::Length(1),
-            Constraint::Length(3),
-            Constraint::Length(1),
-            Constraint::Length(3),
-            Constraint::Length(1),
-            input_length,
-        ])
-        .split(inner.inner(Margin {
-            vertical: 1,
-            horizontal: 1,
-        }));
+        let area = if self.description.is_none() {
+            Layout::vertical([
+                Constraint::Length(3),
+                Constraint::Length(1),
+                Constraint::Length(3),
+                Constraint::Length(1),
+                Constraint::Length(3),
+                Constraint::Length(1),
+                input_length,
+            ])
+            .split(inner.inner(Margin {
+                vertical: 1,
+                horizontal: 1,
+            }))
+        } else {
+            Layout::vertical([
+                Constraint::Length(3),
+                Constraint::Length(1),
+                Constraint::Length(3),
+                Constraint::Length(1),
+                Constraint::Length(3),
+                Constraint::Length(1),
+                input_length,
+                Constraint::Length(1),
+                Constraint::Length(8),
+            ])
+            .split(inner.inner(Margin {
+                vertical: 1,
+                horizontal: 1,
+            }))
+        };
 
         self.name.render_ref(area[0], buf);
         self.register.render_ref(area[2], buf);
@@ -206,6 +233,23 @@ impl WidgetRef for EditDialog {
             self.input.render_ref(area[6], buf);
         } else {
             self.selection.render_ref(area[6], buf);
+        }
+        if let Some(ref c) = self.description {
+            let area = Layout::vertical([Constraint::Length(8)]).split(area[8].inner(Margin {
+                vertical: 0,
+                horizontal: 1,
+            }));
+            let block = Block::bordered().title("Description");
+            let inner = block.inner(area[0]);
+            block.render(area[0], buf);
+
+            Paragraph::new(c.clone()).wrap(Wrap { trim: true }).render(
+                inner.inner(Margin {
+                    horizontal: 1,
+                    vertical: 0,
+                }),
+                buf,
+            );
         }
     }
 }
