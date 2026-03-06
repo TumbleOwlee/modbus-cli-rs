@@ -109,7 +109,7 @@ pub struct Definition {
     on_update: Option<String>,
     r#virtual: Option<bool>,
     values: Option<Vec<Values>>,
-    comment: Option<String>,
+    description: Option<String>,
     #[serde(skip, default = "next_counter")]
     index: usize,
 }
@@ -128,7 +128,7 @@ impl Definition {
         on_update: Option<String>,
         r#virtual: Option<bool>,
         values: Option<Vec<Values>>,
-        comment: Option<String>,
+        description: Option<String>,
     ) -> Self {
         Self {
             id,
@@ -143,7 +143,7 @@ impl Definition {
             r#virtual,
             values,
             index: next_counter(),
-            comment,
+            description,
         }
     }
 
@@ -155,8 +155,8 @@ impl Definition {
         &self.values
     }
 
-    pub fn comment(&self) -> Option<String> {
-        self.comment.clone()
+    pub fn description(&self) -> Option<String> {
+        self.description.clone()
     }
 
     pub fn is_virtual(&self) -> bool {
@@ -215,7 +215,7 @@ pub struct Register {
     r#type: DataType,
     access: AccessType,
     values: Option<Vec<Values>>,
-    comment: Option<String>,
+    description: Option<String>,
     index: usize,
 }
 
@@ -264,7 +264,7 @@ impl Register {
             access: definition.access_type(),
             values: definition.values().clone(),
             index: definition.get_index(),
-            comment: definition.comment(),
+            description: definition.description(),
         }
     }
 
@@ -272,8 +272,8 @@ impl Register {
         &self.values
     }
 
-    pub fn comment(&self) -> Option<String> {
-        self.comment.clone()
+    pub fn description(&self) -> Option<String> {
+        self.description.clone()
     }
 
     pub fn slave_id(&self) -> SlaveId {

@@ -25,7 +25,7 @@ pub struct EditDialog {
     input: InputField,
     selection: Selection,
     values: Vec<Values>,
-    comment: Option<String>,
+    description: Option<String>,
 }
 
 impl EditDialog {
@@ -81,7 +81,7 @@ impl EditDialog {
                     cursor: Style::default().bg(focus_color).fg(bg_color),
                     ..InputStyle::default()
                 }),
-            comment: None,
+            description: None,
         }
     }
 
@@ -119,8 +119,8 @@ impl EditDialog {
         self.values = values;
     }
 
-    pub fn set_comment(&mut self, comment: Option<String>) {
-        self.comment = comment;
+    pub fn set_description(&mut self, description: Option<String>) {
+        self.description = description;
     }
 
     pub fn focus(&mut self) {
@@ -158,7 +158,7 @@ impl EditDialog {
 impl WidgetRef for EditDialog {
     fn render_ref(&self, area: Rect, buf: &mut Buffer) {
         let mut min_height = if self.values.is_empty() { 19 } else { 27 };
-        if self.comment.is_some() {
+        if self.description.is_some() {
             min_height += 9;
         }
         // Center dialog
@@ -194,7 +194,7 @@ impl WidgetRef for EditDialog {
             Constraint::Length(11)
         };
 
-        let area = if self.comment.is_none() {
+        let area = if self.description.is_none() {
             Layout::vertical([
                 Constraint::Length(3),
                 Constraint::Length(1),
@@ -234,12 +234,12 @@ impl WidgetRef for EditDialog {
         } else {
             self.selection.render_ref(area[6], buf);
         }
-        if let Some(ref c) = self.comment {
+        if let Some(ref c) = self.description {
             let area = Layout::vertical([Constraint::Length(8)]).split(area[8].inner(Margin {
                 vertical: 0,
                 horizontal: 1,
             }));
-            let block = Block::bordered().title("Comment");
+            let block = Block::bordered().title("Description");
             let inner = block.inner(area[0]);
             block.render(area[0], buf);
 
