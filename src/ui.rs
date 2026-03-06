@@ -498,6 +498,7 @@ impl App {
                         );
                         self.edit_dialog
                             .limit_to(entry.1.values().clone().unwrap_or(vec![]));
+                        self.edit_dialog.set_comment(entry.1.comment());
                         self.edit_dialog.set(
                             EditFieldType::DataType,
                             Some(entry.1.r#type().label().to_string()),
