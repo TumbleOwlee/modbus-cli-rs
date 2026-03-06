@@ -2,7 +2,7 @@ use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Layout, Margin, Rect},
-    style::{Style, Stylize},
+    style::Style,
     text::Text,
     widgets::{Block, Widget, WidgetRef},
 };
@@ -187,7 +187,7 @@ impl WidgetRef for Selection {
                 style = self.style.focused.reversed();
             }
             let t = Text::from(v).style(style);
-            t.render_ref(area[n], buf);
+            t.render(area[n], buf);
         }
     }
 }
