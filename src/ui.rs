@@ -494,6 +494,11 @@ impl App {
                             Some(entry.1.r#type().label().to_string()),
                             None,
                         );
+                        self.edit_dialog.set(
+                            EditFieldType::DataResolution,
+                            Some(format!("{}", entry.1.get_resolution())),
+                            None,
+                        );
                         let e = entry.1.value().clone();
                         self.edit_dialog.set(
                             EditFieldType::Value,
@@ -516,7 +521,7 @@ impl App {
                 match self.popup {
                     Popup::Edit(ref register) => {
                         if let Some(input) = self.edit_dialog.get_input(EditFieldType::Value) {
-                            match register.r#type().encode(&input) {
+                            match register.r#type().encode(&input, register.get_resolution()) {
                                 Ok(v) => {
                                     if v.len() > register.raw().len() {
                                         self.log_entries.push(LogMsg::err(
@@ -748,7 +753,15 @@ fn render_register(f: &mut Frame, app: &mut App, area: Rect) {
         .bg(app.colors.selected_color.bg);
 
     let cols = [
-        "Access", "SlaveId", "Name", "Address", "Type", "Length", "Value", "Raw Data",
+        "Access",
+        "SlaveId",
+        "Name",
+        "Address",
+        "Type",
+        "Length",
+        "Value",
+        "Resolution",
+        "Raw Data",
     ];
     let header = cols
         .into_iter()
@@ -809,6 +822,7 @@ fn render_register(f: &mut Frame, app: &mut App, area: Rect) {
                 } else {
                     format!("{} [{}]", alias, value)
                 },
+                format!("{}", r.get_resolution()),
                 if app.show_as_hex {
                     format!("[ {:#06X} ]", r.raw().iter().format(", "))
                 } else {
@@ -827,6 +841,7 @@ fn render_register(f: &mut Frame, app: &mut App, area: Rect) {
             cols[5].width() as u16,
             cols[6].width() as u16,
             cols[7].width() as u16,
+            cols[8].width() as u16,
         ),
         |acc, item| {
             (
@@ -838,12 +853,21 @@ fn render_register(f: &mut Frame, app: &mut App, area: Rect) {
                 std::cmp::max(acc.5, item[5].width() as u16),
                 std::cmp::max(acc.6, item[6].width() as u16),
                 std::cmp::max(acc.7, item[7].width() as u16),
+                std::cmp::max(acc.8, item[8].width() as u16),
             )
         },
     );
 
-    app.register_table.table_max_width =
-        limits.0 + limits.1 + limits.2 + limits.3 + limits.4 + limits.5 + limits.6 + limits.7 + 25;
+    app.register_table.table_max_width = limits.0
+        + limits.1
+        + limits.2
+        + limits.3
+        + limits.4
+        + limits.5
+        + limits.6
+        + limits.7
+        + limits.8
+        + 25;
 
     let compact = app.is_compact;
     let rows = items.iter().enumerate().map(|(i, item)| {
@@ -868,7 +892,8 @@ fn render_register(f: &mut Frame, app: &mut App, area: Rect) {
             Constraint::Min(limits.4 + 1),
             Constraint::Min(limits.5 + 1),
             Constraint::Min(limits.6 + 1),
-            Constraint::Min(limits.7 + 3),
+            Constraint::Min(limits.7 + 1),
+            Constraint::Min(limits.8 + 3),
         ],
     )
     .header(header)

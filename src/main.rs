@@ -1,3 +1,5 @@
+#![feature(f128)]
+
 mod lua;
 mod mem;
 mod msg;
@@ -306,7 +308,7 @@ fn main() {
                             Value::Num(v) => format!("{}", v),
                             Value::Float(v) => format!("{}", v),
                         };
-                        if let Ok(v) = def.get_type().encode(&s) {
+                        if let Ok(v) = def.get_type().encode(&s, def.get_resolution()) {
                             if memory
                                 .lock()
                                 .expect("Unable to lock memory")
