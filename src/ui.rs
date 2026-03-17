@@ -42,7 +42,6 @@ const LOGGER_INFO_TEXT: &str = "(m) up | (n) down | (b) left | (,) right | (v) t
 const LOG_HEADER: &str = " Modbus Log";
 
 const ITEM_SPACING: usize = 1;
-const ITEM_HEIGHT: usize = 1 + 2 * ITEM_SPACING;
 
 enum LoopAction {
     Break,
@@ -260,7 +259,7 @@ impl App {
             mode,
             ordering: Order::Default,
             register_handler,
-            register_table: UiTable::new(len, ITEM_HEIGHT),
+            register_table: UiTable::new(len, 1),
             log_entries: Vec::new(),
             log_table: UiTable::new(history_len, 1),
             colors,
@@ -339,10 +338,7 @@ impl App {
             - 1;
 
         self.register_table.table_state.select(Some(i));
-        self.register_table.vertical_scroll = self
-            .register_table
-            .vertical_scroll
-            .position(i * ITEM_HEIGHT);
+        self.register_table.vertical_scroll = self.register_table.vertical_scroll.position(i);
     }
 
     pub fn move_top(&mut self) {
@@ -365,10 +361,7 @@ impl App {
                 .map(|i| std::cmp::min(i + 1, std::cmp::max(len, 1) - 1))
                 .unwrap_or(0);
             self.register_table.table_state.select(Some(i));
-            self.register_table.vertical_scroll = self
-                .register_table
-                .vertical_scroll
-                .position(i * ITEM_HEIGHT);
+            self.register_table.vertical_scroll = self.register_table.vertical_scroll.position(i);
         }
     }
 
@@ -381,10 +374,7 @@ impl App {
                 .map(|i| std::cmp::max(i, 1) - 1)
                 .unwrap_or(0);
             self.register_table.table_state.select(Some(i));
-            self.register_table.vertical_scroll = self
-                .register_table
-                .vertical_scroll
-                .position(i * ITEM_HEIGHT);
+            self.register_table.vertical_scroll = self.register_table.vertical_scroll.position(i);
         }
     }
 
@@ -630,9 +620,16 @@ impl App {
         let mut status = str!("");
         let mut action = AppAction::Exit;
 
+        let mut last_update = std::time::SystemTime::now();
+
         loop {
             if self.exec_lua {
-                lua_runtime.execute();
+                let now = std::time::SystemTime::now();
+                let diff = now.duration_since(last_update);
+                if diff.is_err() || diff.unwrap().as_secs() >= 1 {
+                    lua_runtime.execute();
+                    last_update = now;
+                }
             }
 
             // Update status
@@ -664,7 +661,7 @@ impl App {
             terminal.draw(|f| ui(f, &mut self, status.clone()))?;
 
             // Handle inputs
-            if event::poll(Duration::from_millis(50))? {
+            if event::poll(Duration::from_millis(200))? {
                 if let Event::Key(key) = event::read()? {
                     if key.kind == KeyEventKind::Press {
                         match self.popup {
