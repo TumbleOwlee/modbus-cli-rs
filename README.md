@@ -177,6 +177,7 @@ here optional, too. If none is provided, `slave_id = 0` is used.
     "access": "ReadOnly",
     "type": "I32",
     "reverse": false,
+    "resolution": 10,
     "on_update": "C_Register:GetString(\"Serial Number\")",
     "values": [
         { "name": "Waiting", "value": 1 },
@@ -203,6 +204,7 @@ Please refer to the section [Lua Support](#lua-support) for information about th
 - `on_update`: Lua script to run on each update. See Lua section for details.
 - `virtual`: Mark a register as virtual. Only required in client mode to prevent any read of the register.
 - `values`: List of predefined values for selection in edit dialog. Either a object with properties `name` (for display purposes) and `value` or simply the value. If this property ist omitted, an Input field ist displyed while editing.
+- `resolution`: The resolution to use for value interpretation. Only supported for non-string values. The resolution is applied before writing to memory and applied in reverse on read. E.g. `resolution = 10` will interpret a value of `1` as `10`. This also restricts the input values, e.g in this example, you will be unable to input values between 1-9.
 
 If you use the client mode `--client` the corresponding write codes for manipulating registers or coils are derived from the configured `read_code`. E.g. if you specify a `read_code` that corresponds to coils, the write code will be the function code associated with coils, and if you specify the `read_code` 3 or 4 for input and holding registers, the client will use function code 6 or 16 (depending on the length) to write the values. Please refer to `config.json` of this repository for a example configuration.
 

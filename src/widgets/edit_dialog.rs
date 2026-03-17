@@ -15,6 +15,7 @@ pub enum FieldType {
     Register,
     DataType,
     Value,
+    DataResolution,
 }
 
 pub struct EditDialog {
@@ -22,6 +23,7 @@ pub struct EditDialog {
     name: InputField,
     register: InputField,
     value_type: InputField,
+    value_resolution: InputField,
     input: InputField,
     selection: Selection,
     values: Vec<Values>,
@@ -50,6 +52,14 @@ impl EditDialog {
                 .disabled(),
             value_type: InputField::new()
                 .title(str!("Type"))
+                .bordered(true)
+                .margins(Margin {
+                    vertical: 0,
+                    horizontal: 1,
+                })
+                .disabled(),
+            value_resolution: InputField::new()
+                .title(str!("Resolution"))
                 .bordered(true)
                 .margins(Margin {
                     vertical: 0,
@@ -100,6 +110,7 @@ impl EditDialog {
             FieldType::Name => &mut self.name,
             FieldType::Register => &mut self.register,
             FieldType::DataType => &mut self.value_type,
+            FieldType::DataResolution => &mut self.value_resolution,
             FieldType::Value => &mut self.input,
         };
         if let Some(v) = input {
@@ -132,6 +143,7 @@ impl EditDialog {
             FieldType::Name => self.name.get_input(),
             FieldType::Register => self.register.get_input(),
             FieldType::DataType => self.value_type.get_input(),
+            FieldType::DataResolution => self.value_type.get_input(),
             FieldType::Value => {
                 if self.values.is_empty() {
                     self.input.get_input()
@@ -157,7 +169,7 @@ impl EditDialog {
 
 impl WidgetRef for EditDialog {
     fn render_ref(&self, area: Rect, buf: &mut Buffer) {
-        let mut min_height = if self.values.is_empty() { 19 } else { 27 };
+        let mut min_height = if self.values.is_empty() { 23 } else { 31 };
         if self.description.is_some() {
             min_height += 9;
         }
@@ -202,6 +214,8 @@ impl WidgetRef for EditDialog {
                 Constraint::Length(1),
                 Constraint::Length(3),
                 Constraint::Length(1),
+                Constraint::Length(3),
+                Constraint::Length(1),
                 input_length,
             ])
             .split(inner.inner(Margin {
@@ -210,6 +224,8 @@ impl WidgetRef for EditDialog {
             }))
         } else {
             Layout::vertical([
+                Constraint::Length(3),
+                Constraint::Length(1),
                 Constraint::Length(3),
                 Constraint::Length(1),
                 Constraint::Length(3),
@@ -229,10 +245,11 @@ impl WidgetRef for EditDialog {
         self.name.render_ref(area[0], buf);
         self.register.render_ref(area[2], buf);
         self.value_type.render_ref(area[4], buf);
+        self.value_resolution.render_ref(area[6], buf);
         if self.values.is_empty() {
-            self.input.render_ref(area[6], buf);
+            self.input.render_ref(area[8], buf);
         } else {
-            self.selection.render_ref(area[6], buf);
+            self.selection.render_ref(area[8], buf);
         }
         if let Some(ref c) = self.description {
             let area = Layout::vertical([Constraint::Length(8)]).split(area[8].inner(Margin {

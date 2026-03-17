@@ -215,7 +215,10 @@ impl Register {
             .definitions
             .get(&name)
         {
-            match register.get_type().encode(&value) {
+            match register
+                .get_type()
+                .encode(&value, register.get_resolution())
+            {
                 Ok(values) => {
                     if values.len() > register.length() as usize {
                         let _ = this.logger.try_send(LogMsg::err(

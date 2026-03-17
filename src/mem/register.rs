@@ -112,6 +112,7 @@ pub struct Definition {
     description: Option<String>,
     #[serde(skip, default = "next_counter")]
     index: usize,
+    resolution: Option<f64>,
 }
 
 impl Definition {
@@ -129,6 +130,7 @@ impl Definition {
         r#virtual: Option<bool>,
         values: Option<Vec<Values>>,
         description: Option<String>,
+        resolution: Option<f64>,
     ) -> Self {
         Self {
             id,
@@ -144,6 +146,7 @@ impl Definition {
             values,
             index: next_counter(),
             description,
+            resolution,
         }
     }
 
@@ -202,6 +205,10 @@ impl Definition {
     pub fn get_index(&self) -> usize {
         self.index
     }
+
+    pub fn get_resolution(&self) -> f64 {
+        self.resolution.clone().unwrap_or(1.0)
+    }
 }
 
 #[derive(Clone)]
@@ -217,6 +224,7 @@ pub struct Register {
     values: Option<Vec<Values>>,
     description: Option<String>,
     index: usize,
+    resolution: f64,
 }
 
 impl Register {
@@ -250,7 +258,7 @@ impl Register {
             .collect();
         let value = definition
             .get_type()
-            .as_str(&bytes)
+            .as_str(&bytes, definition.get_resolution())
             .unwrap_or((str!("Invalid data"), String::new()));
 
         Self {
@@ -265,6 +273,7 @@ impl Register {
             values: definition.values().clone(),
             index: definition.get_index(),
             description: definition.description(),
+            resolution: definition.get_resolution(),
         }
     }
 
@@ -298,6 +307,10 @@ impl Register {
 
     pub fn r#type(&self) -> &DataType {
         &self.r#type
+    }
+
+    pub fn get_resolution(&self) -> f64 {
+        self.resolution
     }
 
     pub fn function_code(&self) -> FunctionCode {

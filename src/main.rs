@@ -1,3 +1,5 @@
+#![feature(f128)]
+
 mod lua;
 mod mem;
 mod msg;
@@ -113,11 +115,21 @@ impl AppConfig {
     pub fn read(path: &str) -> anyhow::Result<Self> {
         let file = File::open(path)?;
         let reader = BufReader::new(file);
-        if let Ok(c) = serde_json::from_reader(reader) {
+        let result = serde_json::from_reader(reader);
+        if let Ok(c) = result {
             Ok(c)
         } else {
             let content = std::fs::read_to_string(path)?;
-            toml::from_str(&content).map_err(|e| e.into())
+            let res = toml::from_str(&content);
+            if let Ok(c) = res {
+                Ok(c)
+            } else {
+                Err(anyhow::anyhow!(
+                    "JSON: {}, TOML: {}",
+                    result.err().unwrap(),
+                    res.err().unwrap()
+                ))
+            }
         }
     }
 }
@@ -296,7 +308,7 @@ fn main() {
                             Value::Num(v) => format!("{}", v),
                             Value::Float(v) => format!("{}", v),
                         };
-                        if let Ok(v) = def.get_type().encode(&s) {
+                        if let Ok(v) = def.get_type().encode(&s, def.get_resolution()) {
                             if memory
                                 .lock()
                                 .expect("Unable to lock memory")

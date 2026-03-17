@@ -326,7 +326,7 @@ impl Client {
                     if let Ok(Ok(Ok(vec))) = modbus_result {
                         let _ = self.log_sender
                             .send(LogMsg::info(&format!(
-                                "Read address space [ {start:#06X} ({start}), {end:#06X} ({end}) ) successful.",
+                                "Read address space [ {start:#06X} ({start}), {end:#06X} ({end}) ) = {vec:?} successful.",
                                 start = op.start(),
                                 end = op.end()
                             )))
