@@ -200,7 +200,12 @@ Please refer to the section [Lua Support](#lua-support) for information about th
 - `length`: The successive modbus register count
 - `access`: Accessability mode (either ReadOnly, WriteOnly or ReadWrite)
 - `type`: The type that is represented by the modbus registers
-- `reverse`: Define whether the registers have to be flipped before interpretation (default: `false`)
+- `reverse`: Defines whether the bytes of a register have to be flipped before interpretation (default: `false`)
+    * E.g. a 32bit value stored in four bytes over two registers in the order `| A B | C D |` can be interpreted as:
+        - `U32,   reverse=false: | A B | C D |`
+        - `U32,   reverse=true : | B A | D C |`
+        - `U32le, reverse=false: | C D | A B |`
+        - `U32le, reverse=true : | D C | B A |`
 - `on_update`: Lua script to run on each update. See Lua section for details.
 - `virtual`: Mark a register as virtual. Only required in client mode to prevent any read of the register.
 - `values`: List of predefined values for selection in edit dialog. Either a object with properties `name` (for display purposes) and `value` or simply the value. If this property ist omitted, an Input field ist displyed while editing.
