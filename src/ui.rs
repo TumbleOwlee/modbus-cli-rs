@@ -521,7 +521,7 @@ impl App {
                 match self.popup {
                     Popup::Edit(ref register) => {
                         if let Some(input) = self.edit_dialog.get_input(EditFieldType::Value) {
-                            match register.r#type().encode(&input, register.get_resolution()) {
+                            match register.r#type().encode(&input) {
                                 Ok(v) => {
                                     if v.len() > register.raw().len() {
                                         self.log_entries.push(LogMsg::err(
@@ -759,8 +759,9 @@ fn render_register(f: &mut Frame, app: &mut App, area: Rect) {
         "Address",
         "Type",
         "Length",
-        "Value",
+        "Memory",
         "Resolution",
+        "Value",
         "Raw Data",
     ];
     let header = cols
@@ -777,12 +778,12 @@ fn render_register(f: &mut Frame, app: &mut App, area: Rect) {
         .sorted_by(|a, b| app.ordering.apply(a, b))
         .map(|(n, r)| {
             let mut alias = String::new();
-            let value = r.value();
+            let (hex, value) = r.value();
             if let Some(values) = r.values() {
                 if let Some(v) = values.iter().find(|v| {
                     if let ValueDef(value_def) = v {
                         let s = format!("{}", value_def.value);
-                        s == value.0 || s == value.1
+                        s == *hex || s == *value
                     } else {
                         false
                     }
@@ -793,12 +794,6 @@ fn render_register(f: &mut Frame, app: &mut App, area: Rect) {
                 }
             }
             let value: String = {
-                let (v1, v2) = value;
-                let value = if v2.is_empty() {
-                    v1.clone()
-                } else {
-                    format!("{} ({})", v1, v2)
-                };
                 value
                     .chars()
                     .map(|c| {
@@ -817,12 +812,13 @@ fn render_register(f: &mut Frame, app: &mut App, area: Rect) {
                 format!("{:#06X} ({})", r.address(), r.address()),
                 r.r#type().label().to_string(),
                 r.raw().len().to_string(),
+                format!("{}", hex),
+                format!("{}", r.get_resolution()),
                 if alias.is_empty() {
                     format!("{}", value)
                 } else {
-                    format!("{} [{}]", alias, value)
+                    format!("{} ({})", alias, value)
                 },
-                format!("{}", r.get_resolution()),
                 if app.show_as_hex {
                     format!("[ {:#06X} ]", r.raw().iter().format(", "))
                 } else {
@@ -842,6 +838,7 @@ fn render_register(f: &mut Frame, app: &mut App, area: Rect) {
             cols[6].width() as u16,
             cols[7].width() as u16,
             cols[8].width() as u16,
+            cols[9].width() as u16,
         ),
         |acc, item| {
             (
@@ -854,6 +851,7 @@ fn render_register(f: &mut Frame, app: &mut App, area: Rect) {
                 std::cmp::max(acc.6, item[6].width() as u16),
                 std::cmp::max(acc.7, item[7].width() as u16),
                 std::cmp::max(acc.8, item[8].width() as u16),
+                std::cmp::max(acc.9, item[9].width() as u16),
             )
         },
     );
@@ -867,6 +865,7 @@ fn render_register(f: &mut Frame, app: &mut App, area: Rect) {
         + limits.6
         + limits.7
         + limits.8
+        + limits.9
         + 25;
 
     let compact = app.is_compact;
@@ -893,7 +892,8 @@ fn render_register(f: &mut Frame, app: &mut App, area: Rect) {
             Constraint::Min(limits.5 + 1),
             Constraint::Min(limits.6 + 1),
             Constraint::Min(limits.7 + 1),
-            Constraint::Min(limits.8 + 3),
+            Constraint::Min(limits.8 + 1),
+            Constraint::Min(limits.9 + 3),
         ],
     )
     .header(header)

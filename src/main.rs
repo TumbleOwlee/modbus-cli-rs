@@ -308,7 +308,7 @@ fn main() {
                             Value::Num(v) => format!("{}", v),
                             Value::Float(v) => format!("{}", v),
                         };
-                        if let Ok(v) = def.get_type().encode(&s, def.get_resolution()) {
+                        if let Ok(v) = def.get_type().encode(&s) {
                             if memory
                                 .lock()
                                 .expect("Unable to lock memory")
