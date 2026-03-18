@@ -59,7 +59,7 @@ Alternatively, you can also run it directly using the following command. Please 
 cargo run --release -- --config ./path/to/config.json tcp -i <ip> -p <port>
 
 # Or with the application already built
-modbus-cli-rs --config ./path/to/config.sjon tcp -i <ip> -p <port>
+modbus-cli-rs --config ./path/to/config.json tcp -i <ip> -p <port>
 ```
 
 ### Client Mode
@@ -68,7 +68,7 @@ modbus-cli-rs --config ./path/to/config.sjon tcp -i <ip> -p <port>
 cargo run --release -- --client --config ./path/to/config.json tcp -i <ip> -p <port>
 
 # Or with the application already built
-modbus-cli-rs --client --config ./path/to/config.sjon tcp -i <ip> -p <port>
+modbus-cli-rs --client --config ./path/to/config.json tcp -i <ip> -p <port>
 ```
 
 ## Keybindings
