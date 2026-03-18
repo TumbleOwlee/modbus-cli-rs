@@ -1,3 +1,5 @@
+use std::ops::{Div, Mul};
+
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 
@@ -583,7 +585,13 @@ impl DataType {
                     .collect(),
             )
             .map_err(|e| e.into())
-            .map(|s| (s, String::new())),
+            .map(|s| {
+                let hex = bytes.iter().fold("0x".to_string(), |mut s, c| {
+                    s += &format!("{:01x}", c);
+                    s
+                });
+                (hex, s)
+            }),
             Format::LooseAscii => String::from_utf8(
                 bytes
                     .iter()
@@ -592,7 +600,13 @@ impl DataType {
                     .collect(),
             )
             .map_err(|e| e.into())
-            .map(|s| (s, String::new())),
+            .map(|s| {
+                let hex = bytes.iter().fold("0x".to_string(), |mut s, c| {
+                    s += &format!("{:01x}", c);
+                    s
+                });
+                (hex, s)
+            }),
             Format::PackedUtf8 => String::from_utf8(
                 bytes
                     .iter()
@@ -601,7 +615,13 @@ impl DataType {
                     .collect(),
             )
             .map_err(|e| e.into())
-            .map(|s| (s, String::new())),
+            .map(|s| {
+                let hex = bytes.iter().fold("0x".to_string(), |mut s, c| {
+                    s += &format!("{:01x}", c);
+                    s
+                });
+                (hex, s)
+            }),
             Format::LooseUtf8 => bytes
                 .iter()
                 .map(|v| self.apply_order(*v))
@@ -624,20 +644,26 @@ impl DataType {
                     }
                     Err(_) => Err(anyhow!("Invalid data")),
                 })
-                .map(|s| (s, String::new())),
+                .map(|s| {
+                    let hex = bytes.iter().fold("0x".to_string(), |mut s, c| {
+                        s += &format!("{:01x}", c);
+                        s
+                    });
+                    (hex, s)
+                }),
             Format::U8 => {
                 let val: u8 = ((self.apply_order(*bytes.first().expect("Unable to retrieve byte")))
                     & 0xFF) as u8;
                 Ok((
                     format!("{:#04X}", val),
-                    format!("{}", (val as f64 * coefficient) as u8),
+                    format!("{}", (val as f64 * coefficient)),
                 ))
             }
             Format::U16 => {
                 let val: u16 = self.apply_order(*bytes.first().expect("Unable to retrieve byte"));
                 Ok((
                     format!("{:#06X}", val),
-                    format!("{}", (val as f64 * coefficient) as u16),
+                    format!("{}", (val as f64 * coefficient)),
                 ))
             }
             Format::U32 => {
@@ -647,7 +673,7 @@ impl DataType {
                     + (self.apply_order(*bytes.get(1).expect("Unable to retrieve byte")) as u32);
                 Ok((
                     format!("0x{:01$X}", val, 8),
-                    format!("{}", (val as f64 * coefficient) as u32),
+                    format!("{}", (val as f64 * coefficient)),
                 ))
             }
             Format::U64 => {
@@ -659,10 +685,17 @@ impl DataType {
                     + ((self.apply_order(*bytes.get(2).expect("Unable to retrieve byte")) as u64)
                         << 16)
                     + self.apply_order(*bytes.get(3).expect("Unable to retrieve byte")) as u64;
-                Ok((
-                    format!("0x{:01$X}", val, 16),
-                    format!("{}", (val as f128 * coefficient as f128) as u64),
-                ))
+                let val2 = if coefficient > 1.0 {
+                    format!("{}", val.mul(coefficient as u64))
+                } else {
+                    let v = val.div((1f64 / coefficient) as u64);
+                    if v < f64::MAX as u64 {
+                        format!("{}", val as f64 * coefficient)
+                    } else {
+                        format!("{}", v)
+                    }
+                };
+                Ok((format!("0x{:01$X}", val, 16), format!("{}", val2)))
             }
             Format::U128 => {
                 let val: u128 = ((self.apply_order(*bytes.first().expect("Unable to retrieve byte"))
@@ -681,17 +714,24 @@ impl DataType {
                     + ((self.apply_order(*bytes.get(6).expect("Unable to retrieve byte")) as u128)
                         << 16)
                     + self.apply_order(*bytes.get(7).expect("Unable to retrieve byte")) as u128;
-                Ok((
-                    format!("0x{:01$X}", val, 32),
-                    format!("{}", (val as f128 * coefficient as f128) as u128),
-                ))
+                let val2 = if coefficient > 1.0 {
+                    format!("{}", val.mul(coefficient as u128))
+                } else {
+                    let v = val.div((1f64 / coefficient) as u128);
+                    if v < f64::MAX as u128 {
+                        format!("{}", val as f64 * coefficient)
+                    } else {
+                        format!("{}", v)
+                    }
+                };
+                Ok((format!("0x{:01$X}", val, 32), format!("{}", val2)))
             }
             Format::I8 => {
                 let val: i8 = (self.apply_order(*bytes.first().expect("Unable to retrieve byte"))
                     & 0xFF) as i8;
                 Ok((
                     format!("{:#04X}", val),
-                    format!("{}", (val as f64 * coefficient) as i8),
+                    format!("{}", (val as f64 * coefficient)),
                 ))
             }
             Format::I16 => {
@@ -699,7 +739,7 @@ impl DataType {
                     self.apply_order(*bytes.first().expect("Unable to retrieve byte")) as i16;
                 Ok((
                     format!("{:#06X}", val),
-                    format!("{}", (val as f64 * coefficient) as i16),
+                    format!("{}", (val as f64 * coefficient)),
                 ))
             }
             Format::I32 => {
@@ -709,7 +749,7 @@ impl DataType {
                     + (self.apply_order(*bytes.get(1).expect("Unable to retrieve byte")) as i32);
                 Ok((
                     format!("0x{:01$X}", val, 8),
-                    format!("{}", (val as f64 * coefficient) as i32),
+                    format!("{}", (val as f64 * coefficient)),
                 ))
             }
             Format::I64 => {
@@ -721,10 +761,17 @@ impl DataType {
                     + ((self.apply_order(*bytes.get(2).expect("Unable to retrieve byte")) as i64)
                         << 16)
                     + self.apply_order(*bytes.get(3).expect("Unable to retrieve byte")) as i64;
-                Ok((
-                    format!("0x{:01$X}", val, 16),
-                    format!("{}", (val as f128 * coefficient as f128) as i64),
-                ))
+                let val2 = if coefficient > 1.0 {
+                    format!("{}", val.mul(coefficient as i64))
+                } else {
+                    let v = val.div((1f64 / coefficient) as i64);
+                    if v < f64::MAX as i64 {
+                        format!("{}", val as f64 * coefficient)
+                    } else {
+                        format!("{}", v)
+                    }
+                };
+                Ok((format!("0x{:01$X}", val, 16), format!("{}", val2)))
             }
             Format::I128 => {
                 let val: i128 = ((self.apply_order(*bytes.first().expect("Unable to retrieve byte"))
@@ -743,16 +790,23 @@ impl DataType {
                     + ((self.apply_order(*bytes.get(6).expect("Unable to retrieve byte")) as i128)
                         << 16)
                     + self.apply_order(*bytes.get(7).expect("Unable to retrieve byte")) as i128;
-                Ok((
-                    format!("0x{:01$X}", val, 32),
-                    format!("{}", (val as f128 * coefficient as f128) as i128),
-                ))
+                let val2 = if coefficient > 1.0 {
+                    format!("{}", val.mul(coefficient as i128))
+                } else {
+                    let v = val.div((1f64 / coefficient) as i128);
+                    if v < f64::MAX as i128 {
+                        format!("{}", val as f64 * coefficient)
+                    } else {
+                        format!("{}", v)
+                    }
+                };
+                Ok((format!("0x{:01$X}", val, 32), format!("{}", val2)))
             }
             Format::U16le => {
                 let val: u16 = self.apply_order(*bytes.first().expect("Unable to retrieve byte"));
                 Ok((
                     format!("{:#06X}", val),
-                    format!("{}", (val as f64 * coefficient) as u16),
+                    format!("{}", (val as f64 * coefficient)),
                 ))
             }
             Format::U32le => {
@@ -762,7 +816,7 @@ impl DataType {
                     + (self.apply_order(*bytes.first().expect("Unable to retrieve byte")) as u32);
                 Ok((
                     format!("0x{:01$X}", val, 8),
-                    format!("{}", (val as f64 * coefficient) as u32),
+                    format!("{}", (val as f64 * coefficient)),
                 ))
             }
             Format::U64le => {
@@ -774,10 +828,17 @@ impl DataType {
                     + ((self.apply_order(*bytes.get(1).expect("Unable to retrieve byte")) as u64)
                         << 16)
                     + self.apply_order(*bytes.first().expect("Unable to retrieve byte")) as u64;
-                Ok((
-                    format!("0x{:01$X}", val, 16),
-                    format!("{}", (val as f128 * coefficient as f128) as u64),
-                ))
+                let val2 = if coefficient > 1.0 {
+                    format!("{}", val.mul(coefficient as u64))
+                } else {
+                    let v = val.div((1f64 / coefficient) as u64);
+                    if v < f64::MAX as u64 {
+                        format!("{}", val as f64 * coefficient)
+                    } else {
+                        format!("{}", v)
+                    }
+                };
+                Ok((format!("0x{:01$X}", val, 16), format!("{}", val2)))
             }
             Format::U128le => {
                 let val: u128 = ((self.apply_order(*bytes.get(7).expect("Unable to retrieve byte"))
@@ -796,17 +857,24 @@ impl DataType {
                     + ((self.apply_order(*bytes.get(1).expect("Unable to retrieve byte")) as u128)
                         << 16)
                     + self.apply_order(*bytes.first().expect("Unable to retrieve byte")) as u128;
-                Ok((
-                    format!("0x{:01$X}", val, 32),
-                    format!("{}", (val as f128 * coefficient as f128) as u128),
-                ))
+                let val2 = if coefficient > 1.0 {
+                    format!("{}", val.mul(coefficient as u128))
+                } else {
+                    let v = val.div((1f64 / coefficient) as u128);
+                    if v < f64::MAX as u128 {
+                        format!("{}", val as f64 * coefficient)
+                    } else {
+                        format!("{}", v)
+                    }
+                };
+                Ok((format!("0x{:01$X}", val, 32), format!("{}", val2)))
             }
             Format::I8le => {
                 let val: i8 = (self.apply_order(*bytes.first().expect("Unable to retrieve byte"))
                     & 0xFF) as i8;
                 Ok((
                     format!("{:#04X}", val),
-                    format!("{}", (val as f64 * coefficient) as i8),
+                    format!("{}", (val as f64 * coefficient)),
                 ))
             }
             Format::I16le => {
@@ -814,7 +882,7 @@ impl DataType {
                     self.apply_order(*bytes.first().expect("Unable to retrieve byte")) as i16;
                 Ok((
                     format!("{:#06X}", val),
-                    format!("{}", (val as f64 * coefficient) as i16),
+                    format!("{}", (val as f64 * coefficient)),
                 ))
             }
             Format::I32le => {
@@ -824,7 +892,7 @@ impl DataType {
                     + (self.apply_order(*bytes.first().expect("Unable to retrieve byte")) as i32);
                 Ok((
                     format!("0x{:01$X}", val, 8),
-                    format!("{}", (val as f64 * coefficient) as i32),
+                    format!("{}", (val as f64 * coefficient)),
                 ))
             }
             Format::I64le => {
@@ -836,10 +904,17 @@ impl DataType {
                     + ((self.apply_order(*bytes.get(1).expect("Unable to retrieve byte")) as i64)
                         << 16)
                     + self.apply_order(*bytes.first().expect("Unable to retrieve byte")) as i64;
-                Ok((
-                    format!("0x{:01$X}", val, 16),
-                    format!("{}", (val as f128 * coefficient as f128) as i64),
-                ))
+                let val2 = if coefficient > 1.0 {
+                    format!("{}", val.mul(coefficient as i64))
+                } else {
+                    let v = val.div((1f64 / coefficient) as i64);
+                    if v < f64::MAX as i64 {
+                        format!("{}", val as f64 * coefficient)
+                    } else {
+                        format!("{}", v)
+                    }
+                };
+                Ok((format!("0x{:01$X}", val, 16), format!("{}", val2)))
             }
             Format::I128le => {
                 let val: i128 = ((self.apply_order(*bytes.get(7).expect("Unable to retrieve byte"))
@@ -858,23 +933,28 @@ impl DataType {
                     + ((self.apply_order(*bytes.get(1).expect("Unable to retrieve byte")) as i128)
                         << 16)
                     + self.apply_order(*bytes.first().expect("Unable to retrieve byte")) as i128;
-                Ok((
-                    format!("0x{:01$X}", val, 32),
-                    format!("{}", (val as f128 * coefficient as f128) as i128),
-                ))
+                let val2 = if coefficient > 1.0 {
+                    format!("{}", val.mul(coefficient as i128))
+                } else {
+                    let v = val.div((1f64 / coefficient) as i128);
+                    if v < f64::MAX as i128 {
+                        format!("{}", val as f64 * coefficient)
+                    } else {
+                        format!("{}", v)
+                    }
+                };
+                Ok((format!("0x{:01$X}", val, 32), format!("{}", val2)))
             }
         }
     }
 
-    pub fn encode(&self, s: &str, resolution: f64) -> anyhow::Result<Vec<u16>> {
-        let coefficient = 1 as f128 / resolution as f128;
+    pub fn encode(&self, s: &str) -> anyhow::Result<Vec<u16>> {
         match self.format {
             Format::F32 => {
                 let val: f32 = if let Some(s) = s.strip_prefix("0x") {
                     u32::from_str_radix(s, 16).map(f32::from_bits)?
                 } else {
-                    let val: f32 = s.parse()?;
-                    (val as f64 * coefficient as f64) as f32
+                    s.parse()?
                 };
                 let val = val.to_bits();
                 Ok(vec![
@@ -886,8 +966,7 @@ impl DataType {
                 let val: f32 = if let Some(s) = s.strip_prefix("0x") {
                     u32::from_str_radix(s, 16).map(f32::from_bits)?
                 } else {
-                    let val: f32 = s.parse()?;
-                    (val as f64 * coefficient as f64) as f32
+                    s.parse()?
                 };
                 let val = val.to_bits();
                 Ok(vec![
@@ -899,8 +978,7 @@ impl DataType {
                 let val: f64 = if let Some(s) = s.strip_prefix("0x") {
                     u64::from_str_radix(s, 16).map(f64::from_bits)?
                 } else {
-                    let val: f64 = s.parse()?;
-                    val * coefficient as f64
+                    s.parse()?
                 };
                 let val = val.to_bits();
                 Ok(vec![
@@ -914,8 +992,7 @@ impl DataType {
                 let val: f64 = if let Some(s) = s.strip_prefix("0x") {
                     u64::from_str_radix(s, 16).map(f64::from_bits)?
                 } else {
-                    let val: f64 = s.parse()?;
-                    val * coefficient as f64
+                    s.parse()?
                 };
                 let val = val.to_bits();
                 Ok(vec![
@@ -929,8 +1006,7 @@ impl DataType {
                 let val: f128 = if let Some(s) = s.strip_prefix("0x") {
                     u128::from_str_radix(s, 16).map(f128::from_bits)?
                 } else {
-                    let val: f64 = s.parse()?;
-                    val as f128 * coefficient
+                    return Err(anyhow!("Only hex input supported for f128 type."));
                 };
                 let val = val.to_bits();
                 Ok(vec![
@@ -948,8 +1024,7 @@ impl DataType {
                 let val: f128 = if let Some(s) = s.strip_prefix("0x") {
                     u128::from_str_radix(s, 16).map(f128::from_bits)?
                 } else {
-                    let val: f64 = s.parse()?;
-                    val as f128 * coefficient
+                    return Err(anyhow!("Only hex input supported for f128 type."));
                 };
                 let val = val.to_bits();
                 Ok(vec![
@@ -1027,8 +1102,7 @@ impl DataType {
                 let val: u8 = if let Some(s) = s.strip_prefix("0x") {
                     u8::from_str_radix(s, 16)?
                 } else {
-                    let val: u8 = s.parse()?;
-                    (val as f64 * coefficient as f64) as u8
+                    s.parse()?
                 };
                 Ok(vec![self.apply_order(val as u16)])
             }
@@ -1036,8 +1110,7 @@ impl DataType {
                 let val: u16 = if let Some(s) = s.strip_prefix("0x") {
                     u16::from_str_radix(s, 16)?
                 } else {
-                    let val: u16 = s.parse()?;
-                    (val as f64 * coefficient as f64) as u16
+                    s.parse()?
                 };
                 Ok(vec![self.apply_order(val)])
             }
@@ -1045,8 +1118,7 @@ impl DataType {
                 let val: u32 = if let Some(s) = s.strip_prefix("0x") {
                     u32::from_str_radix(s, 16)?
                 } else {
-                    let val: u32 = s.parse()?;
-                    (val as f64 * coefficient as f64) as u32
+                    s.parse()?
                 };
                 Ok(vec![
                     self.apply_order((val >> 16) as u16),
@@ -1057,8 +1129,7 @@ impl DataType {
                 let val: u64 = if let Some(s) = s.strip_prefix("0x") {
                     u64::from_str_radix(s, 16)?
                 } else {
-                    let val: u64 = s.parse()?;
-                    (val as f128 * coefficient as f128) as u64
+                    s.parse()?
                 };
                 Ok(vec![
                     self.apply_order(((val >> 48) & 0xFFFF) as u16),
@@ -1071,8 +1142,7 @@ impl DataType {
                 let val: u128 = if let Some(s) = s.strip_prefix("0x") {
                     u128::from_str_radix(s, 16)?
                 } else {
-                    let val: u128 = s.parse()?;
-                    (val as f128 * coefficient as f128) as u128
+                    s.parse()?
                 };
                 Ok(vec![
                     self.apply_order(((val >> 112) & 0xFFFF) as u16),
@@ -1096,8 +1166,7 @@ impl DataType {
                         return Err(anyhow::anyhow!("Value too large for i8."));
                     }
                 } else {
-                    let val: i8 = s.parse()?;
-                    (val as f64 * coefficient as f64) as i8
+                    s.parse()?
                 };
                 Ok(vec![self.apply_order(val as u16)])
             }
@@ -1112,8 +1181,7 @@ impl DataType {
                         return Err(anyhow::anyhow!("Value too large for i16."));
                     }
                 } else {
-                    let val: i16 = s.parse()?;
-                    (val as f64 * coefficient as f64) as i16
+                    s.parse()?
                 };
                 Ok(vec![self.apply_order(val as u16)])
             }
@@ -1128,8 +1196,7 @@ impl DataType {
                         return Err(anyhow::anyhow!("Value too large for i32."));
                     }
                 } else {
-                    let val: i32 = s.parse()?;
-                    (val as f64 * coefficient as f64) as i32
+                    s.parse()?
                 };
                 Ok(vec![
                     self.apply_order((val >> 16) as u16),
@@ -1147,8 +1214,7 @@ impl DataType {
                         return Err(anyhow::anyhow!("Value too large for i64."));
                     }
                 } else {
-                    let val: i64 = s.parse()?;
-                    (val as f128 * coefficient as f128) as i64
+                    s.parse()?
                 };
                 Ok(vec![
                     self.apply_order(((val >> 48) & 0xFFFF) as u16),
@@ -1168,8 +1234,7 @@ impl DataType {
                         return Err(anyhow::anyhow!("Value too large for i128."));
                     }
                 } else {
-                    let val: i128 = s.parse()?;
-                    (val as f128 * coefficient as f128) as i128
+                    s.parse()?
                 };
                 Ok(vec![
                     self.apply_order(((val >> 112) & 0xFFFF) as u16),
@@ -1186,8 +1251,7 @@ impl DataType {
                 let val: u32 = if let Some(s) = s.strip_prefix("0x") {
                     u32::from_str_radix(s, 16)?
                 } else {
-                    let val: u32 = s.parse()?;
-                    (val as f128 * coefficient as f128) as u32
+                    s.parse()?
                 };
                 Ok(vec![
                     self.apply_order((val & 0xFFFF) as u16),
@@ -1198,8 +1262,7 @@ impl DataType {
                 let val: u64 = if let Some(s) = s.strip_prefix("0x") {
                     u64::from_str_radix(s, 16)?
                 } else {
-                    let val: u64 = s.parse()?;
-                    (val as f128 * coefficient as f128) as u64
+                    s.parse()?
                 };
                 Ok(vec![
                     self.apply_order((val & 0xFFFF) as u16),
@@ -1212,8 +1275,7 @@ impl DataType {
                 let val: u128 = if let Some(s) = s.strip_prefix("0x") {
                     u128::from_str_radix(s, 16)?
                 } else {
-                    let val: u128 = s.parse()?;
-                    (val as f128 * coefficient as f128) as u128
+                    s.parse()?
                 };
                 Ok(vec![
                     self.apply_order((val & 0xFFFF) as u16),
@@ -1237,8 +1299,7 @@ impl DataType {
                         return Err(anyhow::anyhow!("Value too large for i32."));
                     }
                 } else {
-                    let val: i32 = s.parse()?;
-                    (val as f128 * coefficient as f128) as i32
+                    s.parse()?
                 };
                 Ok(vec![
                     self.apply_order((val & 0xFFFF) as u16),
@@ -1256,8 +1317,7 @@ impl DataType {
                         return Err(anyhow::anyhow!("Value too large for i64."));
                     }
                 } else {
-                    let val: i64 = s.parse()?;
-                    (val as f128 * coefficient as f128) as i64
+                    s.parse()?
                 };
                 Ok(vec![
                     self.apply_order((val & 0xFFFF) as u16),
@@ -1277,8 +1337,7 @@ impl DataType {
                         return Err(anyhow::anyhow!("Value too large for i128."));
                     }
                 } else {
-                    let val: i128 = s.parse()?;
-                    (val as f128 * coefficient as f128) as i128
+                    s.parse()?
                 };
                 Ok(vec![
                     self.apply_order((val & 0xFFFF) as u16),
