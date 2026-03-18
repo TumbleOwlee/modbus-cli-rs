@@ -245,6 +245,8 @@ The following data types are currently supported and can be configured:
 - `F32le`: The combined register contents contain a 32-bit little-endian float value
 - `F64`: The combined register contents contain a 64-bit float value
 - `F64le`: The combined register contents contain a 64-bit little-endian float value
+- `F128`: The combined register contents contain a 128-bit float value (only available with feature `f128`)
+- `F128le`: The combined register contents contain a 128-bit little-endian float value (only available with feature `f128`)
 
 ### Lua Support
 
