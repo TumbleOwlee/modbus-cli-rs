@@ -1,4 +1,9 @@
+#[cfg(feature = "f128")]
 use crate::mem::data::DataType;
+
+#[cfg(not(feature = "f128"))]
+use crate::mem::datav2::DataType;
+
 use crate::mem::memory::{Memory, Range};
 use crate::util::str;
 use crate::util::Expect;
