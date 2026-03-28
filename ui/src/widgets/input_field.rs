@@ -60,7 +60,7 @@ impl StatefulWidget for &InputField {
 
         // Create block if border is required
         if self.bordered {
-            let style = if state.focused && !state.disabled {
+            let style = if state.in_focus() && !state.is_disabled() {
                 self.style.focused
             } else {
                 self.style.default
@@ -108,9 +108,9 @@ impl StatefulWidget for &InputField {
         // Display text
         let input = Paragraph::new(Text::from(text).style(self.style.default));
         input.render(area, buf);
-        if !state.disabled {
+        if !state.is_disabled() {
             // Display cursor
-            if state.focused {
+            if state.in_focus() {
                 buf[(area.x + (cursor - x_start) as u16, area.y)].set_style(self.style.cursor);
             }
         }

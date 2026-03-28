@@ -1,14 +1,14 @@
-use crossterm::event::{KeyCode, KeyModifiers};
-
 use super::super::traits::ToLabel;
+use crate::EventResult;
 use crate::traits::HandleEvents;
-use crate::{EventResult, Transition};
+use crossterm::event::{KeyCode, KeyModifiers};
 
 #[derive(Debug)]
 pub struct SelectionState<ValueType>
 where
     ValueType: ToLabel + Clone,
 {
+    focused: bool,
     selection: usize,
     values: Vec<ValueType>,
 }
@@ -19,6 +19,7 @@ where
 {
     fn default() -> Self {
         Self {
+            focused: false,
             selection: 0,
             values: Vec::new(),
         }
@@ -72,6 +73,21 @@ where
 
     pub fn get_selection_index(&self) -> usize {
         self.selection
+    }
+
+    pub fn set_focus(&mut self, focus: bool) {
+        self.focused = focus;
+    }
+
+    pub fn in_focus(&self) -> bool {
+        self.focused
+    }
+
+    pub fn focus(self) -> Self {
+        Self {
+            focused: true,
+            ..self
+        }
     }
 }
 

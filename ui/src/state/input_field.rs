@@ -7,8 +7,8 @@ use crate::{EventResult, Transition};
 pub struct InputFieldState {
     input: String,
     cursor: usize,
-    pub focused: bool,
-    pub disabled: bool,
+    focused: bool,
+    disabled: bool,
 }
 
 impl InputFieldState {
@@ -47,6 +47,10 @@ impl InputFieldState {
         self.focused = true;
     }
 
+    pub fn in_focus(&self) -> bool {
+        self.focused
+    }
+
     pub fn focus(self) -> Self {
         Self {
             focused: true,
@@ -54,7 +58,11 @@ impl InputFieldState {
         }
     }
 
-    pub fn disabled(self) -> Self {
+    pub fn is_disabled(&self) -> bool {
+        self.disabled
+    }
+
+    pub fn disable(self) -> Self {
         Self {
             disabled: true,
             ..self
