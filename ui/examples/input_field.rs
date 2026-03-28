@@ -3,7 +3,7 @@ use ratatui::{Frame, layout::Margin, style::palette::tailwind};
 use std::{io::Stdout, time::Duration};
 use ui::{
     AlternateScreen, EventResult, Style, state::InputFieldState, traits::HandleEvents,
-    widget::InputField,
+    widgets::InputField,
 };
 
 // Simple app consisting of single input field

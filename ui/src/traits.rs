@@ -23,3 +23,7 @@ impl Init for Stderr {
         stderr()
     }
 }
+
+pub trait ToLabel {
+    fn to_label(&self) -> String;
+}

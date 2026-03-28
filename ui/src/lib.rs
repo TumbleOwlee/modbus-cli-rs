@@ -4,7 +4,7 @@ mod types;
 
 pub mod state;
 pub mod traits;
-pub mod widget;
+pub mod widgets;
 pub use screen::AlternateScreen;
 pub use style::Style;
 pub use types::{EventResult, Transition};
