@@ -4,13 +4,13 @@ use ratatui::text::Text;
 use ratatui::widgets::Widget;
 use ratatui::widgets::{Block, Paragraph, StatefulWidget};
 
-use crate::Style;
 use crate::state::InputFieldState;
+use crate::style::InputStyle;
 
 pub struct InputField {
     placeholder: Option<String>,
     bordered: bool,
-    style: Style,
+    style: InputStyle,
     title: Option<String>,
     margins: Margin,
 }
@@ -122,7 +122,7 @@ impl InputField {
         Self {
             placeholder: None,
             bordered: false,
-            style: Style::default(),
+            style: InputStyle::default(),
             title: None,
             margins: Margin {
                 vertical: 0,
@@ -142,7 +142,7 @@ impl InputField {
         Self { bordered, ..self }
     }
 
-    pub fn style(self, style: Style) -> Self {
+    pub fn style(self, style: InputStyle) -> Self {
         Self { style, ..self }
     }
 
@@ -158,7 +158,7 @@ impl InputField {
         self.placeholder = None;
     }
 
-    pub fn set_style(&mut self, style: Style) {
+    pub fn set_style(&mut self, style: InputStyle) {
         self.style = style;
     }
 }

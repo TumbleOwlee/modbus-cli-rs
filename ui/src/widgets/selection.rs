@@ -1,3 +1,4 @@
+use ratatui::style::palette::tailwind;
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Layout, Margin, Rect},
@@ -8,7 +9,7 @@ use std::marker::PhantomData;
 
 use super::super::state::SelectionState;
 use super::super::traits::ToLabel;
-use crate::Style as InputStyle;
+use crate::style::SelectionStyle;
 
 pub struct Selection<ValueType>
 where
@@ -16,10 +17,9 @@ where
 {
     title: Option<String>,
     bordered: bool,
-    style: InputStyle,
+    style: SelectionStyle,
     margins: Margin,
     marker: PhantomData<ValueType>,
-    //colors: TableColors,
 }
 
 impl<ValueType> Selection<ValueType>
@@ -29,14 +29,13 @@ where
     pub fn new() -> Self {
         Self {
             bordered: false,
-            style: InputStyle::default(),
+            style: SelectionStyle::default(),
             title: None,
             margins: Margin {
                 vertical: 0,
                 horizontal: 0,
             },
             marker: PhantomData,
-            //colors: TableColors::new(&PALETTES[0]),
         }
     }
 
@@ -51,7 +50,7 @@ where
         Self { bordered, ..self }
     }
 
-    pub fn style(self, style: InputStyle) -> Self {
+    pub fn style(self, style: SelectionStyle) -> Self {
         Self { style, ..self }
     }
 
@@ -59,7 +58,7 @@ where
         Self { margins, ..self }
     }
 
-    pub fn set_style(&mut self, style: InputStyle) {
+    pub fn set_style(&mut self, style: SelectionStyle) {
         self.style = style;
     }
 }
@@ -121,7 +120,7 @@ impl<ValueType: ToLabel + Clone> StatefulWidget for &Selection<ValueType> {
         // Create block if border is required
         if self.bordered {
             let style = if state.in_focus() {
-                self.style.focused
+                self.style.border
             } else {
                 self.style.default
             };
@@ -163,12 +162,12 @@ impl<ValueType: ToLabel + Clone> StatefulWidget for &Selection<ValueType> {
         {
             let t = if i == selection {
                 if state.in_focus() {
-                    Text::from(format!(" {}", v)).style(self.style.focused.clone().reversed())
+                    Text::from(format!(" {}", v)).style(self.style.focused.clone())
                 } else {
                     Text::from(format!(" {}", v)).style(self.style.default.clone())
                 }
             } else {
-                Text::from(v).style(self.style.default.clone())
+                Text::from(v).style(self.style.rows[i % 2])
             };
             t.render(area[n], buf);
         }

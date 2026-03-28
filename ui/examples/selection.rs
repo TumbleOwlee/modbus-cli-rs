@@ -4,8 +4,8 @@ use ratatui::{
 };
 use std::{io::Stdout, time::Duration};
 use ui::{
-    AlternateScreen, EventResult, Style, state::SelectionState, traits::HandleEvents,
-    traits::ToLabel, widgets::Selection,
+    AlternateScreen, EventResult, state::SelectionState, style::SelectionStyle,
+    traits::HandleEvents, traits::ToLabel, widgets::Selection,
 };
 
 #[derive(Clone, Debug)]
@@ -41,7 +41,7 @@ impl Default for App {
 
 // Render simple input field
 fn ui(f: &mut Frame, app: &mut App) {
-    let layout = Layout::vertical([Constraint::Length(5)]);
+    let layout = Layout::vertical([Constraint::Length(8)]);
     let rects = f.area().layout_vec(&layout);
     let layout = Layout::horizontal([Constraint::Length(30)]);
     let rects = rects[0].layout_vec(&layout);
@@ -52,12 +52,12 @@ fn ui(f: &mut Frame, app: &mut App) {
             vertical: 0,
             horizontal: 1,
         })
-        .style(Style {
-            focused: ratatui::prelude::Style::default().fg(tailwind::INDIGO.c400),
-            cursor: ratatui::prelude::Style::default()
+        .style(SelectionStyle {
+            focused: ratatui::prelude::Style::default()
                 .bg(tailwind::INDIGO.c400)
-                .fg(tailwind::WHITE),
-            ..Style::default()
+                .fg(tailwind::BLACK),
+            border: ratatui::prelude::Style::default().fg(tailwind::INDIGO.c400),
+            ..SelectionStyle::default()
         });
 
     f.render_stateful_widget(selection, rects[0], &mut app.state);
