@@ -6,20 +6,28 @@ use ratatui::{
     text::Text,
     widgets::{Block, StatefulWidget, Widget},
 };
+use std::marker::PhantomData;
 
 use super::super::state::SelectionState;
 use super::super::traits::ToLabel;
 use crate::Style as InputStyle;
 
-pub struct Selection {
+pub struct Selection<ValueType>
+where
+    ValueType: ToLabel + Clone,
+{
     title: Option<String>,
     bordered: bool,
     style: InputStyle,
     margins: Margin,
+    marker: PhantomData<ValueType>,
     //colors: TableColors,
 }
 
-impl Selection {
+impl<ValueType> Selection<ValueType>
+where
+    ValueType: ToLabel + Clone,
+{
     pub fn new() -> Self {
         Self {
             bordered: false,
@@ -29,6 +37,7 @@ impl Selection {
                 vertical: 0,
                 horizontal: 0,
             },
+            marker: PhantomData,
             //colors: TableColors::new(&PALETTES[0]),
         }
     }
@@ -57,20 +66,26 @@ impl Selection {
     }
 }
 
-impl Widget for Selection {
+impl<ValueType> Widget for Selection<ValueType>
+where
+    ValueType: ToLabel + Clone,
+{
     fn render(self, area: Rect, buf: &mut Buffer) {
         Widget::render(&self, area, buf);
     }
 }
 
-impl Widget for &Selection {
+impl<ValueType> Widget for &Selection<ValueType>
+where
+    ValueType: ToLabel + Clone,
+{
     fn render(self, area: Rect, buf: &mut Buffer) {
         let mut state = SelectionState::default();
         StatefulWidget::render(self, area, buf, &mut state);
     }
 }
 
-impl<ValueType> StatefulWidget for Selection
+impl<ValueType> StatefulWidget for Selection<ValueType>
 where
     ValueType: ToLabel + Clone,
 {
@@ -81,10 +96,7 @@ where
     }
 }
 
-impl<ValueType> StatefulWidget for &Selection
-where
-    ValueType: ToLabel + Clone,
-{
+impl<ValueType: ToLabel + Clone> StatefulWidget for &Selection<ValueType> {
     type State = SelectionState<ValueType>;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
@@ -121,8 +133,8 @@ where
             });
         }
 
-        let items = state
-            .items
+        let values = state
+            .get_values()
             .iter()
             .map(ToLabel::to_label)
             .collect::<Vec<_>>();
@@ -131,15 +143,15 @@ where
         let area = Layout::vertical(constraints).split(area);
 
         let selection = state.get_selection_index();
-        let start = if selection >= split && items.len() - split >= selection {
+        let start = if selection >= split && values.len() - split >= selection {
             selection - split
-        } else if selection < split || items.len() < count {
+        } else if selection < split || values.len() < count {
             0
         } else {
-            items.len() - count
+            values.len() - count
         };
 
-        for (n, (i, v)) in items
+        for (n, (i, v)) in values
             .into_iter()
             .enumerate()
             .filter(|(i, _)| *i >= start && *i < (start + count))

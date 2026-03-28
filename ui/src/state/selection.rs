@@ -4,13 +4,25 @@ use super::super::traits::ToLabel;
 use crate::traits::HandleEvents;
 use crate::{EventResult, Transition};
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct SelectionState<ValueType>
 where
     ValueType: ToLabel + Clone,
 {
     selection: usize,
     values: Vec<ValueType>,
+}
+
+impl<ValueType> Default for SelectionState<ValueType>
+where
+    ValueType: ToLabel + Clone,
+{
+    fn default() -> Self {
+        Self {
+            selection: 0,
+            values: Vec::new(),
+        }
+    }
 }
 
 impl<ValueType> SelectionState<ValueType>
