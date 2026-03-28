@@ -1,5 +1,7 @@
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
-use ratatui::{Frame, layout::Margin, style::palette::tailwind};
+use ratatui::{
+    Frame, layout::Constraint, layout::Layout, layout::Margin, style::palette::tailwind,
+};
 use std::{io::Stdout, time::Duration};
 use ui::{
     AlternateScreen, EventResult, Style, state::SelectionState, traits::HandleEvents,
@@ -39,6 +41,10 @@ impl Default for App {
 
 // Render simple input field
 fn ui(f: &mut Frame, app: &mut App) {
+    let layout = Layout::vertical([Constraint::Length(5)]);
+    let rects = f.area().layout_vec(&layout);
+    let layout = Layout::horizontal([Constraint::Length(30)]);
+    let rects = rects[0].layout_vec(&layout);
     let selection = Selection::new()
         .title("Mode".to_string())
         .bordered(true)
@@ -46,7 +52,6 @@ fn ui(f: &mut Frame, app: &mut App) {
             vertical: 0,
             horizontal: 1,
         })
-        .max_lines(8)
         .style(Style {
             focused: ratatui::prelude::Style::default().fg(tailwind::INDIGO.c400),
             cursor: ratatui::prelude::Style::default()
@@ -55,7 +60,7 @@ fn ui(f: &mut Frame, app: &mut App) {
             ..Style::default()
         });
 
-    f.render_stateful_widget(selection, f.area(), &mut app.state);
+    f.render_stateful_widget(selection, rects[0], &mut app.state);
 }
 
 fn main() {

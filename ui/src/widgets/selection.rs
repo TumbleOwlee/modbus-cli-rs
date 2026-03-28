@@ -18,7 +18,6 @@ where
     bordered: bool,
     style: InputStyle,
     margins: Margin,
-    max_lines: usize,
     marker: PhantomData<ValueType>,
     //colors: TableColors,
 }
@@ -36,7 +35,6 @@ where
                 vertical: 0,
                 horizontal: 0,
             },
-            max_lines: 5,
             marker: PhantomData,
             //colors: TableColors::new(&PALETTES[0]),
         }
@@ -61,19 +59,8 @@ where
         Self { margins, ..self }
     }
 
-    pub fn max_lines(self, height: usize) -> Self {
-        Self {
-            max_lines: height,
-            ..self
-        }
-    }
-
     pub fn set_style(&mut self, style: InputStyle) {
         self.style = style;
-    }
-
-    pub fn set_max_lines(&mut self, height: usize) {
-        self.max_lines = height;
     }
 }
 
@@ -111,8 +98,10 @@ impl<ValueType: ToLabel + Clone> StatefulWidget for &Selection<ValueType> {
     type State = SelectionState<ValueType>;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+        let border_lines = if self.bordered { 2 } else { 0 };
+        let max_lines = area.height as i32 - border_lines;
         let lines = state.get_values().len();
-        let lines = std::cmp::min(lines, self.max_lines);
+        let lines = std::cmp::min(lines as i32, max_lines);
         let height = if self.bordered { lines + 2 } else { lines };
 
         let area = Layout::vertical([
@@ -154,19 +143,16 @@ impl<ValueType: ToLabel + Clone> StatefulWidget for &Selection<ValueType> {
             .map(ToLabel::to_label)
             .collect::<Vec<_>>();
 
-        let constraints = vec![Constraint::Length(1); lines];
+        let constraints = vec![Constraint::Length(1); lines as usize];
         let area = Layout::vertical(constraints).split(area);
 
         let selection = state.get_selection_index();
         let offset = lines / 2;
 
         let mut start = std::cmp::max(0, selection as i32 - offset as i32);
-        let end = std::cmp::min(
-            state.get_values().len() as i32,
-            start + self.max_lines as i32,
-        );
+        let end = std::cmp::min(state.get_values().len() as i32, start + max_lines as i32);
         if end == state.get_values().len() as i32 {
-            start = std::cmp::max(end - self.max_lines as i32, 0);
+            start = std::cmp::max(end - max_lines as i32, 0);
         }
 
         for (n, (i, v)) in values
@@ -177,9 +163,9 @@ impl<ValueType: ToLabel + Clone> StatefulWidget for &Selection<ValueType> {
         {
             let t = if i == selection {
                 if state.in_focus() {
-                    Text::from(v).style(self.style.focused.clone().reversed())
+                    Text::from(format!(" {}", v)).style(self.style.focused.clone().reversed())
                 } else {
-                    Text::from(v).style(self.style.default.clone())
+                    Text::from(format!(" {}", v)).style(self.style.default.clone())
                 }
             } else {
                 Text::from(v).style(self.style.default.clone())
