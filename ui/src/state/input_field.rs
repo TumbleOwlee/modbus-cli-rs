@@ -3,7 +3,7 @@ use crossterm::event::{KeyCode, KeyModifiers};
 use crate::traits::HandleEvents;
 use crate::{EventResult, Transition};
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct InputFieldState {
     input: String,
     cursor: usize,

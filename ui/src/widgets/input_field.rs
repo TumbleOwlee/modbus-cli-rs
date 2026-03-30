@@ -5,14 +5,28 @@ use ratatui::widgets::Widget;
 use ratatui::widgets::{Block, Paragraph, StatefulWidget};
 
 use crate::state::InputFieldState;
-use crate::style::InputStyle;
+use crate::style::InputFieldStyle;
+use crate::traits::AsConstraint;
 
+#[derive(Clone)]
 pub struct InputField {
     placeholder: Option<String>,
     bordered: bool,
-    style: InputStyle,
+    style: InputFieldStyle,
     title: Option<String>,
     margins: Margin,
+}
+
+impl AsConstraint for InputField {
+    fn horizontal(&self) -> Constraint {
+        let width = if self.bordered { 2 } else { 0 };
+        Constraint::Min(width + self.placeholder.as_ref().map(|s| s.len()).unwrap_or(0) as u16)
+    }
+
+    fn vertical(&self) -> Constraint {
+        let height = if self.bordered { 3 } else { 1 };
+        Constraint::Length(height)
+    }
 }
 
 impl Widget for InputField {
@@ -122,7 +136,7 @@ impl InputField {
         Self {
             placeholder: None,
             bordered: false,
-            style: InputStyle::default(),
+            style: InputFieldStyle::default(),
             title: None,
             margins: Margin {
                 vertical: 0,
@@ -142,7 +156,7 @@ impl InputField {
         Self { bordered, ..self }
     }
 
-    pub fn style(self, style: InputStyle) -> Self {
+    pub fn style(self, style: InputFieldStyle) -> Self {
         Self { style, ..self }
     }
 
@@ -158,7 +172,7 @@ impl InputField {
         self.placeholder = None;
     }
 
-    pub fn set_style(&mut self, style: InputStyle) {
+    pub fn set_style(&mut self, style: InputFieldStyle) {
         self.style = style;
     }
 }

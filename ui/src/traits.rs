@@ -1,6 +1,6 @@
-use std::io::{Stderr, Stdout, stderr, stdout};
-
 use crossterm::event::{KeyCode, KeyModifiers};
+use ratatui::layout::Constraint;
+use std::io::{Stderr, Stdout, stderr, stdout};
 
 use crate::EventResult;
 
@@ -26,4 +26,10 @@ impl Init for Stderr {
 
 pub trait ToLabel {
     fn to_label(&self) -> String;
+}
+
+pub trait AsConstraint {
+    fn horizontal(&self) -> Constraint;
+
+    fn vertical(&self) -> Constraint;
 }

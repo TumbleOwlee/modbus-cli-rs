@@ -41,7 +41,7 @@ impl Default for App {
 
 // Render simple input field
 fn ui(f: &mut Frame, app: &mut App) {
-    let layout = Layout::vertical([Constraint::Length(8)]);
+    let layout = Layout::vertical([Constraint::Length(4)]);
     let rects = f.area().layout_vec(&layout);
     let layout = Layout::horizontal([Constraint::Length(30)]);
     let rects = rects[0].layout_vec(&layout);

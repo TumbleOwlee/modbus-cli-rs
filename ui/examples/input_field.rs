@@ -1,21 +1,23 @@
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
-use ratatui::{Frame, layout::Margin, style::palette::tailwind};
+use ratatui::{Frame, layout::Layout, layout::Margin, layout::Rect, style::palette::tailwind};
 use std::{io::Stdout, time::Duration};
 use ui::{
-    AlternateScreen, EventResult, Style, state::InputFieldState, traits::HandleEvents,
-    widgets::InputField,
+    AlternateScreen, EventResult, Transition, state::InputFieldState, style::InputFieldStyle,
+    traits::HandleEvents, widgets::InputField,
 };
+
+use ui::traits::AsConstraint;
 
 // Simple app consisting of single input field
 struct App {
-    pub state: InputFieldState,
+    index: usize,
+    states: Vec<InputFieldState>,
 }
 
 impl Default for App {
     fn default() -> Self {
-        Self {
-            state: InputFieldState::default().focus(),
-        }
+        let mut states = vec![InputFieldState::default(); 4];
+        Self { index: 0, states }
     }
 }
 
@@ -28,19 +30,31 @@ fn ui(f: &mut Frame, app: &mut App) {
             vertical: 0,
             horizontal: 1,
         })
-        .style(Style {
+        .style(InputFieldStyle {
             focused: ratatui::prelude::Style::default().fg(tailwind::INDIGO.c400),
             cursor: ratatui::prelude::Style::default()
                 .bg(tailwind::INDIGO.c400)
                 .fg(tailwind::WHITE),
-            ..Style::default()
+            ..InputFieldStyle::default()
         });
 
-    f.render_stateful_widget(input, f.area(), &mut app.state);
+    let layout = Layout::vertical([input.vertical(), input.vertical(), input.vertical()]);
+    let rects: [Rect; 3] = f.area().layout(&layout);
+    f.render_stateful_widget(input.clone(), rects[0], &mut app.states[0]);
+
+    let layout = Layout::horizontal([input.horizontal(), input.horizontal(), input.horizontal()]);
+    let rects2: [Rect; 3] = rects[1].layout(&layout);
+    f.render_stateful_widget(input.clone(), rects2[0], &mut app.states[1]);
+    f.render_stateful_widget(input.clone(), rects2[1], &mut app.states[2]);
+    f.render_stateful_widget(input.clone(), rects2[2], &mut app.states[3]);
+
+    let layout = Layout::horizontal([input.horizontal(), input.horizontal()]);
+    let rects3: [Rect; 2] = rects[2].layout(&layout);
+    f.render_stateful_widget(input.clone(), rects3[0], &mut app.states[1]);
+    f.render_stateful_widget(input.clone(), rects3[1], &mut app.states[2]);
 }
 
 fn main() {
-    let mut input = None;
     let mut screen: AlternateScreen<Stdout> =
         AlternateScreen::new().expect("Failed to create alternate screen.");
 
@@ -51,6 +65,8 @@ fn main() {
         // Draw app
         screen.draw(|f| ui(f, &mut app)).unwrap();
 
+        app.states[app.index].set_focus();
+
         // Check for events
         if event::poll(Duration::from_millis(50)).unwrap() {
             if let Event::Key(key) = event::read().unwrap() {
@@ -58,11 +74,19 @@ fn main() {
                     if let KeyCode::Esc = key.code {
                         break;
                     } else {
-                        let event_result: EventResult =
-                            app.state.handle_events(key.modifiers, key.code);
-                        if let EventResult::Unhandled(_, KeyCode::Enter) = event_result {
-                            input = app.state.get_input();
-                            break;
+                        let event_result =
+                            app.states[app.index].handle_events(key.modifiers, key.code);
+                        match event_result {
+                            EventResult::Unhandled(_, KeyCode::Enter) => {
+                                break;
+                            }
+                            EventResult::Transition(Transition::FocusNext) => {
+                                app.index = (app.index + 1) % 4;
+                            }
+                            EventResult::Transition(Transition::FocusPrevious) => {
+                                app.index = (app.index + 3) % 4;
+                            }
+                            _ => {}
                         }
                     }
                 }
@@ -71,5 +95,8 @@ fn main() {
     }
 
     drop(screen);
-    println!("Input: {:?}", input);
+
+    for state in app.states {
+        println!("Input: {:?}", state.get_input());
+    }
 }

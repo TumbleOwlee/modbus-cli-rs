@@ -7,9 +7,9 @@ use ratatui::{
 };
 use std::marker::PhantomData;
 
-use super::super::state::SelectionState;
-use super::super::traits::ToLabel;
+use crate::state::SelectionState;
 use crate::style::SelectionStyle;
+use crate::traits::{AsConstraint, ToLabel};
 
 pub struct Selection<ValueType>
 where
@@ -20,6 +20,21 @@ where
     style: SelectionStyle,
     margins: Margin,
     marker: PhantomData<ValueType>,
+}
+
+impl<ValueType> AsConstraint for Selection<ValueType>
+where
+    ValueType: ToLabel + Clone,
+{
+    fn horizontal(&self) -> Constraint {
+        let width = if self.bordered { 7 } else { 5 };
+        Constraint::Min(width)
+    }
+
+    fn vertical(&self) -> Constraint {
+        let height = if self.bordered { 3 } else { 1 };
+        Constraint::Min(height)
+    }
 }
 
 impl<ValueType> Selection<ValueType>
