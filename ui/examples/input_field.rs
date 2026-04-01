@@ -2,8 +2,11 @@ use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::{Frame, layout::Layout, layout::Margin, layout::Rect, style::palette::tailwind};
 use std::{io::Stdout, time::Duration};
 use ui::{
-    AlternateScreen, EventResult, Transition, state::InputFieldState, style::InputFieldStyle,
-    traits::HandleEvents, widgets::InputField,
+    AlternateScreen, EventResult, Transition,
+    state::{InputFieldState, InputFieldStateBuilder},
+    style::InputFieldStyle,
+    traits::HandleEvents,
+    widgets::InputFieldBuilder,
 };
 
 use ui::traits::AsConstraint;
@@ -16,16 +19,22 @@ struct App {
 
 impl Default for App {
     fn default() -> Self {
-        let mut states = vec![InputFieldState::default(); 4];
+        let states = vec![
+            InputFieldStateBuilder::default()
+                .focused(false)
+                .build()
+                .unwrap();
+            4
+        ];
         Self { index: 0, states }
     }
 }
 
 // Render simple input field
 fn ui(f: &mut Frame, app: &mut App) {
-    let input = InputField::new()
-        .title("Name".to_string())
-        .bordered(true)
+    let input = InputFieldBuilder::default()
+        .title(Some("Name".to_string()))
+        .border(true)
         .margins(Margin {
             vertical: 0,
             horizontal: 1,
@@ -36,7 +45,9 @@ fn ui(f: &mut Frame, app: &mut App) {
                 .bg(tailwind::INDIGO.c400)
                 .fg(tailwind::WHITE),
             ..InputFieldStyle::default()
-        });
+        })
+        .build()
+        .unwrap();
 
     let layout = Layout::vertical([input.vertical(), input.vertical(), input.vertical()]);
     let rects: [Rect; 3] = f.area().layout(&layout);
@@ -65,7 +76,7 @@ fn main() {
         // Draw app
         screen.draw(|f| ui(f, &mut app)).unwrap();
 
-        app.states[app.index].set_focus();
+        app.states[app.index].set_focused(true);
 
         // Check for events
         if event::poll(Duration::from_millis(50)).unwrap() {
@@ -97,6 +108,6 @@ fn main() {
     drop(screen);
 
     for state in app.states {
-        println!("Input: {:?}", state.get_input());
+        println!("Input: {:?}", state.input());
     }
 }

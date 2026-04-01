@@ -5,4 +5,6 @@ edition = "2024"
 
 [dependencies]
 crossterm = "0.29.0"
+derive_builder = "0.20.2"
+getset = "0.1.6"
 ratatui = { version = "0.30.0", features = ["all-widgets", "unstable-widget-ref"] }

@@ -1,7 +1,7 @@
 use ratatui::style::palette::tailwind;
 use ratatui::style::{Color, Style as UiStyle};
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct InputFieldStyle {
     pub default: UiStyle,
     pub focused: UiStyle,

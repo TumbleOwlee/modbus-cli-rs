@@ -1,73 +1,28 @@
 use crossterm::event::{KeyCode, KeyModifiers};
+use derive_builder::Builder;
+use getset::{CopyGetters, Getters, Setters};
 
 use crate::traits::HandleEvents;
 use crate::{EventResult, Transition};
 
-#[derive(Debug, Default, Clone)]
+#[derive(Builder, Debug, Default, Clone, Getters, Setters, CopyGetters)]
+#[getset(set = "pub")]
 pub struct InputFieldState {
+    #[getset(get = "pub")]
+    #[builder(setter(skip))]
     input: String,
+    #[getset(get_copy = "pub")]
+    #[builder(setter(skip))]
     cursor: usize,
+    #[getset(get_copy = "pub")]
+    #[builder(default = "true")]
     focused: bool,
+    #[getset(get_copy = "pub")]
+    #[builder(default = "false")]
     disabled: bool,
-}
-
-impl InputFieldState {
-    pub fn set_input(&mut self, value: &str) {
-        let len = value.len();
-        self.input = value.to_string();
-        self.cursor = std::cmp::min(self.cursor, len);
-    }
-
-    pub fn clear(&mut self) {
-        self.input.clear();
-        self.cursor = 0;
-    }
-
-    pub fn get_input(&self) -> Option<String> {
-        if self.input.is_empty() {
-            None
-        } else {
-            Some(self.input.clone())
-        }
-    }
-
-    pub fn set_cursor(&mut self, cursor: usize) {
-        let len = self.input.len();
-        self.cursor = std::cmp::min(cursor, len);
-    }
-
-    pub fn get_cursor(&self) -> usize {
-        self.cursor
-    }
-
-    pub fn set_focus(&mut self) {
-        if self.disabled {
-            panic!("Tried to select disabled input field.");
-        }
-        self.focused = true;
-    }
-
-    pub fn in_focus(&self) -> bool {
-        self.focused
-    }
-
-    pub fn focus(self) -> Self {
-        Self {
-            focused: true,
-            ..self
-        }
-    }
-
-    pub fn is_disabled(&self) -> bool {
-        self.disabled
-    }
-
-    pub fn disable(self) -> Self {
-        Self {
-            disabled: true,
-            ..self
-        }
-    }
+    #[getset(get = "pub")]
+    #[builder(default = "None")]
+    placeholder: Option<String>,
 }
 
 impl HandleEvents for InputFieldState {

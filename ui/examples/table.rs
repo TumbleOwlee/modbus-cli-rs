@@ -1,16 +1,13 @@
-use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use derive_builder::Builder;
-use ratatui::{
-    Frame, layout::Constraint, layout::Layout, layout::Margin, style::palette::tailwind,
-};
-use std::{io::Stdout, time::Duration};
 
+use crossterm::event::{self, Event, KeyCode, KeyEventKind};
+use ratatui::Frame;
+use std::{io::Stdout, time::Duration};
 use ui::{
     AlternateScreen, EventResult,
-    state::{SelectionState, SelectionStateBuilder},
-    style::SelectionStyle,
-    traits::{HandleEvents, ToLabel},
-    widgets::SelectionBuilder,
+    state::{TableState, TableStateBuilder, ToRow},
+    traits::HandleEvents,
+    widgets::{Table, TableBuilder},
 };
 
 #[derive(Clone, Debug)]
@@ -25,49 +22,35 @@ impl Item {
     }
 }
 
-impl ToLabel for Item {
-    fn to_label(&self) -> String {
-        self.name.clone()
+impl ToRow<2> for Item {
+    fn to_row(&self) -> [String; 2] {
+        [self.name.clone(), format!("{}", self.value)]
     }
 }
 
 // Simple app consisting of single input field
 #[derive(Builder, Debug)]
 struct App {
-    pub state: SelectionState<Item>,
+    pub state: TableState<Item, 2>,
 }
 
 // Render simple input field
 fn ui(f: &mut Frame, app: &mut App) {
-    let layout = Layout::vertical([Constraint::Length(4)]);
-    let rects = f.area().layout_vec(&layout);
-    let layout = Layout::horizontal([Constraint::Length(30)]);
-    let rects = rects[0].layout_vec(&layout);
-    let selection = SelectionBuilder::default()
-        .title(Some("Mode".to_string()))
-        .bordered(true)
-        .margins(Margin {
-            vertical: 0,
-            horizontal: 1,
-        })
-        .style(SelectionStyle {
-            focused: ratatui::prelude::Style::default()
-                .bg(tailwind::INDIGO.c400)
-                .fg(tailwind::BLACK),
-            border: ratatui::prelude::Style::default().fg(tailwind::INDIGO.c400),
-            ..SelectionStyle::default()
-        })
+    let table: Table<Item, 2> = TableBuilder::default()
+        .header(["Name".to_string(), "Value".to_string()])
         .build()
         .unwrap();
-
-    f.render_stateful_widget(selection, rects[0], &mut app.state);
+    //f.render_stateful_widget(table, f.area(), &mut app.state);
 }
 
 fn main() {
+    let mut screen: AlternateScreen<Stdout> =
+        AlternateScreen::new().expect("Failed to create alternate screen.");
+
     // Create app state
     let mut app = AppBuilder::default()
         .state(
-            SelectionStateBuilder::default()
+            TableStateBuilder::default()
                 .values(vec![
                     Item::new("Value 0".to_string(), 0),
                     Item::new("Value 1".to_string(), 1),
@@ -82,9 +65,6 @@ fn main() {
         )
         .build()
         .unwrap();
-
-    let mut screen: AlternateScreen<Stdout> =
-        AlternateScreen::new().expect("Failed to create alternate screen.");
 
     loop {
         // Draw app

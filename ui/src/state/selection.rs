@@ -1,44 +1,31 @@
-use super::super::traits::ToLabel;
+use crossterm::event::{KeyCode, KeyModifiers};
+use derive_builder::Builder;
+use getset::{CopyGetters, Getters, Setters};
+
 use crate::EventResult;
 use crate::traits::HandleEvents;
-use crossterm::event::{KeyCode, KeyModifiers};
+use crate::traits::ToLabel;
 
-#[derive(Debug)]
+#[derive(Builder, Debug, Clone, Getters, Setters, CopyGetters)]
+#[getset(set = "pub")]
 pub struct SelectionState<ValueType>
 where
     ValueType: ToLabel + Clone,
 {
+    #[getset(get_copy = "pub")]
+    #[builder(default = "true")]
     focused: bool,
+    #[getset(get_copy = "pub")]
+    #[builder(setter(skip))]
     selection: usize,
+    #[getset(get = "pub")]
     values: Vec<ValueType>,
-}
-
-impl<ValueType> Default for SelectionState<ValueType>
-where
-    ValueType: ToLabel + Clone,
-{
-    fn default() -> Self {
-        Self {
-            focused: false,
-            selection: 0,
-            values: Vec::new(),
-        }
-    }
 }
 
 impl<ValueType> SelectionState<ValueType>
 where
     ValueType: ToLabel + Clone,
 {
-    pub fn set_values(&mut self, values: Vec<ValueType>) {
-        self.selection = 0;
-        self.values = values;
-    }
-
-    pub fn get_values(&self) -> &Vec<ValueType> {
-        &self.values
-    }
-
     pub fn next_row(&mut self) {
         self.selection = if self.selection >= self.values.len() - 1 {
             0
@@ -53,41 +40,6 @@ where
         } else {
             self.selection - 1
         };
-    }
-
-    pub fn get_label(&self) -> Option<String> {
-        if self.values.len() > self.selection {
-            self.values.get(self.selection).map(ToLabel::to_label)
-        } else {
-            self.values.first().map(ToLabel::to_label)
-        }
-    }
-
-    pub fn get_selection(&self) -> Option<ValueType> {
-        if self.values.len() > self.selection {
-            self.values.get(self.selection).cloned()
-        } else {
-            self.values.first().cloned()
-        }
-    }
-
-    pub fn get_selection_index(&self) -> usize {
-        self.selection
-    }
-
-    pub fn set_focus(&mut self, focus: bool) {
-        self.focused = focus;
-    }
-
-    pub fn in_focus(&self) -> bool {
-        self.focused
-    }
-
-    pub fn focus(self) -> Self {
-        Self {
-            focused: true,
-            ..self
-        }
     }
 }
 

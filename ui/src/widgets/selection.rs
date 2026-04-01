@@ -1,4 +1,6 @@
-use ratatui::style::palette::tailwind;
+use derive_builder::Builder;
+use getset::{CopyGetters, Getters, Setters, WithSetters};
+
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Layout, Margin, Rect},
@@ -7,18 +9,30 @@ use ratatui::{
 };
 use std::marker::PhantomData;
 
-use crate::state::SelectionState;
+use crate::state::{SelectionState, SelectionStateBuilder};
 use crate::style::SelectionStyle;
 use crate::traits::{AsConstraint, ToLabel};
 
+#[derive(Builder, Debug, Clone, Getters, Setters, CopyGetters, WithSetters)]
+#[getset(set = "pub")]
 pub struct Selection<ValueType>
 where
     ValueType: ToLabel + Clone,
 {
+    #[getset(get = "pub")]
+    #[builder(default = "None")]
     title: Option<String>,
+    #[getset(get_copy = "pub")]
+    #[builder(default = "false")]
     bordered: bool,
+    #[getset(get = "pub")]
+    #[builder(default = "SelectionStyle::default()")]
     style: SelectionStyle,
+    #[getset(get = "pub")]
+    #[builder(default = "Margin::default()")]
     margins: Margin,
+    #[builder(setter(skip))]
+    #[builder(default = "PhantomData")]
     marker: PhantomData<ValueType>,
 }
 
@@ -37,47 +51,6 @@ where
     }
 }
 
-impl<ValueType> Selection<ValueType>
-where
-    ValueType: ToLabel + Clone,
-{
-    pub fn new() -> Self {
-        Self {
-            bordered: false,
-            style: SelectionStyle::default(),
-            title: None,
-            margins: Margin {
-                vertical: 0,
-                horizontal: 0,
-            },
-            marker: PhantomData,
-        }
-    }
-
-    pub fn title(self, title: String) -> Self {
-        Self {
-            title: Some(title),
-            ..self
-        }
-    }
-
-    pub fn bordered(self, bordered: bool) -> Self {
-        Self { bordered, ..self }
-    }
-
-    pub fn style(self, style: SelectionStyle) -> Self {
-        Self { style, ..self }
-    }
-
-    pub fn margins(self, margins: Margin) -> Self {
-        Self { margins, ..self }
-    }
-
-    pub fn set_style(&mut self, style: SelectionStyle) {
-        self.style = style;
-    }
-}
-
 impl<ValueType> Widget for Selection<ValueType>
 where
     ValueType: ToLabel + Clone,
@@ -92,7 +65,7 @@ where
     ValueType: ToLabel + Clone,
 {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let mut state = SelectionState::default();
+        let mut state = SelectionStateBuilder::default().build().unwrap();
         StatefulWidget::render(self, area, buf, &mut state);
     }
 }
@@ -114,7 +87,7 @@ impl<ValueType: ToLabel + Clone> StatefulWidget for &Selection<ValueType> {
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         let border_lines = if self.bordered { 2 } else { 0 };
         let max_lines = area.height as i32 - border_lines;
-        let lines = state.get_values().len();
+        let lines = state.values().len();
         let lines = std::cmp::min(lines as i32, max_lines);
         let height = if self.bordered { lines + 2 } else { lines };
 
@@ -134,7 +107,7 @@ impl<ValueType: ToLabel + Clone> StatefulWidget for &Selection<ValueType> {
 
         // Create block if border is required
         if self.bordered {
-            let style = if state.in_focus() {
+            let style = if state.focused() {
                 self.style.border
             } else {
                 self.style.default
@@ -152,7 +125,7 @@ impl<ValueType: ToLabel + Clone> StatefulWidget for &Selection<ValueType> {
         }
 
         let values = state
-            .get_values()
+            .values()
             .iter()
             .map(ToLabel::to_label)
             .collect::<Vec<_>>();
@@ -160,12 +133,12 @@ impl<ValueType: ToLabel + Clone> StatefulWidget for &Selection<ValueType> {
         let constraints = vec![Constraint::Length(1); lines as usize];
         let area = Layout::vertical(constraints).split(area);
 
-        let selection = state.get_selection_index();
+        let selection = state.selection();
         let offset = lines / 2;
 
         let mut start = std::cmp::max(0, selection as i32 - offset as i32);
-        let end = std::cmp::min(state.get_values().len() as i32, start + max_lines as i32);
-        if end == state.get_values().len() as i32 {
+        let end = std::cmp::min(state.values().len() as i32, start + max_lines as i32);
+        if end == state.values().len() as i32 {
             start = std::cmp::max(end - max_lines as i32, 0);
         }
 
@@ -176,7 +149,7 @@ impl<ValueType: ToLabel + Clone> StatefulWidget for &Selection<ValueType> {
             .enumerate()
         {
             let t = if i == selection {
-                if state.in_focus() {
+                if state.focused() {
                     Text::from(format!(" {}", v)).style(self.style.focused.clone())
                 } else {
                     Text::from(format!(" {}", v)).style(self.style.default.clone())

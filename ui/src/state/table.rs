@@ -1,52 +1,39 @@
+use crossterm::event::{KeyCode, KeyModifiers};
+use derive_builder::Builder;
+use getset::{CopyGetters, Getters, Setters};
+use ratatui::widgets::{ScrollbarState as UiScrollbarState, TableState as UiTableState};
+
 use crate::EventResult;
 use crate::traits::HandleEvents;
-use crossterm::event::{KeyCode, KeyModifiers};
-use ratatui::widgets::{ScrollbarState as UiScrollbarState, TableState as UiTableState};
 
 pub trait ToRow<const N: usize> {
     fn to_row(&self) -> [String; N];
 }
 
-#[derive(Debug)]
+#[derive(Builder, Debug, Clone, Getters, Setters, CopyGetters)]
+#[getset(set = "pub")]
 pub struct TableState<ValueType, const N: usize>
 where
     ValueType: ToRow<N> + Clone,
 {
+    #[getset(get_copy = "pub")]
+    #[builder(default = "true")]
     focused: bool,
+    #[getset(get_copy = "pub")]
+    #[builder(setter(skip))]
     selection: usize,
+    #[getset(get = "pub")]
     table_state: UiTableState,
+    #[getset(get = "pub")]
     scroll_state: UiScrollbarState,
+    #[getset(get = "pub")]
     values: Vec<ValueType>,
-}
-
-impl<ValueType, const N: usize> Default for TableState<ValueType, N>
-where
-    ValueType: ToRow<N> + Clone,
-{
-    fn default() -> Self {
-        Self {
-            focused: false,
-            selection: 0,
-            table_state: UiTableState::default(),
-            scroll_state: UiScrollbarState::default(),
-            values: Vec::new(),
-        }
-    }
 }
 
 impl<ValueType, const N: usize> TableState<ValueType, N>
 where
     ValueType: ToRow<N> + Clone,
 {
-    pub fn set_values(&mut self, values: Vec<ValueType>) {
-        self.selection = 0;
-        self.values = values;
-    }
-
-    pub fn get_values(&self) -> &Vec<ValueType> {
-        &self.values
-    }
-
     pub fn next_row(&mut self) {
         self.selection = if self.selection >= self.values.len() - 1 {
             0
@@ -61,33 +48,6 @@ where
         } else {
             self.selection - 1
         };
-    }
-
-    pub fn get_selection(&self) -> Option<ValueType> {
-        if self.values.len() > self.selection {
-            self.values.get(self.selection).cloned()
-        } else {
-            self.values.first().cloned()
-        }
-    }
-
-    pub fn get_selection_index(&self) -> usize {
-        self.selection
-    }
-
-    pub fn set_focus(&mut self, focus: bool) {
-        self.focused = focus;
-    }
-
-    pub fn in_focus(&self) -> bool {
-        self.focused
-    }
-
-    pub fn focus(self) -> Self {
-        Self {
-            focused: true,
-            ..self
-        }
     }
 }
 

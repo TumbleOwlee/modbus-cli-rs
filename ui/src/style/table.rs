@@ -2,16 +2,16 @@ use ratatui::style::palette::tailwind;
 use ratatui::style::{Color, Style as UiStyle};
 
 #[derive(Debug, Clone)]
-pub struct SelectionStyle {
+pub struct TableStyle {
     pub focused: UiStyle,
     pub border: UiStyle,
     pub default: UiStyle,
     pub rows: [UiStyle; 2],
 }
 
-impl Default for SelectionStyle {
+impl Default for TableStyle {
     fn default() -> Self {
-        SelectionStyle {
+        TableStyle {
             default: UiStyle::default().fg(tailwind::WHITE).bg(Color::default()),
             focused: UiStyle::default()
                 .fg(tailwind::INDIGO.c400)
