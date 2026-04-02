@@ -27,10 +27,6 @@ pub struct InputFieldState {
 
 impl HandleEvents for InputFieldState {
     fn handle_events(&mut self, modifiers: KeyModifiers, code: KeyCode) -> EventResult {
-        if self.disabled {
-            return EventResult::Consumed;
-        }
-
         match (modifiers, code) {
             (_, KeyCode::Home) => {
                 self.cursor = 0;
@@ -41,51 +37,57 @@ impl HandleEvents for InputFieldState {
                 EventResult::Consumed
             }
             (_, KeyCode::Char(c)) => {
-                if self.input.is_empty() || self.input.chars().count() == self.cursor {
-                    self.input.push(c);
-                } else {
-                    self.input = self.input.chars().enumerate().fold(
-                        String::with_capacity(self.input.capacity() + 1),
-                        |mut s, (i, v)| {
-                            if i == self.cursor {
-                                s.push(c);
-                            }
-                            s.push(v);
-                            s
-                        },
-                    );
-                }
-                self.cursor += 1;
-                EventResult::Consumed
-            }
-            (_, KeyCode::Backspace) => {
-                if self.cursor > 0 {
-                    if self.input.chars().count() >= self.cursor {
+                if !self.disabled {
+                    if self.input.is_empty() || self.input.chars().count() == self.cursor {
+                        self.input.push(c);
+                    } else {
                         self.input = self.input.chars().enumerate().fold(
                             String::with_capacity(self.input.capacity() + 1),
                             |mut s, (i, v)| {
-                                if i != self.cursor - 1 {
+                                if i == self.cursor {
+                                    s.push(c);
+                                }
+                                s.push(v);
+                                s
+                            },
+                        );
+                    }
+                    self.cursor += 1;
+                }
+                EventResult::Consumed
+            }
+            (_, KeyCode::Backspace) => {
+                if !self.disabled {
+                    if self.cursor > 0 {
+                        if self.input.chars().count() >= self.cursor {
+                            self.input = self.input.chars().enumerate().fold(
+                                String::with_capacity(self.input.capacity() + 1),
+                                |mut s, (i, v)| {
+                                    if i != self.cursor - 1 {
+                                        s.push(v);
+                                    }
+                                    s
+                                },
+                            );
+                        }
+                        self.cursor -= 1;
+                    }
+                }
+                EventResult::Consumed
+            }
+            (_, KeyCode::Delete) => {
+                if !self.disabled {
+                    if self.input.chars().count() > self.cursor {
+                        self.input = self.input.chars().enumerate().fold(
+                            String::with_capacity(self.input.capacity() + 1),
+                            |mut s, (i, v)| {
+                                if i != self.cursor {
                                     s.push(v);
                                 }
                                 s
                             },
                         );
                     }
-                    self.cursor -= 1;
-                }
-                EventResult::Consumed
-            }
-            (_, KeyCode::Delete) => {
-                if self.input.chars().count() > self.cursor {
-                    self.input = self.input.chars().enumerate().fold(
-                        String::with_capacity(self.input.capacity() + 1),
-                        |mut s, (i, v)| {
-                            if i != self.cursor {
-                                s.push(v);
-                            }
-                            s
-                        },
-                    );
                 }
                 EventResult::Consumed
             }

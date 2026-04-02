@@ -87,6 +87,7 @@ struct App {
     pub street: Element<InputFieldState, InputField<String>>,
     pub code: Element<InputFieldState, InputField<Code>>,
     pub city: Element<InputFieldState, InputField<String>>,
+    pub error: Element<InputFieldState, InputField<String>>,
 }
 
 #[derive(Debug)]
@@ -240,15 +241,16 @@ fn ui(f: &mut Frame, app: &mut App) {
             .areas(f.area());
     let vertical_layout: [Rect; 3] = Layout::vertical([
         Constraint::Min(1),
-        Constraint::Length(12),
+        Constraint::Length(15),
         Constraint::Min(1),
     ])
     .areas(horizontal_layout[1]);
-    let vertical_layout: [Rect; 4] = Layout::vertical([
+    let vertical_layout: [Rect; 5] = Layout::vertical([
         app.name.widget.vertical(),
         app.day.widget.vertical(),
         app.street.widget.vertical(),
         app.code.widget.vertical(),
+        app.error.widget.vertical(),
     ])
     .areas(vertical_layout[1]);
 
@@ -292,6 +294,10 @@ fn ui(f: &mut Frame, app: &mut App) {
 
     f.render_stateful_widget(&app.code.widget, horizontal_layout[0], &mut app.code.state);
     f.render_stateful_widget(&app.city.widget, horizontal_layout[1], &mut app.city.state);
+
+    if !app.error.state.input().is_empty() {
+        f.render_stateful_widget(&app.error.widget, vertical_layout[4], &mut app.error.state);
+    }
 }
 
 fn main() {
@@ -309,11 +315,18 @@ fn main() {
             .fg(tailwind::WHITE),
         ..InputFieldStyle::default()
     };
+    let error_style = InputFieldStyle {
+        focused: ratatui::prelude::Style::default().fg(tailwind::RED.c500),
+        cursor: ratatui::prelude::Style::default(),
+        default: ratatui::prelude::Style::default().fg(tailwind::RED.c500),
+        ..InputFieldStyle::default()
+    };
     // Create app state
     let mut app = AppBuilder::default()
         .name(Element {
             state: InputFieldStateBuilder::default()
                 .focused(true)
+                .disabled(false)
                 .build()
                 .unwrap(),
             widget: InputFieldBuilder::default()
@@ -331,6 +344,7 @@ fn main() {
         .lastname(Element {
             state: InputFieldStateBuilder::default()
                 .focused(false)
+                .disabled(false)
                 .build()
                 .unwrap(),
             widget: InputFieldBuilder::default()
@@ -348,6 +362,7 @@ fn main() {
         .day(Element {
             state: InputFieldStateBuilder::default()
                 .focused(false)
+                .disabled(false)
                 .build()
                 .unwrap(),
             widget: InputFieldBuilder::default()
@@ -395,6 +410,7 @@ fn main() {
         .year(Element {
             state: InputFieldStateBuilder::default()
                 .focused(false)
+                .disabled(false)
                 .build()
                 .unwrap(),
             widget: InputFieldBuilder::default()
@@ -412,6 +428,7 @@ fn main() {
         .street(Element {
             state: InputFieldStateBuilder::default()
                 .focused(false)
+                .disabled(false)
                 .build()
                 .unwrap(),
             widget: InputFieldBuilder::default()
@@ -429,6 +446,7 @@ fn main() {
         .code(Element {
             state: InputFieldStateBuilder::default()
                 .focused(false)
+                .disabled(false)
                 .build()
                 .unwrap(),
             widget: InputFieldBuilder::default()
@@ -446,6 +464,7 @@ fn main() {
         .city(Element {
             state: InputFieldStateBuilder::default()
                 .focused(false)
+                .disabled(false)
                 .build()
                 .unwrap(),
             widget: InputFieldBuilder::default()
@@ -460,6 +479,24 @@ fn main() {
                 .build()
                 .unwrap(),
         })
+        .error(Element {
+            state: InputFieldStateBuilder::default()
+                .focused(true)
+                .disabled(false)
+                .build()
+                .unwrap(),
+            widget: InputFieldBuilder::default()
+                .border(false)
+                .title(None)
+                .margins(Margin {
+                    vertical: 0,
+                    horizontal: 1,
+                })
+                .style(error_style.clone())
+                .min_width(5)
+                .build()
+                .unwrap(),
+        })
         .build()
         .unwrap();
 
@@ -469,6 +506,16 @@ fn main() {
     loop {
         // Draw app
         screen.draw(|f| ui(f, &mut app)).unwrap();
+
+        // Show error
+        match app.result() {
+            Ok(_) => {
+                app.error.state.set_input("".into());
+            }
+            Err(e) => {
+                app.error.state.set_input(format!("ERROR: {}", e));
+            }
+        }
 
         // Check for events
         if event::poll(Duration::from_millis(50)).unwrap() {
