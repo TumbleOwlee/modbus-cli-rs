@@ -2,8 +2,8 @@ use crossterm::event::{KeyCode, KeyModifiers};
 use derive_builder::Builder;
 use getset::{CopyGetters, Getters, Setters};
 
+use crate::EventResult;
 use crate::traits::HandleEvents;
-use crate::{EventResult, Transition};
 
 #[derive(Builder, Debug, Default, Clone, Getters, Setters, CopyGetters)]
 #[getset(set = "pub")]
@@ -37,26 +37,55 @@ impl HandleEvents for InputFieldState {
                 EventResult::Consumed
             }
             (_, KeyCode::End) => {
-                self.cursor = self.input.len();
+                self.cursor = self.input.chars().count();
                 EventResult::Consumed
             }
             (_, KeyCode::Char(c)) => {
-                self.input.insert(self.cursor, c);
+                if self.input.is_empty() || self.input.chars().count() == self.cursor {
+                    self.input.push(c);
+                } else {
+                    self.input = self.input.chars().enumerate().fold(
+                        String::with_capacity(self.input.capacity() + 1),
+                        |mut s, (i, v)| {
+                            if i == self.cursor {
+                                s.push(c);
+                            }
+                            s.push(v);
+                            s
+                        },
+                    );
+                }
                 self.cursor += 1;
                 EventResult::Consumed
             }
             (_, KeyCode::Backspace) => {
                 if self.cursor > 0 {
-                    if self.input.len() >= self.cursor {
-                        self.input.remove(self.cursor - 1);
+                    if self.input.chars().count() >= self.cursor {
+                        self.input = self.input.chars().enumerate().fold(
+                            String::with_capacity(self.input.capacity() + 1),
+                            |mut s, (i, v)| {
+                                if i != self.cursor - 1 {
+                                    s.push(v);
+                                }
+                                s
+                            },
+                        );
                     }
                     self.cursor -= 1;
                 }
                 EventResult::Consumed
             }
             (_, KeyCode::Delete) => {
-                if self.input.len() > self.cursor {
-                    self.input.remove(self.cursor);
+                if self.input.chars().count() > self.cursor {
+                    self.input = self.input.chars().enumerate().fold(
+                        String::with_capacity(self.input.capacity() + 1),
+                        |mut s, (i, v)| {
+                            if i != self.cursor {
+                                s.push(v);
+                            }
+                            s
+                        },
+                    );
                 }
                 EventResult::Consumed
             }
@@ -67,16 +96,8 @@ impl HandleEvents for InputFieldState {
                 EventResult::Consumed
             }
             (_, KeyCode::Right) => {
-                self.cursor = std::cmp::min(self.cursor + 1, self.input.len());
+                self.cursor = std::cmp::min(self.cursor + 1, self.input.chars().count());
                 EventResult::Consumed
-            }
-            (KeyModifiers::SHIFT, KeyCode::Tab) => {
-                self.focused = false;
-                EventResult::Transition(Transition::FocusPrevious)
-            }
-            (_, KeyCode::Tab) => {
-                self.focused = false;
-                EventResult::Transition(Transition::FocusNext)
             }
             (m, c) => EventResult::Unhandled(m, c),
         }

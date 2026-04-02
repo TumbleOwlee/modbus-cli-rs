@@ -1,12 +1,12 @@
-use crossterm::event::{self, Event, KeyCode, KeyEventKind};
+use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use ratatui::{Frame, layout::Layout, layout::Margin, layout::Rect, style::palette::tailwind};
 use std::{io::Stdout, time::Duration};
 use ui::{
-    AlternateScreen, EventResult, Transition,
+    AlternateScreen, EventResult,
     state::{InputFieldState, InputFieldStateBuilder},
     style::InputFieldStyle,
     traits::HandleEvents,
-    widgets::InputFieldBuilder,
+    widgets::{InputField, InputFieldBuilder},
 };
 
 use ui::traits::AsConstraint;
@@ -32,7 +32,7 @@ impl Default for App {
 
 // Render simple input field
 fn ui(f: &mut Frame, app: &mut App) {
-    let input = InputFieldBuilder::default()
+    let input: InputField<String> = InputFieldBuilder::default()
         .title(Some("Name".to_string()))
         .border(true)
         .margins(Margin {
@@ -91,11 +91,11 @@ fn main() {
                             EventResult::Unhandled(_, KeyCode::Enter) => {
                                 break;
                             }
-                            EventResult::Transition(Transition::FocusNext) => {
-                                app.index = (app.index + 1) % 4;
-                            }
-                            EventResult::Transition(Transition::FocusPrevious) => {
+                            EventResult::Unhandled(KeyModifiers::SHIFT, KeyCode::Tab) => {
                                 app.index = (app.index + 3) % 4;
+                            }
+                            EventResult::Unhandled(_, KeyCode::Tab) => {
+                                app.index = (app.index + 1) % 4;
                             }
                             _ => {}
                         }

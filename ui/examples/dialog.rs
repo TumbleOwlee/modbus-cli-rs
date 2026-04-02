@@ -1,0 +1,476 @@
+use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
+use derive_builder::Builder;
+use ratatui::{
+    Frame,
+    layout::{Constraint, Layout, Margin, Rect},
+    style::palette::tailwind,
+};
+use std::{fmt::Debug, io::Stdout, time::Duration};
+
+use ui::{
+    AlternateScreen, EventResult,
+    state::{InputFieldState, InputFieldStateBuilder, SelectionState, SelectionStateBuilder},
+    style::{InputFieldStyle, SelectionStyle},
+    traits::{AsConstraint, HandleEvents},
+    widgets::{InputField, InputFieldBuilder, Selection, SelectionBuilder, Validate},
+};
+
+#[derive(Debug, Clone)]
+struct Element<State, Widget>
+where
+    State: Debug + Clone,
+    Widget: Clone + Debug,
+{
+    state: State,
+    widget: Widget,
+}
+
+#[derive(Debug, Clone)]
+struct Day {}
+
+impl Validate for Day {
+    fn validate(input: &str) -> Result<(), String> {
+        let day = input.parse::<usize>();
+        if let Ok(day) = day {
+            if day < 32 {
+                Ok(())
+            } else {
+                Err("Invalid day input".into())
+            }
+        } else {
+            Err("Input is not numerical".into())
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct Year {}
+
+impl Validate for Year {
+    fn validate(input: &str) -> Result<(), String> {
+        let year = input.parse::<usize>();
+        if year.is_ok() {
+            Ok(())
+        } else {
+            Err("Input is not numerical".into())
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct Code {}
+
+impl Validate for Code {
+    fn validate(input: &str) -> Result<(), String> {
+        let code = input.parse::<usize>();
+        if let Ok(code) = code {
+            if code >= 10000 && code <= 99999 {
+                Ok(())
+            } else {
+                Err("Invalid postal code".into())
+            }
+        } else {
+            Err("Input is not numerical".into())
+        }
+    }
+}
+
+#[derive(Builder, Debug)]
+struct App {
+    #[builder(setter(skip))]
+    pub focus: usize,
+    pub name: Element<InputFieldState, InputField<String>>,
+    pub lastname: Element<InputFieldState, InputField<String>>,
+    pub day: Element<InputFieldState, InputField<Day>>,
+    pub month: Element<SelectionState<String>, Selection<String>>,
+    pub year: Element<InputFieldState, InputField<Year>>,
+    pub street: Element<InputFieldState, InputField<String>>,
+    pub code: Element<InputFieldState, InputField<Code>>,
+    pub city: Element<InputFieldState, InputField<String>>,
+}
+
+impl HandleEvents for App {
+    fn handle_events(&mut self, modifiers: KeyModifiers, code: KeyCode) -> EventResult {
+        match self.focus {
+            0 => self.name.state.handle_events(modifiers, code),
+            1 => self.lastname.state.handle_events(modifiers, code),
+            2 => self.day.state.handle_events(modifiers, code),
+            3 => self.month.state.handle_events(modifiers, code),
+            4 => self.year.state.handle_events(modifiers, code),
+            5 => self.street.state.handle_events(modifiers, code),
+            6 => self.code.state.handle_events(modifiers, code),
+            7 => self.city.state.handle_events(modifiers, code),
+            _ => {
+                unreachable!("Invalid case");
+            }
+        }
+    }
+}
+
+impl App {
+    fn focus_previous(&mut self) {
+        match self.focus {
+            0 => {
+                self.name.state.set_focused(false);
+                self.city.state.set_focused(true);
+            }
+            1 => {
+                self.lastname.state.set_focused(false);
+                self.name.state.set_focused(true);
+            }
+            2 => {
+                self.day.state.set_focused(false);
+                self.lastname.state.set_focused(true);
+            }
+            3 => {
+                self.month.state.set_focused(false);
+                self.day.state.set_focused(true);
+            }
+            4 => {
+                self.year.state.set_focused(false);
+                self.month.state.set_focused(true);
+            }
+            5 => {
+                self.street.state.set_focused(false);
+                self.year.state.set_focused(true);
+            }
+            6 => {
+                self.code.state.set_focused(false);
+                self.street.state.set_focused(true);
+            }
+            7 => {
+                self.city.state.set_focused(false);
+                self.code.state.set_focused(true);
+            }
+            _ => {
+                unreachable!("Invalid case");
+            }
+        };
+
+        self.focus = (self.focus + 7) % 8;
+    }
+
+    fn focus_next(&mut self) {
+        match self.focus {
+            0 => {
+                self.name.state.set_focused(false);
+                self.lastname.state.set_focused(true);
+            }
+            1 => {
+                self.lastname.state.set_focused(false);
+                self.day.state.set_focused(true);
+            }
+            2 => {
+                self.day.state.set_focused(false);
+                self.month.state.set_focused(true);
+            }
+            3 => {
+                self.month.state.set_focused(false);
+                self.year.state.set_focused(true);
+            }
+            4 => {
+                self.year.state.set_focused(false);
+                self.street.state.set_focused(true);
+            }
+            5 => {
+                self.street.state.set_focused(false);
+                self.code.state.set_focused(true);
+            }
+            6 => {
+                self.code.state.set_focused(false);
+                self.city.state.set_focused(true);
+            }
+            7 => {
+                self.city.state.set_focused(false);
+                self.name.state.set_focused(true);
+            }
+            _ => {
+                unreachable!("Invalid case");
+            }
+        };
+
+        self.focus = (self.focus + 1) % 8;
+    }
+}
+
+// Render simple input field
+fn ui(f: &mut Frame, app: &mut App) {
+    let horizontal_layout: [Rect; 3] =
+        Layout::horizontal([Constraint::Min(1), Constraint::Max(70), Constraint::Min(1)])
+            .areas(f.area());
+    let vertical_layout: [Rect; 3] = Layout::vertical([
+        Constraint::Min(1),
+        Constraint::Length(12),
+        Constraint::Min(1),
+    ])
+    .areas(horizontal_layout[1]);
+    let vertical_layout: [Rect; 4] = Layout::vertical([
+        app.name.widget.vertical(),
+        app.day.widget.vertical(),
+        app.street.widget.vertical(),
+        app.code.widget.vertical(),
+    ])
+    .areas(vertical_layout[1]);
+
+    let horizontal_layout: [Rect; 2] = Layout::horizontal([
+        app.name.widget.horizontal(),
+        app.lastname.widget.horizontal(),
+    ])
+    .areas(vertical_layout[0]);
+
+    f.render_stateful_widget(&app.name.widget, horizontal_layout[0], &mut app.name.state);
+    f.render_stateful_widget(
+        &app.lastname.widget,
+        horizontal_layout[1],
+        &mut app.lastname.state,
+    );
+
+    let horizontal_layout: [Rect; 3] = Layout::horizontal([
+        app.day.widget.horizontal(),
+        app.month.widget.horizontal(),
+        app.year.widget.horizontal(),
+    ])
+    .areas(vertical_layout[1]);
+
+    f.render_stateful_widget(&app.day.widget, horizontal_layout[0], &mut app.day.state);
+    f.render_stateful_widget(
+        &app.month.widget,
+        horizontal_layout[1],
+        &mut app.month.state,
+    );
+    f.render_stateful_widget(&app.year.widget, horizontal_layout[2], &mut app.year.state);
+
+    f.render_stateful_widget(
+        &app.street.widget,
+        vertical_layout[2],
+        &mut app.street.state,
+    );
+
+    let horizontal_layout: [Rect; 2] =
+        Layout::horizontal([app.code.widget.horizontal(), app.city.widget.horizontal()])
+            .areas(vertical_layout[3]);
+
+    f.render_stateful_widget(&app.code.widget, horizontal_layout[0], &mut app.code.state);
+    f.render_stateful_widget(&app.city.widget, horizontal_layout[1], &mut app.city.state);
+}
+
+fn main() {
+    let selection_style = SelectionStyle {
+        focused: ratatui::prelude::Style::default()
+            .bg(tailwind::INDIGO.c400)
+            .fg(tailwind::BLACK),
+        border: ratatui::prelude::Style::default().fg(tailwind::INDIGO.c400),
+        ..SelectionStyle::default()
+    };
+    let input_style = InputFieldStyle {
+        focused: ratatui::prelude::Style::default().fg(tailwind::INDIGO.c400),
+        cursor: ratatui::prelude::Style::default()
+            .bg(tailwind::INDIGO.c400)
+            .fg(tailwind::WHITE),
+        ..InputFieldStyle::default()
+    };
+    // Create app state
+    let mut app = AppBuilder::default()
+        .name(Element {
+            state: InputFieldStateBuilder::default()
+                .focused(true)
+                .build()
+                .unwrap(),
+            widget: InputFieldBuilder::default()
+                .border(true)
+                .title(Some("Name".to_string()))
+                .margins(Margin {
+                    vertical: 0,
+                    horizontal: 1,
+                })
+                .style(input_style.clone())
+                .min_width(4)
+                .build()
+                .unwrap(),
+        })
+        .lastname(Element {
+            state: InputFieldStateBuilder::default()
+                .focused(false)
+                .build()
+                .unwrap(),
+            widget: InputFieldBuilder::default()
+                .border(true)
+                .title(Some("Lastname".to_string()))
+                .margins(Margin {
+                    vertical: 0,
+                    horizontal: 1,
+                })
+                .style(input_style.clone())
+                .min_width(4)
+                .build()
+                .unwrap(),
+        })
+        .day(Element {
+            state: InputFieldStateBuilder::default()
+                .focused(false)
+                .build()
+                .unwrap(),
+            widget: InputFieldBuilder::default()
+                .border(true)
+                .title(Some("Day".to_string()))
+                .margins(Margin {
+                    vertical: 0,
+                    horizontal: 1,
+                })
+                .style(input_style.clone())
+                .min_width(2)
+                .build()
+                .unwrap(),
+        })
+        .month(Element {
+            state: SelectionStateBuilder::default()
+                .focused(false)
+                .values(vec![
+                    "January".into(),
+                    "February".into(),
+                    "March".into(),
+                    "April".into(),
+                    "June".into(),
+                    "July".into(),
+                    "August".into(),
+                    "September".into(),
+                    "October".into(),
+                    "November".into(),
+                    "December".into(),
+                ])
+                .build()
+                .unwrap(),
+            widget: SelectionBuilder::default()
+                .border(true)
+                .title(Some("Month".to_string()))
+                .margins(Margin {
+                    vertical: 0,
+                    horizontal: 1,
+                })
+                .style(selection_style.clone())
+                .min_width(10)
+                .build()
+                .unwrap(),
+        })
+        .year(Element {
+            state: InputFieldStateBuilder::default()
+                .focused(false)
+                .build()
+                .unwrap(),
+            widget: InputFieldBuilder::default()
+                .border(true)
+                .title(Some("Year".to_string()))
+                .margins(Margin {
+                    vertical: 0,
+                    horizontal: 1,
+                })
+                .style(input_style.clone())
+                .min_width(4)
+                .build()
+                .unwrap(),
+        })
+        .street(Element {
+            state: InputFieldStateBuilder::default()
+                .focused(false)
+                .build()
+                .unwrap(),
+            widget: InputFieldBuilder::default()
+                .border(true)
+                .title(Some("Street".to_string()))
+                .margins(Margin {
+                    vertical: 0,
+                    horizontal: 1,
+                })
+                .style(input_style.clone())
+                .min_width(5)
+                .build()
+                .unwrap(),
+        })
+        .code(Element {
+            state: InputFieldStateBuilder::default()
+                .focused(false)
+                .build()
+                .unwrap(),
+            widget: InputFieldBuilder::default()
+                .border(true)
+                .title(Some("Postalcode".to_string()))
+                .margins(Margin {
+                    vertical: 0,
+                    horizontal: 1,
+                })
+                .style(input_style.clone())
+                .min_width(5)
+                .build()
+                .unwrap(),
+        })
+        .city(Element {
+            state: InputFieldStateBuilder::default()
+                .focused(false)
+                .build()
+                .unwrap(),
+            widget: InputFieldBuilder::default()
+                .border(true)
+                .title(Some("City".to_string()))
+                .margins(Margin {
+                    vertical: 0,
+                    horizontal: 1,
+                })
+                .style(input_style.clone())
+                .min_width(5)
+                .build()
+                .unwrap(),
+        })
+        .build()
+        .unwrap();
+
+    let mut screen: AlternateScreen<Stdout> =
+        AlternateScreen::new().expect("Failed to create alternate screen.");
+
+    loop {
+        // Draw app
+        screen.draw(|f| ui(f, &mut app)).unwrap();
+
+        // Check for events
+        if event::poll(Duration::from_millis(50)).unwrap() {
+            if let Event::Key(key) = event::read().unwrap() {
+                if key.kind == KeyEventKind::Press {
+                    if let KeyCode::Esc = key.code {
+                        break;
+                    } else {
+                        let event_result: EventResult = app.handle_events(key.modifiers, key.code);
+                        match event_result {
+                            EventResult::Unhandled(_, KeyCode::Enter) => {
+                                break;
+                            }
+                            EventResult::Unhandled(KeyModifiers::SHIFT, KeyCode::BackTab)
+                            | EventResult::Unhandled(KeyModifiers::SHIFT, KeyCode::Tab) => {
+                                app.focus_previous();
+                            }
+                            EventResult::Unhandled(_, KeyCode::Tab) => {
+                                app.focus_next();
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    drop(screen);
+
+    println!("Name: '{}'", app.name.state.input());
+    println!("Lastname: '{}'", app.lastname.state.input());
+    println!(
+        "Birthday: '{}.{}.{}'",
+        app.day.state.input(),
+        app.month.state.values()[app.month.state.selection()],
+        app.year.state.input()
+    );
+    println!(
+        "Address: '{}, {} {}'",
+        app.street.state.input(),
+        app.code.state.input(),
+        app.city.state.input()
+    );
+}

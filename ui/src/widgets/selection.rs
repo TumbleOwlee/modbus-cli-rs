@@ -24,7 +24,7 @@ where
     title: Option<String>,
     #[getset(get_copy = "pub")]
     #[builder(default = "false")]
-    bordered: bool,
+    border: bool,
     #[getset(get = "pub")]
     #[builder(default = "SelectionStyle::default()")]
     style: SelectionStyle,
@@ -34,6 +34,9 @@ where
     #[builder(setter(skip))]
     #[builder(default = "PhantomData")]
     marker: PhantomData<ValueType>,
+    #[getset(get = "pub")]
+    #[builder(default = "0")]
+    min_width: u16,
 }
 
 impl<ValueType> AsConstraint for Selection<ValueType>
@@ -41,13 +44,13 @@ where
     ValueType: ToLabel + Clone,
 {
     fn horizontal(&self) -> Constraint {
-        let width = if self.bordered { 7 } else { 5 };
-        Constraint::Min(width)
+        let width = if self.border { 7 } else { 5 };
+        Constraint::Min(width + self.margins.horizontal + self.min_width)
     }
 
     fn vertical(&self) -> Constraint {
-        let height = if self.bordered { 3 } else { 1 };
-        Constraint::Min(height)
+        let height = if self.border { 3 } else { 1 };
+        Constraint::Min(height + self.margins.vertical)
     }
 }
 
@@ -85,11 +88,11 @@ impl<ValueType: ToLabel + Clone> StatefulWidget for &Selection<ValueType> {
     type State = SelectionState<ValueType>;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        let border_lines = if self.bordered { 2 } else { 0 };
+        let border_lines = if self.border { 2 } else { 0 };
         let max_lines = area.height as i32 - border_lines;
         let lines = state.values().len();
         let lines = std::cmp::min(lines as i32, max_lines);
-        let height = if self.bordered { lines + 2 } else { lines };
+        let height = if self.border { lines + 2 } else { lines };
 
         let area = Layout::vertical([
             Constraint::Length(self.margins.vertical),
@@ -106,7 +109,7 @@ impl<ValueType: ToLabel + Clone> StatefulWidget for &Selection<ValueType> {
         .split(area)[1];
 
         // Create block if border is required
-        if self.bordered {
+        if self.border {
             let style = if state.focused() {
                 self.style.border
             } else {

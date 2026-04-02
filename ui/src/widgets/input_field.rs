@@ -3,17 +3,33 @@ use getset::{CopyGetters, Getters, Setters, WithSetters};
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Margin, Rect};
+use ratatui::style::Color;
+use ratatui::style::palette::tailwind;
 use ratatui::text::Text;
 use ratatui::widgets::Widget;
 use ratatui::widgets::{Block, Paragraph, StatefulWidget};
+use std::marker::PhantomData;
 
 use crate::state::InputFieldState;
 use crate::style::InputFieldStyle;
 use crate::traits::AsConstraint;
 
+pub trait Validate {
+    fn validate(input: &str) -> Result<(), String>;
+}
+
+impl Validate for String {
+    fn validate(_input: &str) -> Result<(), String> {
+        Ok(())
+    }
+}
+
 #[derive(Builder, Debug, Clone, Getters, Setters, CopyGetters, WithSetters)]
 #[getset(set = "pub")]
-pub struct InputField {
+pub struct InputField<ValueType>
+where
+    ValueType: Validate,
+{
     #[getset(get_copy = "pub")]
     #[builder(default = "false")]
     border: bool,
@@ -26,34 +42,52 @@ pub struct InputField {
     #[getset(get = "pub")]
     #[builder(default = "Margin::default()")]
     margins: Margin,
+    #[getset(get = "pub")]
+    #[builder(default = "0")]
+    min_width: u16,
+    #[builder(setter(skip))]
+    #[builder(default = "PhantomData")]
+    marker: PhantomData<ValueType>,
 }
 
-impl AsConstraint for InputField {
+impl<ValueType> AsConstraint for InputField<ValueType>
+where
+    ValueType: Validate,
+{
     fn horizontal(&self) -> Constraint {
         let width = if self.border { 2 } else { 0 };
-        Constraint::Min(width)
+        Constraint::Min(width + self.margins.horizontal + self.min_width)
     }
 
     fn vertical(&self) -> Constraint {
         let height = if self.border { 3 } else { 1 };
-        Constraint::Length(height)
+        Constraint::Length(height + self.margins.vertical)
     }
 }
 
-impl Widget for InputField {
+impl<ValueType> Widget for InputField<ValueType>
+where
+    ValueType: Validate,
+{
     fn render(self, area: Rect, buf: &mut Buffer) {
         Widget::render(&self, area, buf);
     }
 }
 
-impl Widget for &InputField {
+impl<ValueType> Widget for &InputField<ValueType>
+where
+    ValueType: Validate,
+{
     fn render(self, area: Rect, buf: &mut Buffer) {
         let mut state = InputFieldState::default();
         StatefulWidget::render(self, area, buf, &mut state);
     }
 }
 
-impl StatefulWidget for InputField {
+impl<ValueType> StatefulWidget for InputField<ValueType>
+where
+    ValueType: Validate,
+{
     type State = InputFieldState;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
@@ -61,7 +95,10 @@ impl StatefulWidget for InputField {
     }
 }
 
-impl StatefulWidget for &InputField {
+impl<ValueType> StatefulWidget for &InputField<ValueType>
+where
+    ValueType: Validate,
+{
     type State = InputFieldState;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
@@ -83,12 +120,23 @@ impl StatefulWidget for &InputField {
         ])
         .split(area)[1];
 
+        let valid = if state.input().is_empty() {
+            Ok(())
+        } else {
+            ValueType::validate(state.input())
+        };
+
         // Create block if border is required
         if self.border {
             let style = if state.focused() && !state.disabled() {
                 self.style.focused
             } else {
                 self.style.default
+            };
+            let style = if valid.is_ok() {
+                style
+            } else {
+                ratatui::prelude::Style::default().fg(tailwind::RED.c900)
             };
             let mut block = Block::bordered().style(style);
             if let Some(title) = self.title.as_ref() {
@@ -134,7 +182,14 @@ impl StatefulWidget for &InputField {
         }
 
         // Display text
-        let input = Paragraph::new(Text::from(text).style(self.style.default));
+        let text_style = if valid.is_ok() {
+            self.style.default
+        } else {
+            ratatui::prelude::Style::default()
+                .fg(tailwind::RED.c900)
+                .bg(Color::default())
+        };
+        let input = Paragraph::new(Text::from(text).style(text_style));
         input.render(area, buf);
         if !state.disabled() {
             // Display cursor

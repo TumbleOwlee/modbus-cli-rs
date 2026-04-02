@@ -28,6 +28,12 @@ pub trait ToLabel {
     fn to_label(&self) -> String;
 }
 
+impl ToLabel for String {
+    fn to_label(&self) -> String {
+        self.clone()
+    }
+}
+
 pub trait AsConstraint {
     fn horizontal(&self) -> Constraint;
 

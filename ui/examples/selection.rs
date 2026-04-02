@@ -39,13 +39,13 @@ struct App {
 
 // Render simple input field
 fn ui(f: &mut Frame, app: &mut App) {
-    let layout = Layout::vertical([Constraint::Length(4)]);
+    let layout = Layout::vertical([Constraint::Length(5)]);
     let rects = f.area().layout_vec(&layout);
     let layout = Layout::horizontal([Constraint::Length(30)]);
     let rects = rects[0].layout_vec(&layout);
     let selection = SelectionBuilder::default()
         .title(Some("Mode".to_string()))
-        .bordered(true)
+        .border(true)
         .margins(Margin {
             vertical: 0,
             horizontal: 1,
