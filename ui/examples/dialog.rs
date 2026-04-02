@@ -89,6 +89,13 @@ struct App {
     pub city: Element<InputFieldState, InputField<String>>,
 }
 
+#[derive(Debug)]
+struct Person {
+    name: String,
+    birthday: String,
+    address: String,
+}
+
 impl HandleEvents for App {
     fn handle_events(&mut self, modifiers: KeyModifiers, code: KeyCode) -> EventResult {
         match self.focus {
@@ -190,6 +197,39 @@ impl App {
         };
 
         self.focus = (self.focus + 1) % 8;
+    }
+
+    fn result(&self) -> Result<Person, String> {
+        if let Err(_) = Day::validate(self.day.state.input()) {
+            Err("Invalid input for day".into())
+        } else if let Err(_) = Year::validate(self.year.state.input()) {
+            Err("Invalid input for year".into())
+        } else if let Err(_) = Code::validate(self.code.state.input()) {
+            Err("Invalid input for postal code".into())
+        } else {
+            let name = format!(
+                "{} {}",
+                self.name.state.input(),
+                self.lastname.state.input()
+            );
+            let birthday = format!(
+                "{}.{}.{}",
+                self.day.state.input(),
+                self.month.state.values()[self.month.state.selection()],
+                self.year.state.input()
+            );
+            let address = format!(
+                "{}, {} {}",
+                self.street.state.input(),
+                self.code.state.input(),
+                self.city.state.input()
+            );
+            Ok(Person {
+                name,
+                birthday,
+                address,
+            })
+        }
     }
 }
 
@@ -456,21 +496,7 @@ fn main() {
             }
         }
     }
-
     drop(screen);
 
-    println!("Name: '{}'", app.name.state.input());
-    println!("Lastname: '{}'", app.lastname.state.input());
-    println!(
-        "Birthday: '{}.{}.{}'",
-        app.day.state.input(),
-        app.month.state.values()[app.month.state.selection()],
-        app.year.state.input()
-    );
-    println!(
-        "Address: '{}, {} {}'",
-        app.street.state.input(),
-        app.code.state.input(),
-        app.city.state.input()
-    );
+    println!("{:?}", app.result());
 }
