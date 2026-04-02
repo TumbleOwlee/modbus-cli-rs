@@ -19,13 +19,14 @@ struct App {
 
 impl Default for App {
     fn default() -> Self {
-        let states = vec![
+        let mut states = vec![
             InputFieldStateBuilder::default()
                 .focused(false)
                 .build()
                 .unwrap();
             4
         ];
+        states[0].set_focused(true);
         Self { index: 0, states }
     }
 }
@@ -76,8 +77,6 @@ fn main() {
         // Draw app
         screen.draw(|f| ui(f, &mut app)).unwrap();
 
-        app.states[app.index].set_focused(true);
-
         // Check for events
         if event::poll(Duration::from_millis(50)).unwrap() {
             if let Event::Key(key) = event::read().unwrap() {
@@ -91,11 +90,16 @@ fn main() {
                             EventResult::Unhandled(_, KeyCode::Enter) => {
                                 break;
                             }
-                            EventResult::Unhandled(KeyModifiers::SHIFT, KeyCode::Tab) => {
+                            EventResult::Unhandled(KeyModifiers::SHIFT, KeyCode::BackTab)
+                            | EventResult::Unhandled(KeyModifiers::SHIFT, KeyCode::Tab) => {
+                                app.states[app.index].set_focused(false);
                                 app.index = (app.index + 3) % 4;
+                                app.states[app.index].set_focused(true);
                             }
                             EventResult::Unhandled(_, KeyCode::Tab) => {
+                                app.states[app.index].set_focused(false);
                                 app.index = (app.index + 1) % 4;
+                                app.states[app.index].set_focused(true);
                             }
                             _ => {}
                         }
