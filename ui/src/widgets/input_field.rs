@@ -144,7 +144,7 @@ where
             let style = if valid.is_ok() {
                 style
             } else {
-                ratatui::prelude::Style::default().fg(tailwind::RED.c900)
+                self.style.error
             };
             let mut block = Block::bordered().style(style);
             if let Some(title) = self.title.as_ref() {
@@ -202,9 +202,7 @@ where
         let text_style = if valid.is_ok() {
             self.style.default
         } else {
-            ratatui::prelude::Style::default()
-                .fg(tailwind::RED.c900)
-                .bg(Color::default())
+            self.style.error
         };
 
         let mut text_area = area.clone();

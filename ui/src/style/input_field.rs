@@ -6,6 +6,7 @@ pub struct InputFieldStyle {
     pub default: UiStyle,
     pub focused: UiStyle,
     pub cursor: UiStyle,
+    pub error: UiStyle,
 }
 
 impl Default for InputFieldStyle {
@@ -18,6 +19,7 @@ impl Default for InputFieldStyle {
             cursor: UiStyle::default()
                 .fg(tailwind::WHITE)
                 .bg(tailwind::INDIGO.c600),
+            error: UiStyle::default().fg(tailwind::RED.c500),
         }
     }
 }
