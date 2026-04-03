@@ -45,6 +45,9 @@ where
     #[getset(get = "pub")]
     #[builder(default = "0")]
     min_width: u16,
+    #[getset(get = "pub")]
+    #[builder(default = "false")]
+    multiline: bool,
     #[builder(setter(skip))]
     #[builder(default = "PhantomData")]
     marker: PhantomData<ValueType>,
@@ -104,7 +107,12 @@ where
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         buf.set_style(area, self.style.default);
 
-        let height = if self.border { 3 } else { 1 };
+        let mut height = if self.border { 2 } else { 0 };
+        if self.multiline {
+            height += std::cmp::max(1, area.height);
+        } else {
+            height += 1;
+        }
 
         let area = Layout::vertical([
             Constraint::Length(self.margins.vertical),
@@ -159,29 +167,38 @@ where
 
         let mut x_start = 0;
         let cursor = state.cursor();
+        let text_len = text.chars().count();
 
         // Calculate range of text to display
-        if (area.width as usize) < text.len() {
-            let width = (area.width / 2) as usize;
+        if (area.width as usize) <= text_len {
+            let total_len = area.width * area.height - 1;
+            let width = (total_len / 2) as usize;
             // Display width characters left of cursor
             x_start = std::cmp::max(state.cursor(), width) - width;
             // Display width characters right of cursor
-            let mut x_end = std::cmp::min(cursor + width, text.len());
+            let mut x_end = std::cmp::min(cursor + width, text_len);
             // Add more characters to the left, if right of cursor are not enough
-            if (x_end - cursor) < (area.width as usize - width) {
-                let remaining = (area.width as usize - width) - (x_end - cursor);
+            if (x_end - cursor) < (total_len as usize - width) {
+                let remaining = (total_len as usize - width) - (x_end - cursor);
                 x_start = std::cmp::max(x_start, remaining) - remaining;
             }
             // Add more characters to the right, if left of cursor are not enough
             if (cursor - x_start) < width {
                 let remaining = width - (cursor - x_start);
-                x_end = std::cmp::min(text.len(), x_end + remaining);
+                x_end = std::cmp::min(text_len, x_end + remaining);
             }
             // Get displayable text area
-            text = text[x_start..x_end].to_owned();
+            text = text.chars().enumerate().fold(
+                String::with_capacity(x_end - x_start),
+                |mut s, (i, c)| {
+                    if i >= x_start && i < x_end {
+                        s.push(c);
+                    }
+                    s
+                },
+            );
         }
 
-        // Display text
         let text_style = if valid.is_ok() {
             self.style.default
         } else {
@@ -189,12 +206,34 @@ where
                 .fg(tailwind::RED.c900)
                 .bg(Color::default())
         };
-        let input = Paragraph::new(Text::from(text).style(text_style));
-        input.render(area, buf);
+
+        let mut text_area = area.clone();
+        let (len, remain) = text
+            .chars()
+            .fold((0, String::new()), |(mut len, mut line), c| {
+                line.push(c);
+                len += 1;
+                if len >= area.width as usize {
+                    let input = Paragraph::new(Text::from(line).style(text_style));
+                    input.render(text_area, buf);
+                    text_area.y += 1;
+                    (0, String::new())
+                } else {
+                    (len, line)
+                }
+            });
+        if len > 0 {
+            let input = Paragraph::new(Text::from(remain).style(text_style));
+            input.render(text_area, buf);
+        }
+
         if !state.disabled() {
             // Display cursor
             if state.focused() {
-                buf[(area.x + (cursor - x_start) as u16, area.y)].set_style(self.style.cursor);
+                let pos = (cursor - x_start) as u16;
+                let pos_x = pos % area.width;
+                let pos_y = pos / area.width;
+                buf[(area.x + pos_x, area.y + pos_y)].set_style(self.style.cursor);
             }
         }
     }

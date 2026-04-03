@@ -1,5 +1,9 @@
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
-use ratatui::{Frame, layout::Layout, layout::Margin, layout::Rect, style::palette::tailwind};
+use ratatui::{
+    Frame,
+    layout::{Constraint, Layout, Margin, Rect},
+    style::palette::tailwind,
+};
 use std::{io::Stdout, time::Duration};
 use ui::{
     AlternateScreen, EventResult,
@@ -36,6 +40,7 @@ fn ui(f: &mut Frame, app: &mut App) {
     let input: InputField<String> = InputFieldBuilder::default()
         .title(Some("Name".to_string()))
         .border(true)
+        .multiline(true)
         .margins(Margin {
             vertical: 0,
             horizontal: 1,
@@ -50,18 +55,28 @@ fn ui(f: &mut Frame, app: &mut App) {
         .build()
         .unwrap();
 
-    let layout = Layout::vertical([input.vertical(), input.vertical(), input.vertical()]);
-    let rects: [Rect; 3] = f.area().layout(&layout);
-    f.render_stateful_widget(input.clone(), rects[0], &mut app.states[0]);
+    let horizontal_layout: [Rect; 3] =
+        Layout::horizontal([Constraint::Min(1), Constraint::Max(70), Constraint::Min(1)])
+            .areas(f.area());
+    let vertical_layout: [Rect; 5] = Layout::vertical([
+        Constraint::Min(1),
+        input.vertical(),
+        Constraint::Length(5),
+        input.vertical(),
+        Constraint::Min(1),
+    ])
+    .areas(horizontal_layout[1]);
+
+    f.render_stateful_widget(input.clone(), vertical_layout[1], &mut app.states[0]);
 
     let layout = Layout::horizontal([input.horizontal(), input.horizontal(), input.horizontal()]);
-    let rects2: [Rect; 3] = rects[1].layout(&layout);
+    let rects2: [Rect; 3] = vertical_layout[2].layout(&layout);
     f.render_stateful_widget(input.clone(), rects2[0], &mut app.states[1]);
     f.render_stateful_widget(input.clone(), rects2[1], &mut app.states[2]);
     f.render_stateful_widget(input.clone(), rects2[2], &mut app.states[3]);
 
     let layout = Layout::horizontal([input.horizontal(), input.horizontal()]);
-    let rects3: [Rect; 2] = rects[2].layout(&layout);
+    let rects3: [Rect; 2] = vertical_layout[3].layout(&layout);
     f.render_stateful_widget(input.clone(), rects3[0], &mut app.states[1]);
     f.render_stateful_widget(input.clone(), rects3[1], &mut app.states[2]);
 }
