@@ -4,8 +4,18 @@ use derive_focus::{Focus, focusable};
 #[derive(Default, Clone, Debug)]
 struct State;
 
-impl State {
+impl ui::traits::SetFocus for State {
     fn set_focused(&mut self, _focus: bool) {}
+}
+
+impl ui::traits::HandleEvents for State {
+    fn handle_events(
+        &mut self,
+        _modifiers: crossterm::event::KeyModifiers,
+        _code: crossterm::event::KeyCode,
+    ) -> ui::EventResult {
+        ui::EventResult::Consumed
+    }
 }
 
 #[focusable]

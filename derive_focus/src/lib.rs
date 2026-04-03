@@ -28,8 +28,8 @@ pub fn derive_focus(item: TokenStream) -> TokenStream {
                 let to = *idents[to_idx].as_ref().unwrap();
                 impl_previous.extend(quote! {
                     #i => {
-                        self.#from.set_focused(false);
-                        self.#to.set_focused(true);
+                        ui::traits::SetFocus::set_focused(&mut self.#from, false);
+                        ui::traits::SetFocus::set_focused(&mut self.#to, true);
                         self.focus = #to_idx;
                     }
                 });
@@ -39,14 +39,14 @@ pub fn derive_focus(item: TokenStream) -> TokenStream {
                 let to = *idents[to_idx].as_ref().unwrap();
                 impl_next.extend(quote! {
                     #i => {
-                        self.#from.set_focused(false);
-                        self.#to.set_focused(true);
+                        ui::traits::SetFocus::set_focused(&mut self.#from, false);
+                        ui::traits::SetFocus::set_focused(&mut self.#to, true);
                         self.focus = #to_idx;
                     }
                 });
 
                 impl_handle.extend(quote! {
-                    #i => self.#from.handle_events(modifiers, code),
+                    #i => ui::traits::HandleEvents::handle_events(&mut self.#from, modifiers, code),
                 });
             }
 
@@ -71,8 +71,8 @@ pub fn derive_focus(item: TokenStream) -> TokenStream {
                         }
                     }
                 }
-                impl HandleEvents for #identifier {
-                    fn handle_events(&mut self, modifiers: KeyModifiers, code: KeyCode) -> EventResult {
+                impl ui::traits::HandleEvents for #identifier {
+                    fn handle_events(&mut self, modifiers: crossterm::event::KeyModifiers, code: crossterm::event::KeyCode) -> ui::EventResult {
                         match self.focus {
                             #impl_handle
                         }

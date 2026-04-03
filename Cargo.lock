@@ -513,9 +513,11 @@ dependencies = [
 name = "derive_focus"
 version = "0.1.0"
 dependencies = [
+ "crossterm",
  "proc-macro2",
  "quote",
  "syn 2.0.117",
+ "ui",
 ]
 
 [[package]]

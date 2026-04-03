@@ -131,71 +131,90 @@ impl App {
             })
         }
     }
-}
 
-// Render simple input field
-fn ui(f: &mut Frame, app: &mut App) {
-    let horizontal_layout: [Rect; 3] =
-        Layout::horizontal([Constraint::Min(1), Constraint::Max(70), Constraint::Min(1)])
-            .areas(f.area());
-    let vertical_layout: [Rect; 3] = Layout::vertical([
-        Constraint::Min(1),
-        Constraint::Length(15),
-        Constraint::Min(1),
-    ])
-    .areas(horizontal_layout[1]);
-    let vertical_layout: [Rect; 5] = Layout::vertical([
-        app.name.widget.vertical(),
-        app.day.widget.vertical(),
-        app.street.widget.vertical(),
-        app.code.widget.vertical(),
-        app.error.widget.vertical(),
-    ])
-    .areas(vertical_layout[1]);
+    fn render(&mut self, f: &mut Frame, area: Rect) {
+        let horizontal_layout: [Rect; 3] =
+            Layout::horizontal([Constraint::Min(1), Constraint::Max(70), Constraint::Min(1)])
+                .areas(area);
+        let vertical_layout: [Rect; 3] = Layout::vertical([
+            Constraint::Min(1),
+            Constraint::Length(15),
+            Constraint::Min(1),
+        ])
+        .areas(horizontal_layout[1]);
+        let vertical_layout: [Rect; 5] = Layout::vertical([
+            self.name.widget.vertical(),
+            self.day.widget.vertical(),
+            self.street.widget.vertical(),
+            self.code.widget.vertical(),
+            self.error.widget.vertical(),
+        ])
+        .areas(vertical_layout[1]);
 
-    let horizontal_layout: [Rect; 2] = Layout::horizontal([
-        app.name.widget.horizontal(),
-        app.lastname.widget.horizontal(),
-    ])
-    .areas(vertical_layout[0]);
+        let horizontal_layout: [Rect; 2] = Layout::horizontal([
+            self.name.widget.horizontal(),
+            self.lastname.widget.horizontal(),
+        ])
+        .areas(vertical_layout[0]);
 
-    f.render_stateful_widget(&app.name.widget, horizontal_layout[0], &mut app.name.state);
-    f.render_stateful_widget(
-        &app.lastname.widget,
-        horizontal_layout[1],
-        &mut app.lastname.state,
-    );
+        f.render_stateful_widget(
+            &self.name.widget,
+            horizontal_layout[0],
+            &mut self.name.state,
+        );
+        f.render_stateful_widget(
+            &self.lastname.widget,
+            horizontal_layout[1],
+            &mut self.lastname.state,
+        );
 
-    let horizontal_layout: [Rect; 3] = Layout::horizontal([
-        app.day.widget.horizontal(),
-        app.month.widget.horizontal(),
-        app.year.widget.horizontal(),
-    ])
-    .areas(vertical_layout[1]);
+        let horizontal_layout: [Rect; 3] = Layout::horizontal([
+            self.day.widget.horizontal(),
+            self.month.widget.horizontal(),
+            self.year.widget.horizontal(),
+        ])
+        .areas(vertical_layout[1]);
 
-    f.render_stateful_widget(&app.day.widget, horizontal_layout[0], &mut app.day.state);
-    f.render_stateful_widget(
-        &app.month.widget,
-        horizontal_layout[1],
-        &mut app.month.state,
-    );
-    f.render_stateful_widget(&app.year.widget, horizontal_layout[2], &mut app.year.state);
+        f.render_stateful_widget(&self.day.widget, horizontal_layout[0], &mut self.day.state);
+        f.render_stateful_widget(
+            &self.month.widget,
+            horizontal_layout[1],
+            &mut self.month.state,
+        );
+        f.render_stateful_widget(
+            &self.year.widget,
+            horizontal_layout[2],
+            &mut self.year.state,
+        );
 
-    f.render_stateful_widget(
-        &app.street.widget,
-        vertical_layout[2],
-        &mut app.street.state,
-    );
+        f.render_stateful_widget(
+            &self.street.widget,
+            vertical_layout[2],
+            &mut self.street.state,
+        );
 
-    let horizontal_layout: [Rect; 2] =
-        Layout::horizontal([app.code.widget.horizontal(), app.city.widget.horizontal()])
-            .areas(vertical_layout[3]);
+        let horizontal_layout: [Rect; 2] =
+            Layout::horizontal([self.code.widget.horizontal(), self.city.widget.horizontal()])
+                .areas(vertical_layout[3]);
 
-    f.render_stateful_widget(&app.code.widget, horizontal_layout[0], &mut app.code.state);
-    f.render_stateful_widget(&app.city.widget, horizontal_layout[1], &mut app.city.state);
+        f.render_stateful_widget(
+            &self.code.widget,
+            horizontal_layout[0],
+            &mut self.code.state,
+        );
+        f.render_stateful_widget(
+            &self.city.widget,
+            horizontal_layout[1],
+            &mut self.city.state,
+        );
 
-    if !app.error.state.input().is_empty() {
-        f.render_stateful_widget(&app.error.widget, vertical_layout[4], &mut app.error.state);
+        if !self.error.state.input().is_empty() {
+            f.render_stateful_widget(
+                &self.error.widget,
+                vertical_layout[4],
+                &mut self.error.state,
+            );
+        }
     }
 }
 
@@ -406,7 +425,7 @@ fn main() {
 
     loop {
         // Draw app
-        screen.draw(|f| ui(f, &mut app)).unwrap();
+        screen.draw(|f| app.render(f, f.area())).unwrap();
 
         // Show error
         match app.result() {
