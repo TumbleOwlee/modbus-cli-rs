@@ -34,7 +34,7 @@ impl Statics {
     }
 
     fn get_int(_: &mlua::Lua, this: &Statics, name: String) -> Result<i128> {
-        if let Some(ValueType::Int(ref i)) = this.data.get(&name) {
+        if let Some(ValueType::Int(i)) = this.data.get(&name) {
             Ok(*i)
         } else {
             Err(mlua::Error::UserDataTypeMismatch)
@@ -42,7 +42,7 @@ impl Statics {
     }
 
     fn get_float(_: &mlua::Lua, this: &Statics, name: String) -> Result<f64> {
-        if let Some(ValueType::Float(ref f)) = this.data.get(&name) {
+        if let Some(ValueType::Float(f)) = this.data.get(&name) {
             Ok(*f)
         } else {
             Err(mlua::Error::UserDataTypeMismatch)
@@ -50,7 +50,7 @@ impl Statics {
     }
 
     fn get_string(_: &mlua::Lua, this: &Statics, name: String) -> Result<String> {
-        if let Some(ValueType::String(ref s)) = this.data.get(&name) {
+        if let Some(ValueType::String(s)) = this.data.get(&name) {
             Ok(s.to_owned())
         } else {
             Err(mlua::Error::UserDataTypeMismatch)
@@ -58,7 +58,7 @@ impl Statics {
     }
 
     fn get_bool(_: &mlua::Lua, this: &Statics, name: String) -> Result<bool> {
-        if let Some(ValueType::Bool(ref b)) = this.data.get(&name) {
+        if let Some(ValueType::Bool(b)) = this.data.get(&name) {
             Ok(*b)
         } else {
             Err(mlua::Error::UserDataTypeMismatch)

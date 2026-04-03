@@ -12,40 +12,11 @@ use ui::{
     state::{InputFieldState, InputFieldStateBuilder, SelectionState, SelectionStateBuilder},
     style::{InputFieldStyle, SelectionStyle},
     traits::{AsConstraint, HandleEvents, SetFocus},
+    widgets::Widget,
     widgets::{InputField, InputFieldBuilder, Selection, SelectionBuilder, Validate},
 };
 
 use derive_focus::{Focus, focusable};
-
-#[derive(Debug, Clone)]
-struct Element<State, Widget>
-where
-    State: Debug + Clone + HandleEvents + SetFocus,
-    Widget: Clone + Debug,
-{
-    state: State,
-    widget: Widget,
-}
-
-impl<State, Widget> SetFocus for Element<State, Widget>
-where
-    State: Debug + Clone + HandleEvents + SetFocus,
-    Widget: Clone + Debug,
-{
-    fn set_focused(&mut self, focus: bool) {
-        self.state.set_focused(focus);
-    }
-}
-
-impl<State, Widget> HandleEvents for Element<State, Widget>
-where
-    State: Debug + Clone + HandleEvents + SetFocus,
-    Widget: Clone + Debug,
-{
-    fn handle_events(&mut self, modifiers: KeyModifiers, code: KeyCode) -> EventResult {
-        self.state.handle_events(modifiers, code)
-    }
-}
 
 #[derive(Debug, Clone)]
 struct Day {}
@@ -101,22 +72,22 @@ impl Validate for Code {
 #[derive(Builder, Debug, Focus)]
 struct App {
     #[focus]
-    pub name: Element<InputFieldState, InputField<String>>,
+    pub name: Widget<InputFieldState, InputField<String>>,
     #[focus]
-    pub lastname: Element<InputFieldState, InputField<String>>,
+    pub lastname: Widget<InputFieldState, InputField<String>>,
     #[focus]
-    pub day: Element<InputFieldState, InputField<Day>>,
+    pub day: Widget<InputFieldState, InputField<Day>>,
     #[focus]
-    pub month: Element<SelectionState<String>, Selection<String>>,
+    pub month: Widget<SelectionState<String>, Selection<String>>,
     #[focus]
-    pub year: Element<InputFieldState, InputField<Year>>,
+    pub year: Widget<InputFieldState, InputField<Year>>,
     #[focus]
-    pub street: Element<InputFieldState, InputField<String>>,
+    pub street: Widget<InputFieldState, InputField<String>>,
     #[focus]
-    pub code: Element<InputFieldState, InputField<Code>>,
+    pub code: Widget<InputFieldState, InputField<Code>>,
     #[focus]
-    pub city: Element<InputFieldState, InputField<String>>,
-    pub error: Element<InputFieldState, InputField<String>>,
+    pub city: Widget<InputFieldState, InputField<String>>,
+    pub error: Widget<InputFieldState, InputField<String>>,
 }
 
 #[derive(Debug)]
@@ -251,7 +222,7 @@ fn main() {
     };
     // Create app state
     let mut app = AppBuilder::default()
-        .name(Element {
+        .name(Widget {
             state: InputFieldStateBuilder::default()
                 .focused(true)
                 .disabled(false)
@@ -269,7 +240,7 @@ fn main() {
                 .build()
                 .unwrap(),
         })
-        .lastname(Element {
+        .lastname(Widget {
             state: InputFieldStateBuilder::default()
                 .focused(false)
                 .disabled(false)
@@ -287,7 +258,7 @@ fn main() {
                 .build()
                 .unwrap(),
         })
-        .day(Element {
+        .day(Widget {
             state: InputFieldStateBuilder::default()
                 .focused(false)
                 .disabled(false)
@@ -305,7 +276,7 @@ fn main() {
                 .build()
                 .unwrap(),
         })
-        .month(Element {
+        .month(Widget {
             state: SelectionStateBuilder::default()
                 .focused(false)
                 .values(vec![
@@ -336,7 +307,7 @@ fn main() {
                 .build()
                 .unwrap(),
         })
-        .year(Element {
+        .year(Widget {
             state: InputFieldStateBuilder::default()
                 .focused(false)
                 .disabled(false)
@@ -354,7 +325,7 @@ fn main() {
                 .build()
                 .unwrap(),
         })
-        .street(Element {
+        .street(Widget {
             state: InputFieldStateBuilder::default()
                 .focused(false)
                 .disabled(false)
@@ -372,7 +343,7 @@ fn main() {
                 .build()
                 .unwrap(),
         })
-        .code(Element {
+        .code(Widget {
             state: InputFieldStateBuilder::default()
                 .focused(false)
                 .disabled(false)
@@ -390,7 +361,7 @@ fn main() {
                 .build()
                 .unwrap(),
         })
-        .city(Element {
+        .city(Widget {
             state: InputFieldStateBuilder::default()
                 .focused(false)
                 .disabled(false)
@@ -408,7 +379,7 @@ fn main() {
                 .build()
                 .unwrap(),
         })
-        .error(Element {
+        .error(Widget {
             state: InputFieldStateBuilder::default()
                 .focused(true)
                 .disabled(false)

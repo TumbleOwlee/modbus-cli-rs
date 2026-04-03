@@ -32,7 +32,10 @@ where
     style: TableStyle,
     #[getset(get = "pub")]
     #[builder(default = "Margin::default()")]
-    margins: Margin,
+    margin: Margin,
+    #[getset(get = "pub")]
+    #[builder(default = "Margin::default()")]
+    row_margin: Margin,
     #[builder(setter(skip))]
     #[builder(default = "PhantomData")]
     marker: PhantomData<ValueType>,
