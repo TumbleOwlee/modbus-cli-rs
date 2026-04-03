@@ -91,6 +91,7 @@ struct App {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 struct Person {
     name: String,
     birthday: String,

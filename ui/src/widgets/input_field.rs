@@ -3,8 +3,6 @@ use getset::{CopyGetters, Getters, Setters, WithSetters};
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Margin, Rect};
-use ratatui::style::Color;
-use ratatui::style::palette::tailwind;
 use ratatui::text::Text;
 use ratatui::widgets::Widget;
 use ratatui::widgets::{Block, Paragraph, StatefulWidget};
