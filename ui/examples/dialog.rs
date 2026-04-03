@@ -11,18 +11,40 @@ use ui::{
     AlternateScreen, EventResult,
     state::{InputFieldState, InputFieldStateBuilder, SelectionState, SelectionStateBuilder},
     style::{InputFieldStyle, SelectionStyle},
-    traits::{AsConstraint, HandleEvents},
+    traits::{AsConstraint, HandleEvents, SetFocus},
     widgets::{InputField, InputFieldBuilder, Selection, SelectionBuilder, Validate},
 };
+
+use derive_focus::{Focus, focusable};
 
 #[derive(Debug, Clone)]
 struct Element<State, Widget>
 where
-    State: Debug + Clone,
+    State: Debug + Clone + HandleEvents + SetFocus,
     Widget: Clone + Debug,
 {
     state: State,
     widget: Widget,
+}
+
+impl<State, Widget> SetFocus for Element<State, Widget>
+where
+    State: Debug + Clone + HandleEvents + SetFocus,
+    Widget: Clone + Debug,
+{
+    fn set_focused(&mut self, focus: bool) {
+        self.state.set_focused(focus);
+    }
+}
+
+impl<State, Widget> HandleEvents for Element<State, Widget>
+where
+    State: Debug + Clone + HandleEvents + SetFocus,
+    Widget: Clone + Debug,
+{
+    fn handle_events(&mut self, modifiers: KeyModifiers, code: KeyCode) -> EventResult {
+        self.state.handle_events(modifiers, code)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -75,17 +97,24 @@ impl Validate for Code {
     }
 }
 
-#[derive(Builder, Debug)]
+#[focusable]
+#[derive(Builder, Debug, Focus)]
 struct App {
-    #[builder(setter(skip))]
-    pub focus: usize,
+    #[focus]
     pub name: Element<InputFieldState, InputField<String>>,
+    #[focus]
     pub lastname: Element<InputFieldState, InputField<String>>,
+    #[focus]
     pub day: Element<InputFieldState, InputField<Day>>,
+    #[focus]
     pub month: Element<SelectionState<String>, Selection<String>>,
+    #[focus]
     pub year: Element<InputFieldState, InputField<Year>>,
+    #[focus]
     pub street: Element<InputFieldState, InputField<String>>,
+    #[focus]
     pub code: Element<InputFieldState, InputField<Code>>,
+    #[focus]
     pub city: Element<InputFieldState, InputField<String>>,
     pub error: Element<InputFieldState, InputField<String>>,
 }
@@ -98,109 +127,7 @@ struct Person {
     address: String,
 }
 
-impl HandleEvents for App {
-    fn handle_events(&mut self, modifiers: KeyModifiers, code: KeyCode) -> EventResult {
-        match self.focus {
-            0 => self.name.state.handle_events(modifiers, code),
-            1 => self.lastname.state.handle_events(modifiers, code),
-            2 => self.day.state.handle_events(modifiers, code),
-            3 => self.month.state.handle_events(modifiers, code),
-            4 => self.year.state.handle_events(modifiers, code),
-            5 => self.street.state.handle_events(modifiers, code),
-            6 => self.code.state.handle_events(modifiers, code),
-            7 => self.city.state.handle_events(modifiers, code),
-            _ => {
-                unreachable!("Invalid case");
-            }
-        }
-    }
-}
-
 impl App {
-    fn focus_previous(&mut self) {
-        match self.focus {
-            0 => {
-                self.name.state.set_focused(false);
-                self.city.state.set_focused(true);
-            }
-            1 => {
-                self.lastname.state.set_focused(false);
-                self.name.state.set_focused(true);
-            }
-            2 => {
-                self.day.state.set_focused(false);
-                self.lastname.state.set_focused(true);
-            }
-            3 => {
-                self.month.state.set_focused(false);
-                self.day.state.set_focused(true);
-            }
-            4 => {
-                self.year.state.set_focused(false);
-                self.month.state.set_focused(true);
-            }
-            5 => {
-                self.street.state.set_focused(false);
-                self.year.state.set_focused(true);
-            }
-            6 => {
-                self.code.state.set_focused(false);
-                self.street.state.set_focused(true);
-            }
-            7 => {
-                self.city.state.set_focused(false);
-                self.code.state.set_focused(true);
-            }
-            _ => {
-                unreachable!("Invalid case");
-            }
-        };
-
-        self.focus = (self.focus + 7) % 8;
-    }
-
-    fn focus_next(&mut self) {
-        match self.focus {
-            0 => {
-                self.name.state.set_focused(false);
-                self.lastname.state.set_focused(true);
-            }
-            1 => {
-                self.lastname.state.set_focused(false);
-                self.day.state.set_focused(true);
-            }
-            2 => {
-                self.day.state.set_focused(false);
-                self.month.state.set_focused(true);
-            }
-            3 => {
-                self.month.state.set_focused(false);
-                self.year.state.set_focused(true);
-            }
-            4 => {
-                self.year.state.set_focused(false);
-                self.street.state.set_focused(true);
-            }
-            5 => {
-                self.street.state.set_focused(false);
-                self.code.state.set_focused(true);
-            }
-            6 => {
-                self.code.state.set_focused(false);
-                self.city.state.set_focused(true);
-            }
-            7 => {
-                self.city.state.set_focused(false);
-                self.name.state.set_focused(true);
-            }
-            _ => {
-                unreachable!("Invalid case");
-            }
-        };
-
-        self.focus = (self.focus + 1) % 8;
-    }
-
     fn result(&self) -> Result<Person, String> {
         if let Err(_) = Day::validate(self.day.state.input()) {
             Err("Invalid input for day".into())
@@ -498,6 +425,7 @@ fn main() {
                 .build()
                 .unwrap(),
         })
+        .focus(0)
         .build()
         .unwrap();
 

@@ -39,3 +39,7 @@ pub trait AsConstraint {
 
     fn vertical(&self) -> Constraint;
 }
+
+pub trait SetFocus {
+    fn set_focused(&mut self, focus: bool);
+}

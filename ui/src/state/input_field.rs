@@ -3,7 +3,7 @@ use derive_builder::Builder;
 use getset::{CopyGetters, Getters, Setters};
 
 use crate::EventResult;
-use crate::traits::HandleEvents;
+use crate::traits::{HandleEvents, SetFocus};
 
 #[derive(Builder, Debug, Default, Clone, Getters, Setters, CopyGetters)]
 #[getset(set = "pub")]
@@ -23,6 +23,12 @@ pub struct InputFieldState {
     #[getset(get = "pub")]
     #[builder(default = "None")]
     placeholder: Option<String>,
+}
+
+impl SetFocus for InputFieldState {
+    fn set_focused(&mut self, focus: bool) {
+        self.focused = focus;
+    }
 }
 
 impl HandleEvents for InputFieldState {

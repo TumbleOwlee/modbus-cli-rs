@@ -4,6 +4,7 @@ use getset::{CopyGetters, Getters, Setters};
 
 use crate::EventResult;
 use crate::traits::HandleEvents;
+use crate::traits::SetFocus;
 use crate::traits::ToLabel;
 
 #[derive(Builder, Debug, Clone, Getters, Setters, CopyGetters)]
@@ -20,6 +21,15 @@ where
     selection: usize,
     #[getset(get = "pub")]
     values: Vec<ValueType>,
+}
+
+impl<ValueType> SetFocus for SelectionState<ValueType>
+where
+    ValueType: ToLabel + Clone,
+{
+    fn set_focused(&mut self, focus: bool) {
+        self.focused = focus;
+    }
 }
 
 impl<ValueType> SelectionState<ValueType>
