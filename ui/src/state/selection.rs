@@ -19,6 +19,9 @@ where
     #[getset(get_copy = "pub")]
     #[builder(setter(skip))]
     selection: usize,
+    #[getset(get_copy = "pub")]
+    #[builder(setter(skip))]
+    horizontal_offset: usize,
     #[getset(get = "pub")]
     values: Vec<ValueType>,
 }
@@ -36,7 +39,7 @@ impl<ValueType> SelectionState<ValueType>
 where
     ValueType: ToLabel + Clone,
 {
-    pub fn next_row(&mut self) {
+    pub fn move_down(&mut self) {
         self.selection = if self.selection >= self.values.len() - 1 {
             0
         } else {
@@ -44,12 +47,20 @@ where
         };
     }
 
-    pub fn previous_row(&mut self) {
+    pub fn move_up(&mut self) {
         self.selection = if self.selection == 0 {
             self.values.len() - 1
         } else {
             self.selection - 1
         };
+    }
+
+    pub fn move_right(&mut self) {
+        self.horizontal_offset += 1;
+    }
+
+    pub fn move_left(&mut self) {
+        self.horizontal_offset -= if self.horizontal_offset > 0 { 1 } else { 0 };
     }
 }
 
@@ -60,11 +71,19 @@ where
     fn handle_events(&mut self, modifiers: KeyModifiers, code: KeyCode) -> EventResult {
         match (modifiers, code) {
             (_, KeyCode::Char('j')) | (_, KeyCode::Down) => {
-                self.next_row();
+                self.move_down();
                 EventResult::Consumed
             }
             (_, KeyCode::Char('k')) | (_, KeyCode::Up) => {
-                self.previous_row();
+                self.move_up();
+                EventResult::Consumed
+            }
+            (_, KeyCode::Char('h')) | (_, KeyCode::Left) => {
+                self.move_left();
+                EventResult::Consumed
+            }
+            (_, KeyCode::Char('l')) | (_, KeyCode::Right) => {
+                self.move_right();
                 EventResult::Consumed
             }
             _ => EventResult::Unhandled(modifiers, code),

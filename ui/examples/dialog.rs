@@ -313,6 +313,7 @@ fn main() {
                     "February".into(),
                     "March".into(),
                     "April".into(),
+                    "May".into(),
                     "June".into(),
                     "July".into(),
                     "August".into(),

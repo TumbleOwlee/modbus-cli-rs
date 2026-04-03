@@ -152,10 +152,26 @@ impl<ValueType: ToLabel + Clone> StatefulWidget for &Selection<ValueType> {
             .enumerate()
         {
             let t = if i == selection {
-                if state.focused() {
-                    Text::from(format!(" {}", v)).style(self.style.focused.clone())
+                let text = format!("{}", v);
+                let text_len = text.chars().count();
+                let width = area[n].width as usize;
+                let mut offset = state.horizontal_offset();
+
+                if text_len > width {
+                    offset = std::cmp::min(offset, text_len - width);
+                    state.set_horizontal_offset(offset);
+                }
+
+                let text = if width < text_len {
+                    text.chars().skip(offset).collect()
                 } else {
-                    Text::from(format!(" {}", v)).style(self.style.default.clone())
+                    text
+                };
+
+                if state.focused() {
+                    Text::from(text).style(self.style.focused.clone())
+                } else {
+                    Text::from(text).style(self.style.default.clone())
                 }
             } else {
                 Text::from(v).style(self.style.rows[i % 2])
