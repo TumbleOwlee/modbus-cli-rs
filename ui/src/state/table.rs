@@ -22,14 +22,9 @@ where
     #[getset(get_copy = "pub")]
     #[builder(setter(skip), default = "0")]
     selection: usize,
-    #[getset(get = "pub")]
-    table_state: UiTableState,
-    #[getset(get = "pub")]
-    #[builder(setter(skip), default = "UiScrollbarState::default()")]
-    vertical_scroll_state: UiScrollbarState,
     #[getset(get_copy = "pub")]
     #[builder(setter(skip), default = "0")]
-    horizontal_scroll_offset: usize,
+    horizontal_scroll: usize,
     #[getset(get = "pub")]
     values: Vec<ValueType>,
 }
@@ -76,15 +71,11 @@ where
     }
 
     pub fn move_right(&mut self) {
-        self.horizontal_scroll_offset += 1;
+        self.horizontal_scroll += 1;
     }
 
     pub fn move_left(&mut self) {
-        self.horizontal_scroll_offset -= if self.horizontal_scroll_offset > 0 {
-            1
-        } else {
-            0
-        };
+        self.horizontal_scroll -= if self.horizontal_scroll > 0 { 1 } else { 0 };
     }
 }
 

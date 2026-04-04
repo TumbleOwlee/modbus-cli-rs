@@ -46,7 +46,7 @@ fn ui(f: &mut Frame, app: &mut App) {
     let selection = SelectionBuilder::default()
         .title(Some("Mode".to_string()))
         .border(true)
-        .margins(Margin {
+        .margin(Margin {
             vertical: 0,
             horizontal: 1,
         })

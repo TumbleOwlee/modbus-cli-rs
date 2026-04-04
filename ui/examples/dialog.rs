@@ -11,7 +11,7 @@ use ui::{
     AlternateScreen, EventResult,
     state::{InputFieldState, InputFieldStateBuilder, SelectionState, SelectionStateBuilder},
     style::{InputFieldStyle, SelectionStyle},
-    traits::{AsConstraint, HandleEvents, SetFocus},
+    traits::HandleEvents,
     widgets::Widget,
     widgets::{InputField, InputFieldBuilder, Selection, SelectionBuilder, Validate},
 };
@@ -143,19 +143,17 @@ impl App {
         ])
         .areas(horizontal_layout[1]);
         let vertical_layout: [Rect; 5] = Layout::vertical([
-            self.name.widget.vertical(),
-            self.day.widget.vertical(),
-            self.street.widget.vertical(),
-            self.code.widget.vertical(),
-            self.error.widget.vertical(),
+            self.name.vertical(None),
+            self.day.vertical(None),
+            self.street.vertical(None),
+            self.code.vertical(None),
+            self.error.vertical(None),
         ])
         .areas(vertical_layout[1]);
 
-        let horizontal_layout: [Rect; 2] = Layout::horizontal([
-            self.name.widget.horizontal(),
-            self.lastname.widget.horizontal(),
-        ])
-        .areas(vertical_layout[0]);
+        let horizontal_layout: [Rect; 2] =
+            Layout::horizontal([self.name.horizontal(None), self.lastname.horizontal(None)])
+                .areas(vertical_layout[0]);
 
         f.render_stateful_widget(
             &self.name.widget,
@@ -169,9 +167,9 @@ impl App {
         );
 
         let horizontal_layout: [Rect; 3] = Layout::horizontal([
-            self.day.widget.horizontal(),
-            self.month.widget.horizontal(),
-            self.year.widget.horizontal(),
+            self.day.horizontal(None),
+            self.month.horizontal(None),
+            self.year.horizontal(None),
         ])
         .areas(vertical_layout[1]);
 
@@ -194,7 +192,7 @@ impl App {
         );
 
         let horizontal_layout: [Rect; 2] =
-            Layout::horizontal([self.code.widget.horizontal(), self.city.widget.horizontal()])
+            Layout::horizontal([self.code.horizontal(None), self.city.horizontal(None)])
                 .areas(vertical_layout[3]);
 
         f.render_stateful_widget(
@@ -250,12 +248,11 @@ fn main() {
             widget: InputFieldBuilder::default()
                 .border(true)
                 .title(Some("Name".to_string()))
-                .margins(Margin {
+                .margin(Margin {
                     vertical: 0,
                     horizontal: 1,
                 })
                 .style(input_style.clone())
-                .min_width(4)
                 .build()
                 .unwrap(),
         })
@@ -268,12 +265,11 @@ fn main() {
             widget: InputFieldBuilder::default()
                 .border(true)
                 .title(Some("Lastname".to_string()))
-                .margins(Margin {
+                .margin(Margin {
                     vertical: 0,
                     horizontal: 1,
                 })
                 .style(input_style.clone())
-                .min_width(4)
                 .build()
                 .unwrap(),
         })
@@ -286,12 +282,11 @@ fn main() {
             widget: InputFieldBuilder::default()
                 .border(true)
                 .title(Some("Day".to_string()))
-                .margins(Margin {
+                .margin(Margin {
                     vertical: 0,
                     horizontal: 1,
                 })
                 .style(input_style.clone())
-                .min_width(2)
                 .build()
                 .unwrap(),
         })
@@ -317,12 +312,11 @@ fn main() {
             widget: SelectionBuilder::default()
                 .border(true)
                 .title(Some("Month".to_string()))
-                .margins(Margin {
+                .margin(Margin {
                     vertical: 0,
                     horizontal: 1,
                 })
                 .style(selection_style.clone())
-                .min_width(10)
                 .build()
                 .unwrap(),
         })
@@ -335,12 +329,11 @@ fn main() {
             widget: InputFieldBuilder::default()
                 .border(true)
                 .title(Some("Year".to_string()))
-                .margins(Margin {
+                .margin(Margin {
                     vertical: 0,
                     horizontal: 1,
                 })
                 .style(input_style.clone())
-                .min_width(4)
                 .build()
                 .unwrap(),
         })
@@ -353,12 +346,11 @@ fn main() {
             widget: InputFieldBuilder::default()
                 .border(true)
                 .title(Some("Street".to_string()))
-                .margins(Margin {
+                .margin(Margin {
                     vertical: 0,
                     horizontal: 1,
                 })
                 .style(input_style.clone())
-                .min_width(5)
                 .build()
                 .unwrap(),
         })
@@ -371,12 +363,11 @@ fn main() {
             widget: InputFieldBuilder::default()
                 .border(true)
                 .title(Some("Postalcode".to_string()))
-                .margins(Margin {
+                .margin(Margin {
                     vertical: 0,
                     horizontal: 1,
                 })
                 .style(input_style.clone())
-                .min_width(5)
                 .build()
                 .unwrap(),
         })
@@ -389,12 +380,11 @@ fn main() {
             widget: InputFieldBuilder::default()
                 .border(true)
                 .title(Some("City".to_string()))
-                .margins(Margin {
+                .margin(Margin {
                     vertical: 0,
                     horizontal: 1,
                 })
                 .style(input_style.clone())
-                .min_width(5)
                 .build()
                 .unwrap(),
         })
@@ -407,12 +397,11 @@ fn main() {
             widget: InputFieldBuilder::default()
                 .border(false)
                 .title(None)
-                .margins(Margin {
+                .margin(Margin {
                     vertical: 0,
                     horizontal: 1,
                 })
                 .style(error_style.clone())
-                .min_width(5)
                 .build()
                 .unwrap(),
         })

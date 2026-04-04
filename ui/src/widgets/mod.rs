@@ -9,6 +9,7 @@ use ratatui::{buffer::Buffer, layout::Rect};
 pub use selection::*;
 pub use table::*;
 
+use crate::traits::AsConstraint;
 use crate::{
     EventResult,
     traits::{HandleEvents, SetFocus},
@@ -19,6 +20,19 @@ use std::fmt::Debug;
 pub struct Widget<S, W> {
     pub state: S,
     pub widget: W,
+}
+
+impl<S, W> Widget<S, W>
+where
+    W: AsConstraint<State = S>,
+{
+    pub fn horizontal(&self, height: Option<u16>) -> ratatui::layout::Constraint {
+        self.widget.horizontal(&self.state, height)
+    }
+
+    pub fn vertical(&self, width: Option<u16>) -> ratatui::layout::Constraint {
+        self.widget.vertical(&self.state, width)
+    }
 }
 
 impl<S, W> SetFocus for Widget<S, W>

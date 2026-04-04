@@ -39,13 +39,13 @@ where
     title: Option<String>,
     #[getset(get = "pub")]
     #[builder(default = "Margin::default()")]
-    margins: Margin,
-    #[getset(get = "pub")]
-    #[builder(default = "0")]
-    min_width: u16,
+    margin: Margin,
     #[getset(get = "pub")]
     #[builder(default = "false")]
     multiline: bool,
+    #[getset(get = "pub")]
+    #[builder(default = "true")]
+    overflow: bool,
     #[builder(setter(skip))]
     #[builder(default = "PhantomData")]
     marker: PhantomData<ValueType>,
@@ -55,14 +55,52 @@ impl<ValueType> AsConstraint for InputField<ValueType>
 where
     ValueType: Validate,
 {
-    fn horizontal(&self) -> Constraint {
-        let width = if self.border { 2 } else { 0 };
-        Constraint::Min(width + self.margins.horizontal + self.min_width)
+    type State = InputFieldState;
+
+    fn horizontal(&self, state: &Self::State, height: Option<u16>) -> Constraint {
+        let border = if self.border { 4 } else { 0 } + self.margin.horizontal * 2;
+        if self.overflow {
+            Constraint::Min(border + 1)
+        } else {
+            if self.multiline {
+                if let Some(height) = height {
+                    let cnt = state.input().chars().count() as u16;
+                    let border_ver = if self.border { 4 } else { 0 } + self.margin.vertical * 2;
+                    let height = std::cmp::max(height, border_ver + 1) - border_ver;
+                    let width = cnt / height + 1;
+                    Constraint::Min(border + width)
+                } else {
+                    Constraint::Min(border + 1)
+                }
+            } else {
+                Constraint::Min(border + state.input().chars().count() as u16 + 1)
+            }
+        }
     }
 
-    fn vertical(&self) -> Constraint {
-        let height = if self.border { 3 } else { 1 };
-        Constraint::Length(height + self.margins.vertical)
+    fn vertical(&self, state: &Self::State, width: Option<u16>) -> Constraint {
+        let border = if self.border { 2 } else { 0 } + self.margin.vertical * 2;
+        if self.overflow {
+            if self.multiline {
+                Constraint::Min(border + 1)
+            } else {
+                Constraint::Length(border + 1)
+            }
+        } else {
+            if self.multiline {
+                if let Some(width) = width {
+                    let cnt = state.input().chars().count() as u16;
+                    let border_hor = if self.border { 4 } else { 0 } + self.margin.horizontal * 2;
+                    let width = std::cmp::max(width, border_hor + 1) - border_hor;
+                    let lines = cnt / width + 1;
+                    Constraint::Min(border + lines)
+                } else {
+                    Constraint::Min(border + 1)
+                }
+            } else {
+                Constraint::Length(border + 1)
+            }
+        }
     }
 }
 
@@ -113,16 +151,16 @@ where
         }
 
         let area = Layout::vertical([
-            Constraint::Length(self.margins.vertical),
+            Constraint::Length(self.margin.vertical),
             Constraint::Length(height),
-            Constraint::Length(self.margins.vertical),
+            Constraint::Length(self.margin.vertical),
         ])
         .split(area)[1];
 
         let mut area = Layout::horizontal([
-            Constraint::Length(self.margins.horizontal),
+            Constraint::Length(self.margin.horizontal),
             Constraint::Min(1),
-            Constraint::Length(self.margins.horizontal),
+            Constraint::Length(self.margin.horizontal),
         ])
         .split(area)[1];
 

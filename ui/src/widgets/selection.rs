@@ -29,28 +29,42 @@ where
     #[builder(default = "SelectionStyle::default()")]
     style: SelectionStyle,
     #[getset(get = "pub")]
+    #[builder(default = "true")]
+    overflow: bool,
+    #[getset(get = "pub")]
     #[builder(default = "Margin::default()")]
-    margins: Margin,
+    margin: Margin,
     #[builder(setter(skip))]
     #[builder(default = "PhantomData")]
     marker: PhantomData<ValueType>,
-    #[getset(get = "pub")]
-    #[builder(default = "0")]
-    min_width: u16,
 }
 
 impl<ValueType> AsConstraint for Selection<ValueType>
 where
     ValueType: ToLabel + Clone,
 {
-    fn horizontal(&self) -> Constraint {
-        let width = if self.border { 7 } else { 5 };
-        Constraint::Min(width + self.margins.horizontal + self.min_width)
+    type State = SelectionState<ValueType>;
+
+    fn horizontal(&self, state: &Self::State, _height: Option<u16>) -> Constraint {
+        let width = if self.border { 2 } else { 0 };
+        let width = if self.overflow {
+            width + 5
+        } else {
+            width
+                + state
+                    .values()
+                    .iter()
+                    .map(|v| v.to_label().chars().count())
+                    .max()
+                    .unwrap_or(0) as u16
+                + 1
+        };
+        Constraint::Min(width + self.margin.horizontal)
     }
 
-    fn vertical(&self) -> Constraint {
+    fn vertical(&self, _state: &Self::State, _width: Option<u16>) -> Constraint {
         let height = if self.border { 3 } else { 1 };
-        Constraint::Min(height + self.margins.vertical)
+        Constraint::Min(height + self.margin.vertical)
     }
 }
 
@@ -95,16 +109,16 @@ impl<ValueType: ToLabel + Clone> StatefulWidget for &Selection<ValueType> {
         let height = if self.border { lines + 2 } else { lines };
 
         let area = Layout::vertical([
-            Constraint::Length(self.margins.vertical),
+            Constraint::Length(self.margin.vertical),
             Constraint::Length(height as u16),
-            Constraint::Length(self.margins.vertical),
+            Constraint::Length(self.margin.vertical),
         ])
         .split(area)[1];
 
         let mut area = Layout::horizontal([
-            Constraint::Length(self.margins.horizontal),
+            Constraint::Length(self.margin.horizontal),
             Constraint::Min(1),
-            Constraint::Length(self.margins.horizontal),
+            Constraint::Length(self.margin.horizontal),
         ])
         .split(area)[1];
 

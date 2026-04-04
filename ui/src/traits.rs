@@ -35,9 +35,11 @@ impl ToLabel for String {
 }
 
 pub trait AsConstraint {
-    fn horizontal(&self) -> Constraint;
+    type State;
 
-    fn vertical(&self) -> Constraint;
+    fn horizontal(&self, state: &Self::State, height: Option<u16>) -> Constraint;
+
+    fn vertical(&self, state: &Self::State, width: Option<u16>) -> Constraint;
 }
 
 pub trait SetFocus {
