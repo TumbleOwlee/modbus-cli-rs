@@ -30,7 +30,7 @@ where
     border: bool,
     #[getset(get = "pub")]
     #[builder(default = "TableStyle::default()")]
-    style: TableStyle,
+    style: TableStyle<N>,
     #[getset(get = "pub")]
     #[builder(default = "Margin::default()")]
     margin: Margin,
