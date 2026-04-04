@@ -11,7 +11,7 @@ use std::marker::PhantomData;
 
 use crate::state::{SelectionState, SelectionStateBuilder};
 use crate::style::SelectionStyle;
-use crate::traits::{AsConstraint, ToLabel};
+use crate::traits::ToLabel;
 
 #[derive(Builder, Debug, Clone, Getters, Setters, CopyGetters, WithSetters)]
 #[getset(set = "pub")]
@@ -29,43 +29,11 @@ where
     #[builder(default = "SelectionStyle::default()")]
     style: SelectionStyle,
     #[getset(get = "pub")]
-    #[builder(default = "true")]
-    overflow: bool,
-    #[getset(get = "pub")]
     #[builder(default = "Margin::default()")]
     margin: Margin,
     #[builder(setter(skip))]
     #[builder(default = "PhantomData")]
     marker: PhantomData<ValueType>,
-}
-
-impl<ValueType> AsConstraint for Selection<ValueType>
-where
-    ValueType: ToLabel + Clone,
-{
-    type State = SelectionState<ValueType>;
-
-    fn horizontal(&self, state: &Self::State, _height: Option<u16>) -> Constraint {
-        let width = if self.border { 2 } else { 0 };
-        let width = if self.overflow {
-            width + 5
-        } else {
-            width
-                + state
-                    .values()
-                    .iter()
-                    .map(|v| v.to_label().chars().count())
-                    .max()
-                    .unwrap_or(0) as u16
-                + 1
-        };
-        Constraint::Min(width + self.margin.horizontal)
-    }
-
-    fn vertical(&self, _state: &Self::State, _width: Option<u16>) -> Constraint {
-        let height = if self.border { 3 } else { 1 };
-        Constraint::Min(height + self.margin.vertical)
-    }
 }
 
 impl<ValueType> Widget for Selection<ValueType>

@@ -1,11 +1,11 @@
 use derive_builder::Builder;
 
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
-use ratatui::Frame;
+use ratatui::{Frame, layout::Constraint};
 use std::{io::Stdout, time::Duration};
 use ui::{
     AlternateScreen, EventResult,
-    state::{TableState, TableStateBuilder, ToRow},
+    state::{TableState, TableStateBuilder},
     traits::HandleEvents,
     widgets::{Table, TableBuilder},
 };
@@ -19,12 +19,6 @@ struct Item {
 impl Item {
     fn new(name: String, value: u32) -> Self {
         Self { name, value }
-    }
-}
-
-impl ToRow<2> for Item {
-    fn to_row(&self) -> [String; 2] {
-        [self.name.clone(), format!("{}", self.value)]
     }
 }
 

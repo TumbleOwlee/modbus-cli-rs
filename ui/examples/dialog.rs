@@ -142,18 +142,11 @@ impl App {
             Constraint::Min(1),
         ])
         .areas(horizontal_layout[1]);
-        let vertical_layout: [Rect; 5] = Layout::vertical([
-            self.name.vertical(None),
-            self.day.vertical(None),
-            self.street.vertical(None),
-            self.code.vertical(None),
-            self.error.vertical(None),
-        ])
-        .areas(vertical_layout[1]);
+        let vertical_layout: [Rect; 5] =
+            Layout::vertical([Constraint::Length(3); 5]).areas(vertical_layout[1]);
 
         let horizontal_layout: [Rect; 2] =
-            Layout::horizontal([self.name.horizontal(None), self.lastname.horizontal(None)])
-                .areas(vertical_layout[0]);
+            Layout::horizontal([Constraint::Min(5); 2]).areas(vertical_layout[0]);
 
         f.render_stateful_widget(
             &self.name.widget,
@@ -167,9 +160,9 @@ impl App {
         );
 
         let horizontal_layout: [Rect; 3] = Layout::horizontal([
-            self.day.horizontal(None),
-            self.month.horizontal(None),
-            self.year.horizontal(None),
+            Constraint::Length(12),
+            Constraint::Min(10),
+            Constraint::Min(14),
         ])
         .areas(vertical_layout[1]);
 
@@ -192,8 +185,7 @@ impl App {
         );
 
         let horizontal_layout: [Rect; 2] =
-            Layout::horizontal([self.code.horizontal(None), self.city.horizontal(None)])
-                .areas(vertical_layout[3]);
+            Layout::horizontal([Constraint::Min(9), Constraint::Min(10)]).areas(vertical_layout[3]);
 
         f.render_stateful_widget(
             &self.code.widget,

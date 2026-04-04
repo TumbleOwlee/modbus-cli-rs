@@ -9,16 +9,15 @@ use ratatui::{
 };
 
 use crate::{
-    state::{TableState, TableStateBuilder, ToRow},
+    state::{TableState, TableStateBuilder},
     style::TableStyle,
-    traits::AsConstraint,
 };
 
 #[derive(Builder, Debug, Clone, Getters, Setters, CopyGetters, WithSetters)]
 #[getset(set = "pub")]
 pub struct Table<ValueType, const N: usize>
 where
-    ValueType: ToRow<N> + Clone,
+    ValueType: Widget + StatefulWidget,
 {
     #[getset(get = "pub")]
     #[builder(default = "None")]
@@ -42,26 +41,9 @@ where
     marker: PhantomData<ValueType>,
 }
 
-impl<ValueType, const N: usize> AsConstraint for Table<ValueType, N>
-where
-    ValueType: ToRow<N> + Clone,
-{
-    type State = TableState<ValueType, N>;
-
-    fn horizontal(&self, _state: &Self::State, _height: Option<u16>) -> Constraint {
-        let width = if self.border { 7 } else { 5 };
-        Constraint::Min(width + self.margin.horizontal + self.row_margin.horizontal)
-    }
-
-    fn vertical(&self, _state: &Self::State, _width: Option<u16>) -> Constraint {
-        let height = if self.border { 3 } else { 1 };
-        Constraint::Min(height + self.margin.vertical + self.row_margin.vertical)
-    }
-}
-
 impl<ValueType, const N: usize> Widget for Table<ValueType, N>
 where
-    ValueType: ToRow<N> + Clone,
+    ValueType: Widget + StatefulWidget + Clone,
 {
     fn render(self, area: Rect, buf: &mut Buffer) {
         Widget::render(&self, area, buf);
@@ -70,7 +52,7 @@ where
 
 impl<ValueType, const N: usize> Widget for &Table<ValueType, N>
 where
-    ValueType: ToRow<N> + Clone,
+    ValueType: Widget + StatefulWidget + Clone,
 {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let mut state = TableStateBuilder::default().build().unwrap();
@@ -80,9 +62,9 @@ where
 
 impl<ValueType, const N: usize> StatefulWidget for Table<ValueType, N>
 where
-    ValueType: ToRow<N> + Clone,
+    ValueType: Widget + StatefulWidget,
 {
-    type State = TableState<ValueType, N>;
+    type State = TableState<ValueType>;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         StatefulWidget::render(&self, area, buf, state);
@@ -91,9 +73,9 @@ where
 
 impl<ValueType, const N: usize> StatefulWidget for &Table<ValueType, N>
 where
-    ValueType: ToRow<N> + Clone,
+    ValueType: Widget + StatefulWidget,
 {
-    type State = TableState<ValueType, N>;
+    type State = TableState<ValueType>;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         let area = Layout::vertical([
@@ -130,22 +112,22 @@ where
         }
 
         let column_margin = 2;
-        let rows: Vec<_> = state.values().iter().map(|v| v.to_row()).collect();
+        //let rows: Vec<_> = state.values().iter().map(|v| v.row_content()).collect();
 
-        let column_widths = {
-            let mut widths = [0usize; N];
-            // Get widths necessary for each heading
-            for i in 0..N {
-                widths[i] = self.header[i].chars().count() + column_margin;
-            }
-            // Get max widths for each column
-            rows.iter().fold(widths, |mut v, row| {
-                for i in 0..N {
-                    v[i] = std::cmp::max(v[i], row[i].chars().count() + column_margin);
-                }
-                v
-            })
-        };
+        //let column_widths = {
+        //    let mut widths = [0usize; N];
+        //    // Get widths necessary for each heading
+        //    for i in 0..N {
+        //        widths[i] = self.header[i].chars().count() + column_margin;
+        //    }
+        //    // Get max widths for each column
+        //    rows.iter().fold(widths, |mut v, row| {
+        //        for i in 0..N {
+        //            v[i] = std::cmp::max(v[i], row[i].chars().count() + column_margin);
+        //        }
+        //        v
+        //    })
+        //};
 
         unimplemented!("Render of table");
     }

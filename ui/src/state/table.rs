@@ -1,20 +1,16 @@
 use crossterm::event::{KeyCode, KeyModifiers};
 use derive_builder::Builder;
 use getset::{CopyGetters, Getters, Setters};
-use ratatui::widgets::{ScrollbarState as UiScrollbarState, TableState as UiTableState};
+use ratatui::widgets::{StatefulWidget, Widget};
 
 use crate::EventResult;
 use crate::traits::{HandleEvents, SetFocus};
 
-pub trait ToRow<const N: usize> {
-    fn to_row(&self) -> [String; N];
-}
-
 #[derive(Builder, Debug, Clone, Getters, Setters, CopyGetters)]
 #[getset(set = "pub")]
-pub struct TableState<ValueType, const N: usize>
+pub struct TableState<ValueType>
 where
-    ValueType: ToRow<N> + Clone,
+    ValueType: Widget + StatefulWidget,
 {
     #[getset(get_copy = "pub")]
     #[builder(default = "true")]
@@ -29,18 +25,18 @@ where
     values: Vec<ValueType>,
 }
 
-impl<ValueType, const N: usize> SetFocus for TableState<ValueType, N>
+impl<ValueType> SetFocus for TableState<ValueType>
 where
-    ValueType: ToRow<N> + Clone,
+    ValueType: Widget + StatefulWidget,
 {
     fn set_focused(&mut self, focus: bool) {
         self.focused = focus;
     }
 }
 
-impl<ValueType, const N: usize> TableState<ValueType, N>
+impl<ValueType> TableState<ValueType>
 where
-    ValueType: ToRow<N> + Clone,
+    ValueType: Widget + StatefulWidget,
 {
     pub fn move_down(&mut self) {
         self.selection = if self.selection >= self.values.len() - 1 {
@@ -79,9 +75,9 @@ where
     }
 }
 
-impl<ValueType, const N: usize> HandleEvents for TableState<ValueType, N>
+impl<ValueType> HandleEvents for TableState<ValueType>
 where
-    ValueType: ToRow<N> + Clone,
+    ValueType: Widget + StatefulWidget,
 {
     fn handle_events(&mut self, modifiers: KeyModifiers, code: KeyCode) -> EventResult {
         match (modifiers, code) {

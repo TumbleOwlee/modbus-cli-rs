@@ -13,8 +13,6 @@ use ui::{
     widgets::{InputField, InputFieldBuilder},
 };
 
-use ui::traits::AsConstraint;
-
 // Simple app consisting of single input field
 struct App {
     index: usize,
@@ -28,7 +26,7 @@ impl Default for App {
                 .focused(false)
                 .build()
                 .unwrap();
-            4
+            2
         ];
         states[0].set_focused(true);
         Self { index: 0, states }
@@ -52,25 +50,6 @@ fn ui(f: &mut Frame, app: &mut App) {
                 .fg(tailwind::WHITE),
             ..InputFieldStyle::default()
         })
-        .overflow(false)
-        .build()
-        .unwrap();
-    let input_overflow: InputField<String> = InputFieldBuilder::default()
-        .title(Some("Input (O)".to_string()))
-        .border(true)
-        .multiline(false)
-        .margin(Margin {
-            vertical: 0,
-            horizontal: 1,
-        })
-        .style(InputFieldStyle {
-            focused: ratatui::prelude::Style::default().fg(tailwind::INDIGO.c400),
-            cursor: ratatui::prelude::Style::default()
-                .bg(tailwind::INDIGO.c400)
-                .fg(tailwind::WHITE),
-            ..InputFieldStyle::default()
-        })
-        .overflow(true)
         .build()
         .unwrap();
 
@@ -89,49 +68,17 @@ fn ui(f: &mut Frame, app: &mut App) {
                 .fg(tailwind::WHITE),
             ..InputFieldStyle::default()
         })
-        .overflow(false)
         .build()
         .unwrap();
 
-    let input_multiline_overflow: InputField<String> = InputFieldBuilder::default()
-        .title(Some("Input (M+O)".to_string()))
-        .border(true)
-        .multiline(true)
-        .margin(Margin {
-            vertical: 0,
-            horizontal: 1,
-        })
-        .style(InputFieldStyle {
-            focused: ratatui::prelude::Style::default().fg(tailwind::INDIGO.c400),
-            cursor: ratatui::prelude::Style::default()
-                .bg(tailwind::INDIGO.c400)
-                .fg(tailwind::WHITE),
-            ..InputFieldStyle::default()
-        })
-        .overflow(true)
-        .build()
-        .unwrap();
+    let horizontal_layout: [Rect; 2] =
+        Layout::horizontal([Constraint::Min(1), Constraint::Min(1)]).areas(f.area());
 
-    let horizontal_layout: [Rect; 4] = Layout::horizontal([
-        input.horizontal(&app.states[0], None),
-        input_overflow.horizontal(&app.states[1], None),
-        input_multiline.horizontal(&app.states[2], None),
-        input_multiline_overflow.horizontal(&app.states[3], None),
-    ])
-    .areas(f.area());
-
-    let inputs = [
-        input,
-        input_overflow,
-        input_multiline,
-        input_multiline_overflow,
-    ];
-    for i in 0..4 {
-        let vertical_layout: [Rect; 2] = Layout::vertical([
-            inputs[i].vertical(&app.states[i], Some(horizontal_layout[i].width)),
-            Constraint::Min(1),
-        ])
-        .areas(horizontal_layout[i]);
+    let inputs = [input, input_multiline];
+    for i in 0..2 {
+        let vertical_layout: [Rect; 2] =
+            Layout::vertical([Constraint::Length(10), Constraint::Min(1)])
+                .areas(horizontal_layout[i]);
         f.render_stateful_widget(&inputs[i], vertical_layout[0], &mut app.states[i]);
     }
 }
@@ -185,3 +132,5 @@ fn main() {
         println!("Input: {:?}", state.input());
     }
 }
+
+

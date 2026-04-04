@@ -10,7 +10,6 @@ use std::marker::PhantomData;
 
 use crate::state::InputFieldState;
 use crate::style::InputFieldStyle;
-use crate::traits::AsConstraint;
 
 pub trait Validate {
     fn validate(input: &str) -> Result<(), String>;
@@ -43,65 +42,9 @@ where
     #[getset(get = "pub")]
     #[builder(default = "false")]
     multiline: bool,
-    #[getset(get = "pub")]
-    #[builder(default = "true")]
-    overflow: bool,
     #[builder(setter(skip))]
     #[builder(default = "PhantomData")]
     marker: PhantomData<ValueType>,
-}
-
-impl<ValueType> AsConstraint for InputField<ValueType>
-where
-    ValueType: Validate,
-{
-    type State = InputFieldState;
-
-    fn horizontal(&self, state: &Self::State, height: Option<u16>) -> Constraint {
-        let border = if self.border { 4 } else { 0 } + self.margin.horizontal * 2;
-        if self.overflow {
-            Constraint::Min(border + 1)
-        } else {
-            if self.multiline {
-                if let Some(height) = height {
-                    let cnt = state.input().chars().count() as u16;
-                    let border_ver = if self.border { 4 } else { 0 } + self.margin.vertical * 2;
-                    let height = std::cmp::max(height, border_ver + 1) - border_ver;
-                    let width = cnt / height + 1;
-                    Constraint::Min(border + width)
-                } else {
-                    Constraint::Min(border + 1)
-                }
-            } else {
-                Constraint::Min(border + state.input().chars().count() as u16 + 1)
-            }
-        }
-    }
-
-    fn vertical(&self, state: &Self::State, width: Option<u16>) -> Constraint {
-        let border = if self.border { 2 } else { 0 } + self.margin.vertical * 2;
-        if self.overflow {
-            if self.multiline {
-                Constraint::Min(border + 1)
-            } else {
-                Constraint::Length(border + 1)
-            }
-        } else {
-            if self.multiline {
-                if let Some(width) = width {
-                    let cnt = state.input().chars().count() as u16;
-                    let border_hor = if self.border { 4 } else { 0 } + self.margin.horizontal * 2;
-                    let width = std::cmp::max(width, border_hor + 1) - border_hor;
-                    let lines = cnt / width + 1;
-                    Constraint::Min(border + lines)
-                } else {
-                    Constraint::Min(border + 1)
-                }
-            } else {
-                Constraint::Length(border + 1)
-            }
-        }
-    }
 }
 
 impl<ValueType> Widget for InputField<ValueType>
@@ -206,7 +149,7 @@ where
         let text_len = text.chars().count();
 
         // Calculate range of text to display
-        if (area.width as usize) <= text_len {
+        if area.width > 0 && area.height > 0 && (area.width as usize) <= text_len {
             let total_len = area.width * area.height - 1;
             let width = (total_len / 2) as usize;
             // Display width characters left of cursor

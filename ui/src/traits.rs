@@ -1,5 +1,4 @@
 use crossterm::event::{KeyCode, KeyModifiers};
-use ratatui::layout::Constraint;
 use std::io::{Stderr, Stdout, stderr, stdout};
 
 use crate::EventResult;
@@ -32,14 +31,6 @@ impl ToLabel for String {
     fn to_label(&self) -> String {
         self.clone()
     }
-}
-
-pub trait AsConstraint {
-    type State;
-
-    fn horizontal(&self, state: &Self::State, height: Option<u16>) -> Constraint;
-
-    fn vertical(&self, state: &Self::State, width: Option<u16>) -> Constraint;
 }
 
 pub trait SetFocus {
