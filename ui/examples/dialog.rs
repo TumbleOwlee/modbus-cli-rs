@@ -11,9 +11,8 @@ use ui::{
     AlternateScreen, EventResult,
     state::{InputFieldState, InputFieldStateBuilder, SelectionState, SelectionStateBuilder},
     style::{InputFieldStyle, SelectionStyle},
-    traits::HandleEvents,
-    widgets::Widget,
-    widgets::{InputField, InputFieldBuilder, Selection, SelectionBuilder, Validate},
+    traits::{HandleEvents, Margins},
+    widgets::{InputField, InputFieldBuilder, Selection, SelectionBuilder, Validate, Widget},
 };
 
 use derive_focus::{Focus, focusable};
@@ -160,9 +159,9 @@ impl App {
         );
 
         let horizontal_layout: [Rect; 3] = Layout::horizontal([
-            Constraint::Length(12),
+            Constraint::Length(self.day.margins().horizontal + 4),
             Constraint::Min(10),
-            Constraint::Min(14),
+            Constraint::Length(self.year.margins().horizontal + 6),
         ])
         .areas(vertical_layout[1]);
 

@@ -10,6 +10,7 @@ use std::marker::PhantomData;
 
 use crate::state::InputFieldState;
 use crate::style::InputFieldStyle;
+use crate::traits::Margins;
 
 pub trait Validate {
     fn validate(input: &str) -> Result<(), String>;
@@ -45,6 +46,26 @@ where
     #[builder(setter(skip))]
     #[builder(default = "PhantomData")]
     marker: PhantomData<ValueType>,
+}
+
+impl<ValueType> Margins for InputField<ValueType>
+where
+    ValueType: Validate,
+{
+    fn margins(&self) -> Margin {
+        let horizontal = if self.border { 4 } else { 0 } + 2 * self.margin.horizontal + 1;
+        let vertical = if self.border {
+            2
+        } else if self.title.is_some() {
+            1
+        } else {
+            0
+        } + self.margin.vertical;
+        Margin {
+            horizontal,
+            vertical,
+        }
+    }
 }
 
 impl<ValueType> Widget for InputField<ValueType>

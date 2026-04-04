@@ -1,4 +1,5 @@
 use crossterm::event::{KeyCode, KeyModifiers};
+use ratatui::layout::Margin;
 use std::io::{Stderr, Stdout, stderr, stdout};
 
 use crate::EventResult;
@@ -35,4 +36,8 @@ impl ToLabel for String {
 
 pub trait SetFocus {
     fn set_focused(&mut self, focus: bool);
+}
+
+pub trait Margins {
+    fn margins(&self) -> Margin;
 }

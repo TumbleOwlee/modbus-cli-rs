@@ -1,9 +1,10 @@
 use crossterm::event::{KeyCode, KeyModifiers};
 use derive_builder::Builder;
 use getset::{CopyGetters, Getters, Setters};
+use ratatui::layout::Margin;
 
 use crate::EventResult;
-use crate::traits::{HandleEvents, SetFocus};
+use crate::traits::{HandleEvents, Margins, SetFocus};
 
 #[derive(Builder, Debug, Default, Clone, Getters, Setters, CopyGetters)]
 #[getset(set = "pub")]

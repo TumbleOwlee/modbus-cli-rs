@@ -4,11 +4,13 @@ mod table;
 
 use crossterm::event::{KeyCode, KeyModifiers};
 pub use input_field::*;
+use ratatui::layout::Margin;
 use ratatui::widgets::{StatefulWidget, Widget as RenderWidget};
 use ratatui::{buffer::Buffer, layout::Rect};
 pub use selection::*;
 pub use table::*;
 
+use crate::traits::Margins;
 use crate::{
     EventResult,
     traits::{HandleEvents, SetFocus},
@@ -19,6 +21,15 @@ use std::fmt::Debug;
 pub struct Widget<S, W> {
     pub state: S,
     pub widget: W,
+}
+
+impl<S, W> Margins for Widget<S, W>
+where
+    W: Margins,
+{
+    fn margins(&self) -> Margin {
+        self.widget.margins()
+    }
 }
 
 impl<S, W> SetFocus for Widget<S, W>

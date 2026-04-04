@@ -9,9 +9,12 @@ use ratatui::{
 };
 use std::marker::PhantomData;
 
-use crate::state::{SelectionState, SelectionStateBuilder};
 use crate::style::SelectionStyle;
 use crate::traits::ToLabel;
+use crate::{
+    state::{SelectionState, SelectionStateBuilder},
+    traits::Margins,
+};
 
 #[derive(Builder, Debug, Clone, Getters, Setters, CopyGetters, WithSetters)]
 #[getset(set = "pub")]
@@ -34,6 +37,26 @@ where
     #[builder(setter(skip))]
     #[builder(default = "PhantomData")]
     marker: PhantomData<ValueType>,
+}
+
+impl<ValueType> Margins for Selection<ValueType>
+where
+    ValueType: ToLabel + Clone,
+{
+    fn margins(&self) -> Margin {
+        let horizontal = if self.border { 4 } else { 0 } + 2 * self.margin.horizontal;
+        let vertical = if self.border {
+            2
+        } else if self.title.is_some() {
+            1
+        } else {
+            0
+        } + self.margin.vertical;
+        Margin {
+            horizontal,
+            vertical,
+        }
+    }
 }
 
 impl<ValueType> Widget for Selection<ValueType>
