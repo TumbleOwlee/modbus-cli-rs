@@ -5,6 +5,7 @@ use ratatui::style::{Color, Style as UiStyle};
 pub struct InputFieldStyle {
     pub default: UiStyle,
     pub focused: UiStyle,
+    pub placeholder: UiStyle,
     pub cursor: UiStyle,
     pub error: UiStyle,
 }
@@ -16,6 +17,8 @@ impl Default for InputFieldStyle {
             focused: UiStyle::default()
                 .fg(tailwind::INDIGO.c400)
                 .bg(tailwind::SLATE.c950),
+            placeholder: UiStyle::default()
+                .fg(tailwind::NEUTRAL.c500),
             cursor: UiStyle::default()
                 .fg(tailwind::WHITE)
                 .bg(tailwind::INDIGO.c600),

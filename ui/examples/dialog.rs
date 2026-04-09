@@ -234,6 +234,7 @@ fn main() {
             state: InputFieldStateBuilder::default()
                 .focused(true)
                 .disabled(false)
+                .placeholder(Some("Jane".to_string()))
                 .build()
                 .unwrap(),
             widget: InputFieldBuilder::default()
@@ -251,6 +252,7 @@ fn main() {
             state: InputFieldStateBuilder::default()
                 .focused(false)
                 .disabled(false)
+                .placeholder(Some("Doe".to_string()))
                 .build()
                 .unwrap(),
             widget: InputFieldBuilder::default()
@@ -268,6 +270,7 @@ fn main() {
             state: InputFieldStateBuilder::default()
                 .focused(false)
                 .disabled(false)
+                .placeholder(Some("1".to_string()))
                 .build()
                 .unwrap(),
             widget: InputFieldBuilder::default()
@@ -315,6 +318,7 @@ fn main() {
             state: InputFieldStateBuilder::default()
                 .focused(false)
                 .disabled(false)
+                .placeholder(Some("1990".to_string()))
                 .build()
                 .unwrap(),
             widget: InputFieldBuilder::default()
@@ -332,6 +336,7 @@ fn main() {
             state: InputFieldStateBuilder::default()
                 .focused(false)
                 .disabled(false)
+                .placeholder(Some("123 Main St".to_string()))
                 .build()
                 .unwrap(),
             widget: InputFieldBuilder::default()
@@ -349,6 +354,7 @@ fn main() {
             state: InputFieldStateBuilder::default()
                 .focused(false)
                 .disabled(false)
+                .placeholder(Some("12345".to_string()))
                 .build()
                 .unwrap(),
             widget: InputFieldBuilder::default()
@@ -366,6 +372,7 @@ fn main() {
             state: InputFieldStateBuilder::default()
                 .focused(false)
                 .disabled(false)
+                .placeholder(Some("New York".to_string()))
                 .build()
                 .unwrap(),
             widget: InputFieldBuilder::default()

@@ -199,7 +199,9 @@ where
             );
         }
 
-        let text_style = if valid.is_ok() {
+        let text_style = if state.input().is_empty() {
+            self.style.placeholder
+        } else if valid.is_ok() {
             self.style.default
         } else {
             self.style.error
