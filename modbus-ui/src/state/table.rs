@@ -105,8 +105,17 @@ where
         );
     }
 
+    pub fn move_to_right(&mut self) {
+        self.horizontal_scroll =
+            std::cmp::max(self.total_width, self.visible_width) - self.visible_width;
+    }
+
     pub fn move_left(&mut self) {
         self.horizontal_scroll = std::cmp::max(3, self.horizontal_scroll) - 3;
+    }
+
+    pub fn move_to_left(&mut self) {
+        self.horizontal_scroll = 0;
     }
 }
 
@@ -130,6 +139,22 @@ where
             }
             (_, KeyCode::Char('l')) | (_, KeyCode::Right) => {
                 self.move_right();
+                EventResult::Consumed
+            }
+            (_, KeyCode::End) => {
+                self.move_to_right();
+                EventResult::Consumed
+            }
+            (_, KeyCode::Home) => {
+                self.move_to_left();
+                EventResult::Consumed
+            }
+            (_, KeyCode::Char('G')) => {
+                self.move_to_bottom();
+                EventResult::Consumed
+            }
+            (_, KeyCode::Char('g')) => {
+                self.move_to_top();
                 EventResult::Consumed
             }
             _ => EventResult::Unhandled(modifiers, code),

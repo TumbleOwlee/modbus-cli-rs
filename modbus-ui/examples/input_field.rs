@@ -13,6 +13,8 @@ use ratatui::{
 };
 use std::{io::Stdout, time::Duration};
 
+const INPUT_FIELDS: usize = 2;
+
 // Simple app consisting of single input field
 struct App {
     index: usize,
@@ -110,12 +112,12 @@ fn main() {
                             EventResult::Unhandled(KeyModifiers::SHIFT, KeyCode::BackTab)
                             | EventResult::Unhandled(KeyModifiers::SHIFT, KeyCode::Tab) => {
                                 app.states[app.index].set_focused(false);
-                                app.index = (app.index + 3) % 4;
+                                app.index = (app.index + INPUT_FIELDS - 1) % INPUT_FIELDS;
                                 app.states[app.index].set_focused(true);
                             }
                             EventResult::Unhandled(_, KeyCode::Tab) => {
                                 app.states[app.index].set_focused(false);
-                                app.index = (app.index + 1) % 4;
+                                app.index = (app.index + 1) % INPUT_FIELDS;
                                 app.states[app.index].set_focused(true);
                             }
                             _ => {}
