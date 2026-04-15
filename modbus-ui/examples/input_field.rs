@@ -4,6 +4,7 @@ use modbus_ui::{
     state::{InputFieldState, InputFieldStateBuilder},
     style::InputFieldStyle,
     traits::HandleEvents,
+    types::Border,
     widgets::{InputField, InputFieldBuilder},
 };
 use ratatui::{
@@ -39,7 +40,7 @@ impl Default for App {
 fn ui(f: &mut Frame, app: &mut App) {
     let input: InputField<String> = InputFieldBuilder::default()
         .title(Some("Input".to_string()))
-        .border(true)
+        .border(Border::Full(Margin::new(1, 0)))
         .multiline(false)
         .margin(Margin {
             vertical: 0,
@@ -57,7 +58,7 @@ fn ui(f: &mut Frame, app: &mut App) {
 
     let input_multiline: InputField<String> = InputFieldBuilder::default()
         .title(Some("Input (M)".to_string()))
-        .border(true)
+        .border(Border::Full(Margin::new(1, 0)))
         .multiline(true)
         .margin(Margin {
             vertical: 0,

@@ -14,6 +14,7 @@ use crate::traits::ToLabel;
 use crate::{
     state::{SelectionState, SelectionStateBuilder},
     traits::Margins,
+    types::Border,
 };
 
 #[derive(Builder, Debug, Clone, Getters, Setters, CopyGetters, WithSetters)]
@@ -25,9 +26,9 @@ where
     #[getset(get = "pub")]
     #[builder(default = "None")]
     title: Option<String>,
-    #[getset(get_copy = "pub")]
-    #[builder(default = "false")]
-    border: bool,
+    #[getset(get = "pub")]
+    #[builder(default = "Border::None")]
+    border: Border,
     #[getset(get = "pub")]
     #[builder(default = "SelectionStyle::default()")]
     style: SelectionStyle,
@@ -44,9 +45,13 @@ where
     ValueType: ToLabel + Clone,
 {
     fn margins(&self) -> Margin {
-        let horizontal = if self.border { 4 } else { 0 } + 2 * self.margin.horizontal;
-        let vertical = if self.border {
-            2
+        let horizontal = if let Border::Full(margin) = &self.border {
+            4 + margin.horizontal * 2
+        } else {
+            0
+        } + 2 * self.margin.horizontal;
+        let vertical = if let Border::Full(margin) = &self.border {
+            2 + margin.vertical * 2
         } else if self.title.is_some() {
             1
         } else {
@@ -93,11 +98,19 @@ impl<ValueType: ToLabel + Clone> StatefulWidget for &Selection<ValueType> {
     type State = SelectionState<ValueType>;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        let border_lines = if self.border { 2 } else { 0 };
+        let border_lines = if let Border::Full(margin) = &self.border {
+            2 + 2 * margin.vertical as i32
+        } else {
+            0
+        };
         let max_lines = area.height as i32 - border_lines;
         let lines = state.values().len();
         let lines = std::cmp::min(lines as i32, max_lines);
-        let height = if self.border { lines + 2 } else { lines };
+        let height = if let Border::Full(margin) = &self.border {
+            lines + 2 + 2 * margin.vertical as i32
+        } else {
+            lines
+        };
 
         let area = Layout::vertical([
             Constraint::Length(self.margin.vertical),
@@ -114,7 +127,7 @@ impl<ValueType: ToLabel + Clone> StatefulWidget for &Selection<ValueType> {
         .split(area)[1];
 
         // Create block if border is required
-        if self.border {
+        if let Border::Full(margin) = &self.border {
             let style = if state.focused() {
                 self.style.border
             } else {
@@ -126,10 +139,7 @@ impl<ValueType: ToLabel + Clone> StatefulWidget for &Selection<ValueType> {
             }
             let inner = block.inner(area);
             block.render(area, buf);
-            area = inner.inner(Margin {
-                vertical: 0,
-                horizontal: 1,
-            });
+            area = inner.inner(margin.clone());
         }
 
         let values = state

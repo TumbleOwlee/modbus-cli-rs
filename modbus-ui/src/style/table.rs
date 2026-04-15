@@ -17,9 +17,7 @@ impl Default for TableStyle {
             focused: UiStyle::default()
                 .fg(tailwind::INDIGO.c400)
                 .bg(tailwind::SLATE.c900),
-            border: UiStyle::default()
-                .bg(tailwind::INDIGO.c400)
-                .fg(tailwind::SLATE.c950),
+            border: UiStyle::default().fg(tailwind::INDIGO.c400),
             rows: [
                 UiStyle::default()
                     .fg(tailwind::SLATE.c200)

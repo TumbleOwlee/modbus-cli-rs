@@ -5,6 +5,7 @@ use modbus_ui::{
     state::{SelectionState, SelectionStateBuilder},
     style::SelectionStyle,
     traits::{HandleEvents, ToLabel},
+    types::Border,
     widgets::SelectionBuilder,
 };
 use ratatui::{
@@ -44,7 +45,7 @@ fn ui(f: &mut Frame, app: &mut App) {
     let rects = rects[0].layout_vec(&layout);
     let selection = SelectionBuilder::default()
         .title(Some("Mode".to_string()))
-        .border(true)
+        .border(Border::Full(Margin::new(1, 1)))
         .margin(Margin {
             vertical: 0,
             horizontal: 1,

@@ -11,6 +11,7 @@ use std::marker::PhantomData;
 use crate::state::InputFieldState;
 use crate::style::InputFieldStyle;
 use crate::traits::Margins;
+use crate::types::Border;
 
 pub trait Validate {
     fn validate(input: &str) -> Result<(), String>;
@@ -28,9 +29,9 @@ pub struct InputField<ValueType>
 where
     ValueType: Validate,
 {
-    #[getset(get_copy = "pub")]
-    #[builder(default = "false")]
-    border: bool,
+    #[getset(get = "pub")]
+    #[builder(default = "Border::None")]
+    border: Border,
     #[getset(get = "pub")]
     #[builder(default = "InputFieldStyle::default()")]
     style: InputFieldStyle,
@@ -53,9 +54,14 @@ where
     ValueType: Validate,
 {
     fn margins(&self) -> Margin {
-        let horizontal = if self.border { 4 } else { 0 } + 2 * self.margin.horizontal + 1;
-        let vertical = if self.border {
-            2
+        let horizontal = if let Border::Full(margin) = &self.border {
+            4 + margin.horizontal * 2
+        } else {
+            0
+        } + 2 * self.margin.horizontal
+            + 1;
+        let vertical = if let Border::Full(margin) = &self.border {
+            2 + margin.vertical * 2
         } else if self.title.is_some() {
             1
         } else {
@@ -107,7 +113,11 @@ where
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         buf.set_style(area, self.style.default);
 
-        let mut height = if self.border { 2 } else { 0 };
+        let mut height = if let Border::Full(margin) = &self.border {
+            2 + margin.vertical * 2
+        } else {
+            0
+        };
         if self.multiline {
             height += std::cmp::max(1, area.height);
         } else {
@@ -135,7 +145,7 @@ where
         };
 
         // Create block if border is required
-        if self.border {
+        if let Border::Full(margin) = &self.border {
             let style = if state.focused() && !state.disabled() {
                 self.style.focused
             } else {
@@ -152,10 +162,7 @@ where
             }
             let inner = block.inner(area);
             block.render(area, buf);
-            area = inner.inner(Margin {
-                vertical: 0,
-                horizontal: 1,
-            });
+            area = inner.inner(margin.clone());
         }
 
         let input = state.input();

@@ -15,6 +15,7 @@ use ratatui::{
 use crate::{
     state::{TableState, TableStateBuilder},
     style::TableStyle,
+    types::Border,
 };
 
 pub trait Header<const N: usize> {
@@ -37,9 +38,9 @@ where
     #[getset(get = "pub")]
     #[builder(default = "None")]
     title: Option<String>,
-    #[getset(get_copy = "pub")]
-    #[builder(default = "false")]
-    border: bool,
+    #[getset(get = "pub")]
+    #[builder(default = "Border::None")]
+    border: Border,
     #[getset(get = "pub")]
     #[builder(default = "TableStyle::default()")]
     style: TableStyle,
@@ -113,7 +114,7 @@ where
         .split(area)[1];
 
         // Create block if border is required
-        if self.border {
+        if let Border::Full(margin) = &self.border {
             let style = if state.focused() {
                 self.style.border
             } else {
@@ -125,10 +126,7 @@ where
             }
             let inner = block.inner(area);
             block.render(area, buf);
-            area = inner.inner(Margin {
-                vertical: 0,
-                horizontal: 1,
-            });
+            area = inner.inner(margin.clone());
         }
 
         let header = H::header();
