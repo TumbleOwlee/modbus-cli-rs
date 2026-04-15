@@ -1,3 +1,13 @@
 [workspace]
 resolver = "3"
-members = ["lua", "memory", "register", "log", "net", "util", "ui", "cli", "derive_focus"]
+members = [
+    "modbus-lua",
+    "modbus-mem",
+    "modbus-reg",
+    "modbus-log",
+    "modbus-net",
+    "modbus-util",
+    "modbus-ui",
+    "modbus-cli",
+    "modbus-derive",
+]

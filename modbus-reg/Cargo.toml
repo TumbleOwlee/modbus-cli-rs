@@ -1,0 +1,14 @@
+[package]
+name = "modbus-reg"
+version = "0.1.0"
+edition = "2024"
+authors = ["David Loewe <49597367+TumbleOwlee@users.noreply.github.com>"]
+
+[dependencies]
+anyhow = "1.0.100"
+derive-getters = "0.5.0"
+derive_setters = "0.1.8"
+itertools = "0.14.0"
+modbus-mem = { path = "../modbus-mem" }
+serde = { version = "1.0.228", features = ["derive"] }
+tokio-modbus = "0.17.0"

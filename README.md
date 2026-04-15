@@ -20,7 +20,7 @@ This repository provides a Nightly build of the tool. Please check out the Relea
 
 <p align="center">
     <p align="center">
-        <img src="./img/modbus-cli-rs.png" style="border-radius: 8px">
+        <img src="./images/modbus-cli-rs.png" style="border-radius: 8px">
     </p>
 </p>
 
@@ -28,7 +28,7 @@ This repository provides a Nightly build of the tool. Please check out the Relea
 
 <p align="center">
     <p align="center">
-        <img src="./img/modbus-cli-rs-compact.jpg" style="border-radius: 8px">
+        <img src="./images/modbus-cli-rs-compact.jpg" style="border-radius: 8px">
     </p>
 </p>
 

@@ -1,0 +1,25 @@
+[package]
+name = "cli"
+version = "0.1.0"
+edition = "2024"
+authors = ["David Loewe <49597367+TumbleOwlee@users.noreply.github.com>"]
+
+[dependencies]
+modbus-util = { path = "../modbus-util" }
+modbus-reg = { path = "../modbus-reg" }
+modbus-ui = { path = "../modbus-ui" }
+modbus-log = { path = "../modbus-log" }
+modbus-lua = { path = "../modbus-lua" }
+modbus-mem = { path = "../modbus-mem" }
+modbus-net = { path = "../modbus-net" }
+anyhow = "1.0.100"
+clap = { version = "4.5.54", features = ["derive"] }
+crossterm = "0.29.0"
+ratatui = { version = "0.30.0", features = [
+    "all-widgets",
+    "unstable-widget-ref",
+] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+tokio = { version = "1.49.0", features = ["sync", "time", "rt"] }
+toml = "0.9.11"

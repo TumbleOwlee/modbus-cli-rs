@@ -1,0 +1,17 @@
+[package]
+name = "modbus-derive"
+version = "0.1.0"
+edition = "2024"
+authors = ["David Loewe <49597367+TumbleOwlee@users.noreply.github.com>"]
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "1.0.106"
+quote = "1.0.45"
+syn = "2.0.117"
+
+[dev-dependencies]
+modbus-ui = { path = "../modbus-ui" }
+crossterm = "0.29.0"
