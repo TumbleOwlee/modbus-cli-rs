@@ -1,13 +1,13 @@
 use derive_builder::Builder;
 
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
-use ratatui::{Frame, layout::Constraint};
+use ratatui::{Frame, layout::Margin};
 use std::{io::Stdout, time::Duration};
 use ui::{
     AlternateScreen, EventResult,
     state::{TableState, TableStateBuilder},
     traits::HandleEvents,
-    widgets::{Table, TableBuilder},
+    widgets::{Header, Table, TableBuilder, TableEntry},
 };
 
 #[derive(Clone, Debug)]
@@ -22,19 +22,43 @@ impl Item {
     }
 }
 
+#[derive(Clone)]
+struct ItemHeader {}
+
+impl Header<2> for ItemHeader {
+    fn header() -> [String; 2] {
+        ["Name".to_string(), "Value".to_string()]
+    }
+
+    fn widths() -> [u16; 2] {
+        [50, 50]
+    }
+}
+
+impl TableEntry<2> for Item {
+    fn values(&self) -> [String; 2] {
+        [self.name.clone(), format!("{}", self.value)]
+    }
+
+    fn height(&self) -> u16 {
+        self.value as u16
+    }
+}
+
 // Simple app consisting of single input field
 #[derive(Builder, Debug)]
 struct App {
     pub state: TableState<Item, 2>,
 }
 
-// Render simple input field
-fn ui(f: &mut Frame, app: &mut App) {
-    let table: Table<Item, 2> = TableBuilder::default()
-        .header(["Name".to_string(), "Value".to_string()])
-        .build()
-        .unwrap();
-    //f.render_stateful_widget(table, f.area(), &mut app.state);
+impl App {
+    fn render(&mut self, f: &mut Frame) {
+        let table: Table<Item, ItemHeader, 2> = TableBuilder::default()
+            .row_margin(Margin::new(0, 1))
+            .build()
+            .unwrap();
+        f.render_stateful_widget(table, f.area(), &mut self.state);
+    }
 }
 
 fn main() {
@@ -52,7 +76,7 @@ fn main() {
                     Item::new("Value 3".to_string(), 3),
                     Item::new("Value 4".to_string(), 4),
                     Item::new("Value 5".to_string(), 5),
-                    Item::new("Value 6".to_string(), 6),
+                    Item::new("Value 1 Value 2 Value 3 Value 4 Value 5 Value 6 Value 7 Value 8 Value 6 Value 6 Value 6 Value 6 Value 6 Value 6 Value 6 Value 6".to_string(), 6),
                 ])
                 .build()
                 .unwrap(),
@@ -62,7 +86,7 @@ fn main() {
 
     loop {
         // Draw app
-        screen.draw(|f| ui(f, &mut app)).unwrap();
+        screen.draw(|f| app.render(f)).unwrap();
 
         // Check for events
         if event::poll(Duration::from_millis(50)).unwrap() {
@@ -85,7 +109,11 @@ fn main() {
     }
 
     drop(screen);
-    let value = app.state.values().get(app.state.selection()).unwrap();
+    let value = app
+        .state
+        .values()
+        .get(app.state.table_state().selected().unwrap_or(0))
+        .unwrap();
     println!(
         "Selection: {{ name: {}, value: {} }}",
         value.name, value.value

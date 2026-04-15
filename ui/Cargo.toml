@@ -8,6 +8,7 @@ authors = ["David Loewe <49597367+TumbleOwlee@users.noreply.github.com>"]
 crossterm = "0.29.0"
 derive_builder = "0.20.2"
 getset = "0.1.6"
+itertools = "0.14.0"
 ratatui = { version = "0.30.0", features = ["all-widgets", "unstable-widget-ref"] }
 
 [dev-dependencies]

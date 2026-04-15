@@ -1,83 +1,118 @@
 use crossterm::event::{KeyCode, KeyModifiers};
 use derive_builder::Builder;
 use getset::{CopyGetters, Getters, Setters};
-use ratatui::widgets::{StatefulWidget, Widget};
+use ratatui::widgets::{ScrollbarState, TableState as UiTableState};
 
 use crate::EventResult;
 use crate::traits::{HandleEvents, SetFocus};
+use crate::widgets::TableEntry;
 
 #[derive(Builder, Debug, Clone, Getters, Setters, CopyGetters)]
 #[getset(set = "pub")]
-pub struct TableState<ValueType>
+pub struct TableState<V, const N: usize>
 where
-    ValueType: Widget + StatefulWidget,
+    V: TableEntry<N>,
 {
     #[getset(get_copy = "pub")]
     #[builder(default = "true")]
     focused: bool,
     #[getset(get_copy = "pub")]
-    #[builder(setter(skip), default = "0")]
-    selection: usize,
+    #[builder(setter(skip), default = "ScrollbarState::default()")]
+    vertical_scroll: ScrollbarState,
     #[getset(get_copy = "pub")]
     #[builder(setter(skip), default = "0")]
-    horizontal_scroll: usize,
+    horizontal_scroll: u16,
     #[getset(get = "pub")]
-    values: Vec<ValueType>,
+    values: Vec<V>,
+    #[getset(get_copy = "pub")]
+    #[builder(setter(skip), default = "0")]
+    visible_width: u16,
+    #[getset(get_copy = "pub")]
+    #[builder(setter(skip), default = "0")]
+    total_width: u16,
+    #[getset(get_copy = "pub")]
+    #[builder(setter(skip), default = "UiTableState::default().with_selected(0)")]
+    table_state: UiTableState,
 }
 
-impl<ValueType> SetFocus for TableState<ValueType>
+impl<V, const N: usize> SetFocus for TableState<V, N>
 where
-    ValueType: Widget + StatefulWidget,
+    V: TableEntry<N>,
 {
     fn set_focused(&mut self, focus: bool) {
         self.focused = focus;
     }
 }
 
-impl<ValueType> TableState<ValueType>
+impl<V, const N: usize> TableState<V, N>
 where
-    ValueType: Widget + StatefulWidget,
+    V: TableEntry<N>,
 {
     pub fn move_down(&mut self) {
-        self.selection = if self.selection >= self.values.len() - 1 {
-            0
+        if self.values.is_empty() {
+            self.table_state.select(None);
+            self.vertical_scroll = self.vertical_scroll.position(0);
         } else {
-            self.selection + 1
-        };
+            let i = self
+                .table_state
+                .selected()
+                .map(|i| std::cmp::min(i + 1, std::cmp::max(self.values.len(), 1) - 1))
+                .unwrap_or(0);
+            self.table_state.select(Some(i));
+            self.vertical_scroll = self.vertical_scroll.position(i);
+        }
     }
 
     pub fn move_up(&mut self) {
-        self.selection = if self.selection == 0 {
-            self.values.len() - 1
+        if self.values.is_empty() {
+            self.table_state.select(None);
+            self.vertical_scroll = self.vertical_scroll.position(0);
         } else {
-            self.selection - 1
-        };
+            let i = self
+                .table_state
+                .selected()
+                .map(|i| std::cmp::max(i, 1) - 1)
+                .unwrap_or(0);
+            self.table_state.select(Some(i));
+            self.vertical_scroll = self.vertical_scroll.position(i);
+        }
     }
 
     pub fn move_to_bottom(&mut self) {
-        self.selection = if self.values.is_empty() {
-            0
+        if self.values.is_empty() {
+            self.table_state.select(None);
+            self.vertical_scroll = self.vertical_scroll.position(0);
         } else {
-            self.values.len() - 1
-        };
+            self.table_state.select(Some(self.values.len() - 1));
+            self.vertical_scroll = self.vertical_scroll.position(self.values.len() - 1);
+        }
     }
 
     pub fn move_to_top(&mut self) {
-        self.selection = 0;
+        if self.values.is_empty() {
+            self.table_state.select(None);
+            self.vertical_scroll = self.vertical_scroll.position(0);
+        } else {
+            self.table_state.select(Some(0));
+            self.vertical_scroll = self.vertical_scroll.position(0);
+        }
     }
 
     pub fn move_right(&mut self) {
-        self.horizontal_scroll += 1;
+        self.horizontal_scroll = std::cmp::min(
+            std::cmp::max(self.total_width, self.visible_width) - self.visible_width,
+            self.horizontal_scroll + 3,
+        );
     }
 
     pub fn move_left(&mut self) {
-        self.horizontal_scroll -= if self.horizontal_scroll > 0 { 1 } else { 0 };
+        self.horizontal_scroll = std::cmp::max(3, self.horizontal_scroll) - 3;
     }
 }
 
-impl<ValueType> HandleEvents for TableState<ValueType>
+impl<V, const N: usize> HandleEvents for TableState<V, N>
 where
-    ValueType: Widget + StatefulWidget,
+    V: TableEntry<N>,
 {
     fn handle_events(&mut self, modifiers: KeyModifiers, code: KeyCode) -> EventResult {
         match (modifiers, code) {
