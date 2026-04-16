@@ -111,7 +111,7 @@ where
     type State = InputFieldState;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        buf.set_style(area, self.style.default);
+        buf.set_style(area, self.style.general);
 
         let mut height = if let Border::Full(margin) = &self.border {
             2 + margin.vertical * 2
@@ -149,7 +149,7 @@ where
             let style = if state.focused() && !state.disabled() {
                 self.style.focused
             } else {
-                self.style.default
+                self.style.general
             };
             let style = if valid.is_ok() {
                 style
@@ -209,7 +209,7 @@ where
         let text_style = if state.input().is_empty() {
             self.style.placeholder
         } else if valid.is_ok() {
-            self.style.default
+            self.style.general
         } else {
             self.style.error
         };

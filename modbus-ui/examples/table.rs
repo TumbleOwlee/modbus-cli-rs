@@ -3,11 +3,16 @@ use derive_builder::Builder;
 use modbus_ui::{
     AlternateScreen, EventResult,
     state::{TableState, TableStateBuilder},
+    style::TableStyleBuilder,
     traits::HandleEvents,
     types::Border,
     widgets::{Header, Table, TableBuilder, TableEntry},
 };
-use ratatui::{Frame, layout::Margin};
+use ratatui::{
+    Frame,
+    layout::Margin,
+    style::{Color, palette::tailwind},
+};
 use std::{io::Stdout, time::Duration};
 
 #[derive(Clone, Debug)]
@@ -55,6 +60,16 @@ impl App {
     fn render(&mut self, f: &mut Frame) {
         let table: Table<Item, ItemHeader, 2> = TableBuilder::default()
             .margin(Margin::new(0, 0))
+            .style(
+                TableStyleBuilder::default()
+                    .focused(
+                        ratatui::style::Style::default()
+                            .bg(tailwind::INDIGO.c900)
+                            .fg(tailwind::SLATE.c200),
+                    )
+                    .build()
+                    .unwrap(),
+            )
             .row_margin(Margin::new(0, 1))
             .border(Border::Full(Margin::new(1, 1)))
             .title(Some("Some Table".to_string()))

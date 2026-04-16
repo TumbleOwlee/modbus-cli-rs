@@ -1,28 +1,26 @@
+use derive_builder::Builder;
+use getset::{CopyGetters, Getters, Setters};
 use ratatui::style::palette::tailwind;
-use ratatui::style::{Color, Style as UiStyle};
+use ratatui::style::{Color, Style};
 
-#[derive(Debug, Clone)]
+#[derive(Builder, Debug, Clone, Getters, Setters, CopyGetters)]
+#[getset(set = "pub")]
 pub struct InputFieldStyle {
-    pub default: UiStyle,
-    pub focused: UiStyle,
-    pub placeholder: UiStyle,
-    pub cursor: UiStyle,
-    pub error: UiStyle,
+    #[builder(default = "Style::default().fg(tailwind::WHITE).bg(Color::default())")]
+    pub general: Style,
+    #[builder(default = "Style::default().fg(tailwind::INDIGO.c950).bg(tailwind::SLATE.c950)")]
+    pub focused: Style,
+    #[builder(default = "Style::default().fg(tailwind::NEUTRAL.c500)")]
+    pub placeholder: Style,
+    #[builder(default = "Style::default().fg(tailwind::WHITE).bg(tailwind::INDIGO.c950)")]
+    pub cursor: Style,
+    #[getset(get = "pub")]
+    #[builder(default = "Style::default().fg(tailwind::RED.c500)")]
+    pub error: Style,
 }
 
 impl Default for InputFieldStyle {
     fn default() -> Self {
-        InputFieldStyle {
-            default: UiStyle::default().fg(tailwind::WHITE).bg(Color::default()),
-            focused: UiStyle::default()
-                .fg(tailwind::INDIGO.c400)
-                .bg(tailwind::SLATE.c950),
-            placeholder: UiStyle::default()
-                .fg(tailwind::NEUTRAL.c500),
-            cursor: UiStyle::default()
-                .fg(tailwind::WHITE)
-                .bg(tailwind::INDIGO.c600),
-            error: UiStyle::default().fg(tailwind::RED.c500),
-        }
+        InputFieldStyleBuilder::default().build().unwrap()
     }
 }

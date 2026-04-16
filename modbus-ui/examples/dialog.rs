@@ -12,6 +12,7 @@ use modbus_ui::{
     state::{InputFieldState, InputFieldStateBuilder, SelectionState, SelectionStateBuilder},
     style::{InputFieldStyle, SelectionStyle},
     traits::{HandleEvents, Margins},
+    types::Border,
     widgets::{InputField, InputFieldBuilder, Selection, SelectionBuilder, Validate, Widget},
 };
 
@@ -225,7 +226,7 @@ fn main() {
     let error_style = InputFieldStyle {
         focused: ratatui::prelude::Style::default().fg(tailwind::RED.c500),
         cursor: ratatui::prelude::Style::default(),
-        default: ratatui::prelude::Style::default().fg(tailwind::RED.c500),
+        general: ratatui::prelude::Style::default().fg(tailwind::RED.c500),
         ..InputFieldStyle::default()
     };
     // Create app state
@@ -238,7 +239,7 @@ fn main() {
                 .build()
                 .unwrap(),
             widget: InputFieldBuilder::default()
-                .border(true)
+                .border(Border::Full(Margin::new(1, 0)))
                 .title(Some("Name".to_string()))
                 .margin(Margin {
                     vertical: 0,
@@ -256,7 +257,7 @@ fn main() {
                 .build()
                 .unwrap(),
             widget: InputFieldBuilder::default()
-                .border(true)
+                .border(Border::Full(Margin::new(1, 0)))
                 .title(Some("Lastname".to_string()))
                 .margin(Margin {
                     vertical: 0,
@@ -274,7 +275,7 @@ fn main() {
                 .build()
                 .unwrap(),
             widget: InputFieldBuilder::default()
-                .border(true)
+                .border(Border::Full(Margin::new(1, 0)))
                 .title(Some("Day".to_string()))
                 .margin(Margin {
                     vertical: 0,
@@ -304,7 +305,7 @@ fn main() {
                 .build()
                 .unwrap(),
             widget: SelectionBuilder::default()
-                .border(true)
+                .border(Border::Full(Margin::new(1, 0)))
                 .title(Some("Month".to_string()))
                 .margin(Margin {
                     vertical: 0,
@@ -322,7 +323,7 @@ fn main() {
                 .build()
                 .unwrap(),
             widget: InputFieldBuilder::default()
-                .border(true)
+                .border(Border::Full(Margin::new(1, 0)))
                 .title(Some("Year".to_string()))
                 .margin(Margin {
                     vertical: 0,
@@ -340,7 +341,7 @@ fn main() {
                 .build()
                 .unwrap(),
             widget: InputFieldBuilder::default()
-                .border(true)
+                .border(Border::Full(Margin::new(1, 0)))
                 .title(Some("Street".to_string()))
                 .margin(Margin {
                     vertical: 0,
@@ -358,7 +359,7 @@ fn main() {
                 .build()
                 .unwrap(),
             widget: InputFieldBuilder::default()
-                .border(true)
+                .border(Border::Full(Margin::new(1, 0)))
                 .title(Some("Postalcode".to_string()))
                 .margin(Margin {
                     vertical: 0,
@@ -376,7 +377,7 @@ fn main() {
                 .build()
                 .unwrap(),
             widget: InputFieldBuilder::default()
-                .border(true)
+                .border(Border::Full(Margin::new(1, 0)))
                 .title(Some("City".to_string()))
                 .margin(Margin {
                     vertical: 0,
@@ -393,7 +394,7 @@ fn main() {
                 .build()
                 .unwrap(),
             widget: InputFieldBuilder::default()
-                .border(false)
+                .border(Border::Full(Margin::new(1, 0)))
                 .title(None)
                 .margin(Margin {
                     vertical: 0,

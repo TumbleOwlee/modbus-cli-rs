@@ -118,7 +118,7 @@ where
             let style = if state.focused() {
                 self.style.border
             } else {
-                self.style.default
+                self.style.general
             };
             let mut block = Block::bordered().style(style);
             if let Some(title) = self.title.as_ref() {

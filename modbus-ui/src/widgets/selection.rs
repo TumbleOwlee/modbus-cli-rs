@@ -131,7 +131,7 @@ impl<ValueType: ToLabel + Clone> StatefulWidget for &Selection<ValueType> {
             let style = if state.focused() {
                 self.style.border
             } else {
-                self.style.default
+                self.style.general
             };
             let mut block = Block::bordered().style(style);
             if let Some(title) = self.title.as_ref() {
@@ -186,7 +186,7 @@ impl<ValueType: ToLabel + Clone> StatefulWidget for &Selection<ValueType> {
                 if state.focused() {
                     Text::from(text).style(self.style.focused.clone())
                 } else {
-                    Text::from(text).style(self.style.default.clone())
+                    Text::from(text).style(self.style.general.clone())
                 }
             } else {
                 Text::from(v).style(self.style.rows[i % 2])
