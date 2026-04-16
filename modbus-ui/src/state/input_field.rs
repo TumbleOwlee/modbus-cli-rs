@@ -10,10 +10,10 @@ use crate::traits::{HandleEvents, Margins, SetFocus};
 #[getset(set = "pub")]
 pub struct InputFieldState {
     #[getset(get = "pub")]
-    #[builder(setter(skip))]
+    #[builder(default = "String::new()")]
     input: String,
     #[getset(get_copy = "pub")]
-    #[builder(setter(skip))]
+    #[builder(default = "0")]
     cursor: usize,
     #[getset(get_copy = "pub")]
     #[builder(default = "true")]
@@ -29,6 +29,10 @@ pub struct InputFieldState {
 impl SetFocus for InputFieldState {
     fn set_focused(&mut self, focus: bool) {
         self.focused = focus;
+    }
+
+    fn is_focused(&self) -> bool {
+        self.focused
     }
 }
 

@@ -70,59 +70,89 @@ impl Register {
                 .flat_map(|v| [(v >> 8) as u8, (v & 0xFF) as u8]);
 
             match &self.format {
-                Format::U8(e) => Ok(Value::U8(match e {
-                    Endian::Big => ParseFromU8::<u16>::parse(bytes) as u8,
-                    Endian::Little => ParseFromU8::<u16>::parse(bytes.rev()) as u8,
-                })),
-                Format::U16(e) => Ok(Value::U16(match e {
-                    Endian::Big => bytes.parse(),
-                    Endian::Little => bytes.rev().parse(),
-                })),
-                Format::U32(e) => Ok(Value::U32(match e {
-                    Endian::Big => bytes.parse(),
-                    Endian::Little => bytes.rev().parse(),
-                })),
-                Format::U64(e) => Ok(Value::U64(match e {
-                    Endian::Big => bytes.parse(),
-                    Endian::Little => bytes.rev().parse(),
-                })),
-                Format::U128(e) => Ok(Value::U128(match e {
-                    Endian::Big => bytes.parse(),
-                    Endian::Little => bytes.rev().parse(),
-                })),
-                Format::I8(e) => Ok(Value::I8(match e {
-                    Endian::Big => ParseFromU8::<u16>::parse(bytes) as i8,
-                    Endian::Little => ParseFromU8::<u16>::parse(bytes.rev()) as i8,
-                })),
-                Format::I16(e) => Ok(Value::I16(match e {
-                    Endian::Big => bytes.parse(),
-                    Endian::Little => bytes.rev().parse(),
-                })),
-                Format::I32(e) => Ok(Value::I32(match e {
-                    Endian::Big => bytes.parse(),
-                    Endian::Little => bytes.rev().parse(),
-                })),
-                Format::I64(e) => Ok(Value::I64(match e {
-                    Endian::Big => bytes.parse(),
-                    Endian::Little => bytes.rev().parse(),
-                })),
-                Format::I128(e) => Ok(Value::I128(match e {
-                    Endian::Big => bytes.parse(),
-                    Endian::Little => bytes.rev().parse(),
-                })),
-                Format::F32(e) => {
+                Format::U8((e, r)) => Ok(Value::U8((
+                    match e {
+                        Endian::Big => ParseFromU8::<u16>::parse(bytes) as u8,
+                        Endian::Little => ParseFromU8::<u16>::parse(bytes.rev()) as u8,
+                    },
+                    r.clone(),
+                ))),
+                Format::U16((e, r)) => Ok(Value::U16((
+                    match e {
+                        Endian::Big => bytes.parse(),
+                        Endian::Little => bytes.rev().parse(),
+                    },
+                    r.clone(),
+                ))),
+                Format::U32((e, r)) => Ok(Value::U32((
+                    match e {
+                        Endian::Big => bytes.parse(),
+                        Endian::Little => bytes.rev().parse(),
+                    },
+                    r.clone(),
+                ))),
+                Format::U64((e, r)) => Ok(Value::U64((
+                    match e {
+                        Endian::Big => bytes.parse(),
+                        Endian::Little => bytes.rev().parse(),
+                    },
+                    r.clone(),
+                ))),
+                Format::U128((e, r)) => Ok(Value::U128((
+                    match e {
+                        Endian::Big => bytes.parse(),
+                        Endian::Little => bytes.rev().parse(),
+                    },
+                    r.clone(),
+                ))),
+                Format::I8((e, r)) => Ok(Value::I8((
+                    match e {
+                        Endian::Big => ParseFromU8::<u16>::parse(bytes) as i8,
+                        Endian::Little => ParseFromU8::<u16>::parse(bytes.rev()) as i8,
+                    },
+                    r.clone(),
+                ))),
+                Format::I16((e, r)) => Ok(Value::I16((
+                    match e {
+                        Endian::Big => bytes.parse(),
+                        Endian::Little => bytes.rev().parse(),
+                    },
+                    r.clone(),
+                ))),
+                Format::I32((e, r)) => Ok(Value::I32((
+                    match e {
+                        Endian::Big => bytes.parse(),
+                        Endian::Little => bytes.rev().parse(),
+                    },
+                    r.clone(),
+                ))),
+                Format::I64((e, r)) => Ok(Value::I64((
+                    match e {
+                        Endian::Big => bytes.parse(),
+                        Endian::Little => bytes.rev().parse(),
+                    },
+                    r.clone(),
+                ))),
+                Format::I128((e, r)) => Ok(Value::I128((
+                    match e {
+                        Endian::Big => bytes.parse(),
+                        Endian::Little => bytes.rev().parse(),
+                    },
+                    r.clone(),
+                ))),
+                Format::F32((e, r)) => {
                     let u: u32 = match e {
                         Endian::Big => bytes.parse(),
                         Endian::Little => bytes.rev().parse(),
                     };
-                    Ok(Value::F32(f32::from_bits(u)))
+                    Ok(Value::F32((f32::from_bits(u), r.clone())))
                 }
-                Format::F64(e) => {
+                Format::F64((e, r)) => {
                     let u: u64 = match e {
                         Endian::Big => bytes.parse(),
                         Endian::Little => bytes.rev().parse(),
                     };
-                    Ok(Value::F64(f64::from_bits(u)))
+                    Ok(Value::F64((f64::from_bits(u), r.clone())))
                 }
                 Format::Ascii(_) => Ok(Value::Ascii(
                     String::from_utf8(bytes.collect())
@@ -134,7 +164,7 @@ impl Register {
 
     pub fn encode(&self, s: &str) -> anyhow::Result<Vec<u16>> {
         match &self.format {
-            Format::F32(e) => {
+            Format::F32((e, _)) => {
                 let val: f32 = if let Some(s) = s.strip_prefix("0x") {
                     u32::from_str_radix(s, 16).map(f32::from_bits)?
                 } else {
@@ -145,7 +175,7 @@ impl Register {
                     Endian::Little => val.to_bits().to_le_bytes().iter().into_vec()?,
                 })
             }
-            Format::F64(e) => {
+            Format::F64((e, _)) => {
                 let val: f64 = if let Some(s) = s.strip_prefix("0x") {
                     u64::from_str_radix(s, 16).map(f64::from_bits)?
                 } else {
@@ -169,7 +199,7 @@ impl Register {
                     Alignment::Right => Ok(zeroes.chain(s.bytes()).take(length).into_vec()?),
                 }
             }
-            Format::U8(e) => {
+            Format::U8((e, _)) => {
                 let val: u8 = if let Some(s) = s.strip_prefix("0x") {
                     u8::from_str_radix(s, 16)?
                 } else {
@@ -180,7 +210,7 @@ impl Register {
                     Endian::Little => vec![(val as u16) << 8],
                 })
             }
-            Format::U16(e) => {
+            Format::U16((e, _)) => {
                 let val: u16 = if let Some(s) = s.strip_prefix("0x") {
                     u16::from_str_radix(s, 16)?
                 } else {
@@ -191,7 +221,7 @@ impl Register {
                     Endian::Little => vec![val.to_le()],
                 })
             }
-            Format::U32(e) => {
+            Format::U32((e, _)) => {
                 let val: u32 = if let Some(s) = s.strip_prefix("0x") {
                     u32::from_str_radix(s, 16)?
                 } else {
@@ -202,7 +232,7 @@ impl Register {
                     Endian::Little => val.to_le_bytes().iter().into_vec()?,
                 })
             }
-            Format::U64(e) => {
+            Format::U64((e, _)) => {
                 let val: u64 = if let Some(s) = s.strip_prefix("0x") {
                     u64::from_str_radix(s, 16)?
                 } else {
@@ -213,7 +243,7 @@ impl Register {
                     Endian::Little => val.to_le_bytes().iter().into_vec()?,
                 })
             }
-            Format::U128(e) => {
+            Format::U128((e, _)) => {
                 let val: u128 = if let Some(s) = s.strip_prefix("0x") {
                     u128::from_str_radix(s, 16)?
                 } else {
@@ -224,7 +254,7 @@ impl Register {
                     Endian::Little => val.to_le_bytes().iter().into_vec()?,
                 })
             }
-            Format::I8(e) => {
+            Format::I8((e, _)) => {
                 let val: i8 = if let Some(s) = s.strip_prefix("-0x") {
                     -i8::from_str_radix(s, 16)?
                 } else if let Some(s) = s.strip_prefix("0x") {
@@ -242,7 +272,7 @@ impl Register {
                     Endian::Little => vec![(val as u16) << 8],
                 })
             }
-            Format::I16(e) => {
+            Format::I16((e, _)) => {
                 let val: i16 = if let Some(s) = s.strip_prefix("-0x") {
                     -i16::from_str_radix(s, 16)?
                 } else if let Some(s) = s.strip_prefix("0x") {
@@ -260,7 +290,7 @@ impl Register {
                     Endian::Little => val.to_le_bytes().iter().into_vec()?,
                 })
             }
-            Format::I32(e) => {
+            Format::I32((e, _)) => {
                 let val: i32 = if let Some(s) = s.strip_prefix("-0x") {
                     -i32::from_str_radix(s, 16)?
                 } else if let Some(s) = s.strip_prefix("0x") {
@@ -278,7 +308,7 @@ impl Register {
                     Endian::Little => val.to_le_bytes().iter().into_vec()?,
                 })
             }
-            Format::I64(e) => {
+            Format::I64((e, _)) => {
                 let val: i64 = if let Some(s) = s.strip_prefix("-0x") {
                     -i64::from_str_radix(s, 16)?
                 } else if let Some(s) = s.strip_prefix("0x") {
@@ -296,7 +326,7 @@ impl Register {
                     Endian::Little => val.to_le_bytes().iter().into_vec()?,
                 })
             }
-            Format::I128(e) => {
+            Format::I128((e, _)) => {
                 let val: i128 = if let Some(s) = s.strip_prefix("-0x") {
                     -i128::from_str_radix(s, 16)?
                 } else if let Some(s) = s.strip_prefix("0x") {

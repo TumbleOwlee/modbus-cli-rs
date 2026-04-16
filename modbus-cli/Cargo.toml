@@ -12,6 +12,7 @@ modbus-log = { path = "../modbus-log" }
 modbus-lua = { path = "../modbus-lua" }
 modbus-mem = { path = "../modbus-mem" }
 modbus-net = { path = "../modbus-net" }
+modbus-derive = { path = "../modbus-derive" }
 anyhow = "1.0.100"
 clap = { version = "4.5.54", features = ["derive"] }
 crossterm = "0.29.0"
@@ -23,3 +24,4 @@ serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 tokio = { version = "1.49.0", features = ["sync", "time", "rt"] }
 toml = "0.9.11"
+derive_builder = "0.20.2"

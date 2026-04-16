@@ -6,6 +6,9 @@ struct State;
 
 impl modbus_ui::traits::SetFocus for State {
     fn set_focused(&mut self, _focus: bool) {}
+    fn is_focused(&self) -> bool {
+        true
+    }
 }
 
 impl modbus_ui::traits::HandleEvents for State {

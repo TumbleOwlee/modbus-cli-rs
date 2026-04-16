@@ -253,6 +253,8 @@ dependencies = [
  "anyhow",
  "clap",
  "crossterm",
+ "derive_builder",
+ "modbus-derive",
  "modbus-log",
  "modbus-lua",
  "modbus-mem",

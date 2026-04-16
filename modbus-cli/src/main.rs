@@ -1,13 +1,18 @@
 #![feature(async_fn_traits)]
 
+mod dialog;
 mod instance;
 mod module;
 
+use std::{io::Stdout, time::Duration};
+
 use clap::Parser;
+use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
+use modbus_ui::{AlternateScreen, EventResult, traits::HandleEvents};
 use modbus_util::Expect;
 use tokio::runtime::Runtime;
 
-use crate::module::Definition;
+use crate::{dialog::EditDialog, module::Definition};
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -60,11 +65,57 @@ async fn run() {
 }
 
 fn main() {
-    let _ = CliArgs::parse();
+    //    let _ = CliArgs::parse();
+    //
+    //    // Initialize tokio runtime for modbus server
+    //    let runtime = Runtime::new().panic(|e| format!("Failed to create runtime. [{}]", e));
+    //    runtime.block_on(async {
+    //        run().await;
+    //    });
 
-    // Initialize tokio runtime for modbus server
-    let runtime = Runtime::new().panic(|e| format!("Failed to create runtime. [{}]", e));
-    runtime.block_on(async {
-        run().await;
-    });
+    let mut edit_dialog = EditDialog::new();
+
+    let mut screen: AlternateScreen<Stdout> =
+        AlternateScreen::new().expect("Failed to create alternate screen.");
+
+    let mut result = None;
+
+    loop {
+        // Draw app
+        if let Err(e) = screen.draw(|f| edit_dialog.render(f.area(), f.buffer_mut())) {
+            result = Some(e);
+        }
+
+        // Check for events
+        if event::poll(Duration::from_millis(50)).unwrap() {
+            if let Event::Key(key) = event::read().unwrap() {
+                if key.kind == KeyEventKind::Press {
+                    if let KeyCode::Esc = key.code {
+                        break;
+                    } else {
+                        let event_result: EventResult =
+                            edit_dialog.handle_events(key.modifiers, key.code);
+                        match event_result {
+                            EventResult::Unhandled(_, KeyCode::Enter) => {
+                                break;
+                            }
+                            EventResult::Unhandled(KeyModifiers::SHIFT, KeyCode::BackTab)
+                            | EventResult::Unhandled(KeyModifiers::SHIFT, KeyCode::Tab) => {
+                                edit_dialog.focus_previous();
+                            }
+                            EventResult::Unhandled(_, KeyCode::Tab) => {
+                                edit_dialog.focus_next();
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        }
+    }
+    drop(screen);
+
+    if let Some(e) = result {
+        println!("{}", e);
+    }
 }

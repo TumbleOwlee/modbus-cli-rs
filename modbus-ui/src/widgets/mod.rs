@@ -39,6 +39,10 @@ where
     fn set_focused(&mut self, focus: bool) {
         self.state.set_focused(focus);
     }
+
+    fn is_focused(&self) -> bool {
+        self.state.is_focused()
+    }
 }
 
 impl<S, W> HandleEvents for Widget<S, W>

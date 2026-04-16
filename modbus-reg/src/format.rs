@@ -16,20 +16,23 @@ pub enum Endian {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Resolution(pub f64);
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Format {
     Ascii((Alignment, Width)),
-    U8(Endian),
-    U16(Endian),
-    U32(Endian),
-    U64(Endian),
-    U128(Endian),
-    I8(Endian),
-    I16(Endian),
-    I32(Endian),
-    I64(Endian),
-    I128(Endian),
-    F32(Endian),
-    F64(Endian),
+    U8((Endian, Resolution)),
+    U16((Endian, Resolution)),
+    U32((Endian, Resolution)),
+    U64((Endian, Resolution)),
+    U128((Endian, Resolution)),
+    I8((Endian, Resolution)),
+    I16((Endian, Resolution)),
+    I32((Endian, Resolution)),
+    I64((Endian, Resolution)),
+    I128((Endian, Resolution)),
+    F32((Endian, Resolution)),
+    F64((Endian, Resolution)),
 }
 
 impl Format {
@@ -47,13 +50,5 @@ impl Format {
     /// The length in bytes (u8) of the format
     pub fn length(&self) -> usize {
         self.width() * 2
-    }
-
-    pub fn as_u8(&self) -> Option<&Endian> {
-        if let Self::U8(v) = self {
-            Some(v)
-        } else {
-            None
-        }
     }
 }

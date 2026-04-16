@@ -23,6 +23,34 @@ impl Validate for String {
     }
 }
 
+macro_rules! generate_validate {
+    ($v:ty) => {
+        impl Validate for $v {
+            fn validate(input: &str) -> Result<(), String> {
+                let result = input.parse::<$v>();
+                match result {
+                    Ok(_) => Ok(()),
+                    Err(e) => Err(format!("{}", e)),
+                }
+            }
+        }
+    };
+}
+
+generate_validate!(usize);
+generate_validate!(u8);
+generate_validate!(u16);
+generate_validate!(u32);
+generate_validate!(u64);
+generate_validate!(u128);
+generate_validate!(i8);
+generate_validate!(i16);
+generate_validate!(i32);
+generate_validate!(i64);
+generate_validate!(i128);
+generate_validate!(f32);
+generate_validate!(f64);
+
 #[derive(Builder, Debug, Clone, Getters, Setters, CopyGetters, WithSetters)]
 #[getset(set = "pub")]
 pub struct InputField<ValueType>

@@ -42,6 +42,10 @@ where
     fn set_focused(&mut self, focus: bool) {
         self.focused = focus;
     }
+
+    fn is_focused(&self) -> bool {
+        self.focused
+    }
 }
 
 impl<V, const N: usize> TableState<V, N>

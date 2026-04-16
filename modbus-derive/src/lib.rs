@@ -60,12 +60,12 @@ pub fn derive_focus(item: TokenStream) -> TokenStream {
 
             TokenStream::from(quote! {
                 impl #identifier {
-                    fn focus_previous(&mut self) {
+                    pub fn focus_previous(&mut self) {
                         match self.focus {
                             #impl_previous
                         }
                     }
-                    fn focus_next(&mut self) {
+                    pub fn focus_next(&mut self) {
                         match self.focus {
                             #impl_next
                         }
