@@ -16,6 +16,7 @@ use crate::{
     state::{TableState, TableStateBuilder},
     style::TableStyle,
     types::Border,
+    widgets::Title,
 };
 
 pub trait Header<const N: usize> {
@@ -37,7 +38,7 @@ where
 {
     #[getset(get = "pub")]
     #[builder(default = "None")]
-    title: Option<String>,
+    title: Option<Title>,
     #[getset(get = "pub")]
     #[builder(default = "Border::None")]
     border: Border,
@@ -122,7 +123,9 @@ where
             };
             let mut block = Block::bordered().style(style);
             if let Some(title) = self.title.as_ref() {
-                block = block.title(title.clone());
+                block = block
+                    .title(title.name.as_str())
+                    .title_alignment(title.alignment);
             }
             let inner = block.inner(area);
             block.render(area, buf);

@@ -4,7 +4,7 @@ mod table;
 
 use crossterm::event::{KeyCode, KeyModifiers};
 pub use input_field::*;
-use ratatui::layout::Margin;
+use ratatui::layout::{HorizontalAlignment, Margin};
 use ratatui::widgets::{StatefulWidget, Widget as RenderWidget};
 use ratatui::{buffer::Buffer, layout::Rect};
 pub use selection::*;
@@ -16,6 +16,45 @@ use crate::{
     traits::{HandleEvents, SetFocus},
 };
 use std::fmt::Debug;
+
+#[derive(Debug, Clone)]
+pub struct Title {
+    name: String,
+    alignment: HorizontalAlignment,
+}
+
+impl From<&str> for Title {
+    fn from(name: &str) -> Self {
+        Self {
+            name: name.to_string(),
+            alignment: HorizontalAlignment::Left,
+        }
+    }
+}
+
+impl From<String> for Title {
+    fn from(name: String) -> Self {
+        Self {
+            name,
+            alignment: HorizontalAlignment::Left,
+        }
+    }
+}
+
+impl From<(&str, HorizontalAlignment)> for Title {
+    fn from((name, alignment): (&str, HorizontalAlignment)) -> Self {
+        Self {
+            name: name.to_string(),
+            alignment,
+        }
+    }
+}
+
+impl From<(String, HorizontalAlignment)> for Title {
+    fn from((name, alignment): (String, HorizontalAlignment)) -> Self {
+        Self { name, alignment }
+    }
+}
 
 pub trait GetValue {
     type ValueType;

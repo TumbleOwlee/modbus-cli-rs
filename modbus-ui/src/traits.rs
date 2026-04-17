@@ -34,6 +34,12 @@ impl ToLabel for String {
     }
 }
 
+impl ToLabel for &str {
+    fn to_label(&self) -> String {
+        self.to_string()
+    }
+}
+
 pub trait SetFocus {
     fn set_focused(&mut self, focus: bool);
 }

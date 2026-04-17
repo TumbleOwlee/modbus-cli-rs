@@ -38,6 +38,7 @@ fn main() {
     let mut app = AppBuilder::default()
         .name(State::default())
         .lastname(State::default())
+        .focus(AppFocus::Name)
         .build()
         .expect("App builder failed.");
     app.focus_previous();

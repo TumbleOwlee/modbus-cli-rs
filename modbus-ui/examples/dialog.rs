@@ -240,7 +240,7 @@ fn main() {
                 .unwrap(),
             widget: InputFieldBuilder::default()
                 .border(Border::Full(Margin::new(1, 0)))
-                .title(Some("Name".to_string()))
+                .title(Some("Name".into()))
                 .margin(Margin {
                     vertical: 0,
                     horizontal: 1,
@@ -258,7 +258,7 @@ fn main() {
                 .unwrap(),
             widget: InputFieldBuilder::default()
                 .border(Border::Full(Margin::new(1, 0)))
-                .title(Some("Lastname".to_string()))
+                .title(Some("Lastname".into()))
                 .margin(Margin {
                     vertical: 0,
                     horizontal: 1,
@@ -276,7 +276,7 @@ fn main() {
                 .unwrap(),
             widget: InputFieldBuilder::default()
                 .border(Border::Full(Margin::new(1, 0)))
-                .title(Some("Day".to_string()))
+                .title(Some("Day".into()))
                 .margin(Margin {
                     vertical: 0,
                     horizontal: 1,
@@ -306,7 +306,7 @@ fn main() {
                 .unwrap(),
             widget: SelectionBuilder::default()
                 .border(Border::Full(Margin::new(1, 0)))
-                .title(Some("Month".to_string()))
+                .title(Some("Month".into()))
                 .margin(Margin {
                     vertical: 0,
                     horizontal: 1,
@@ -324,7 +324,7 @@ fn main() {
                 .unwrap(),
             widget: InputFieldBuilder::default()
                 .border(Border::Full(Margin::new(1, 0)))
-                .title(Some("Year".to_string()))
+                .title(Some("Year".into()))
                 .margin(Margin {
                     vertical: 0,
                     horizontal: 1,
@@ -342,7 +342,7 @@ fn main() {
                 .unwrap(),
             widget: InputFieldBuilder::default()
                 .border(Border::Full(Margin::new(1, 0)))
-                .title(Some("Street".to_string()))
+                .title(Some("Street".into()))
                 .margin(Margin {
                     vertical: 0,
                     horizontal: 1,
@@ -360,7 +360,7 @@ fn main() {
                 .unwrap(),
             widget: InputFieldBuilder::default()
                 .border(Border::Full(Margin::new(1, 0)))
-                .title(Some("Postalcode".to_string()))
+                .title(Some("Postalcode".into()))
                 .margin(Margin {
                     vertical: 0,
                     horizontal: 1,
@@ -378,7 +378,7 @@ fn main() {
                 .unwrap(),
             widget: InputFieldBuilder::default()
                 .border(Border::Full(Margin::new(1, 0)))
-                .title(Some("City".to_string()))
+                .title(Some("City".into()))
                 .margin(Margin {
                     vertical: 0,
                     horizontal: 1,

@@ -55,24 +55,10 @@ where
         let mut range = range.clone();
         match self.slices.get_mut(&id) {
             Some(map) => {
-                let mut cursor = map.upper_bound_mut(std::ops::Bound::Included(&range));
-                if let Some((r, slice)) = cursor.peek_prev() {
-                    let start = std::cmp::min(range.start, r.end);
-                    let end = std::cmp::min(range.end, r.end);
-                    let count = end - start;
-
-                    if count != 0 {
-                        slice.write(&Range::new(start, count), &values[idx..(idx + count)]);
-                        range = Range::new(range.start + count, range.length() - count);
-                        idx += count;
-                    }
-                }
-
-                if range.length() != 0 {
-                    while let Some((r, slice)) = cursor.peek_next() {
-                        if r.start > range.start {
-                            break;
-                        }
+                let mut entries: Vec<_> = map.iter_mut().collect();
+                entries.sort_by(|left, right| left.0.cmp(right.0));
+                for (r, slice) in entries.into_iter() {
+                    if r.start <= range.start && r.end > range.start {
                         let start = std::cmp::min(range.start, r.end);
                         let end = std::cmp::min(range.end, r.end);
                         let count = end - start;
@@ -81,13 +67,10 @@ where
                             slice.write(&Range::new(start, count), &values[idx..(idx + count)]);
                             range = Range::new(range.start + count, range.length() - count);
                             idx += count;
-
-                            if range.length() == 0 {
-                                break;
-                            }
                         }
                     }
                 }
+
                 range.length() == 0
             }
             _ => false,
@@ -98,25 +81,10 @@ where
         let mut range = range.clone();
         match self.slices.get_mut(id) {
             Some(map) => {
-                let mut cursor = map.upper_bound_mut(std::ops::Bound::Included(&range));
-                if let Some((r, slice)) = cursor.peek_prev() {
-                    let start = std::cmp::min(range.start, r.end);
-                    let end = std::cmp::min(range.end, r.end);
-                    let count = end - start;
-
-                    if count != 0 {
-                        if !slice.writable(ty, &Range::new(start, count)) {
-                            return false;
-                        }
-                        range = Range::new(range.start + count, range.length() - count);
-                    }
-                }
-
-                if range.length() != 0 {
-                    while let Some((r, slice)) = cursor.peek_next() {
-                        if r.start > range.start {
-                            break;
-                        }
+                let mut entries: Vec<_> = map.iter().collect();
+                entries.sort_by(|left, right| left.0.cmp(right.0));
+                for (r, slice) in entries.into_iter() {
+                    if r.start <= range.start && r.end > range.start {
                         let start = std::cmp::min(range.start, r.end);
                         let end = std::cmp::min(range.end, r.end);
                         let count = end - start;
@@ -126,13 +94,10 @@ where
                                 return false;
                             }
                             range = Range::new(range.start + count, range.length() - count);
-
-                            if range.length() == 0 {
-                                break;
-                            }
                         }
                     }
                 }
+
                 range.length() == 0
             }
             _ => false,
@@ -148,25 +113,10 @@ where
         match self.slices.get(&id) {
             Some(map) => {
                 let mut output: Vec<u16> = Vec::with_capacity(range.length());
-                let cursor = map.upper_bound(std::ops::Bound::Included(&range));
-                if let Some((r, slice)) = cursor.peek_prev() {
-                    let start = std::cmp::min(range.start, r.end);
-                    let end = std::cmp::min(range.end, r.end);
-                    let count = end - start;
-
-                    if count != 0 {
-                        if let Some(mut v) = slice.read(&Range::new(start, count)) {
-                            output.append(&mut v)
-                        };
-                        range = Range::new(range.start + count, range.length() - count);
-                    }
-                }
-
-                if range.length() != 0 {
-                    while let Some((r, slice)) = cursor.peek_next() {
-                        if r.start > range.start {
-                            break;
-                        }
+                let mut entries: Vec<_> = map.iter().collect();
+                entries.sort_by(|left, right| left.0.cmp(right.0));
+                for (r, slice) in entries.into_iter() {
+                    if r.start <= range.start && r.end > range.start {
                         let start = std::cmp::min(range.start, r.end);
                         let end = std::cmp::min(range.end, r.end);
                         let count = end - start;
@@ -176,10 +126,6 @@ where
                                 output.append(&mut v)
                             };
                             range = Range::new(range.start + count, range.length() - count);
-
-                            if range.length() == 0 {
-                                break;
-                            }
                         }
                     }
                 }
@@ -198,25 +144,10 @@ where
         let mut range = range.clone();
         match self.slices.get(id) {
             Some(map) => {
-                let cursor = map.upper_bound(std::ops::Bound::Included(&range));
-                if let Some((r, slice)) = cursor.peek_prev() {
-                    let start = std::cmp::min(range.start, r.end);
-                    let end = std::cmp::min(range.end, r.end);
-                    let count = end - start;
-
-                    if count != 0 {
-                        if !slice.readable(ty, &Range::new(start, count)) {
-                            return false;
-                        };
-                        range = Range::new(range.start + count, range.length() - count);
-                    }
-                }
-
-                if range.length() != 0 {
-                    while let Some((r, slice)) = cursor.peek_next() {
-                        if r.start > range.start {
-                            break;
-                        }
+                let mut entries: Vec<_> = map.iter().collect();
+                entries.sort_by(|left, right| left.0.cmp(right.0));
+                for (r, slice) in entries.into_iter() {
+                    if r.start <= range.start && r.end > range.start {
                         let start = std::cmp::min(range.start, r.end);
                         let end = std::cmp::min(range.end, r.end);
                         let count = end - start;
@@ -226,9 +157,6 @@ where
                                 return false;
                             };
                             range = Range::new(range.start + count, range.length() - count);
-                            if range.length() == 0 {
-                                break;
-                            }
                         }
                     }
                 }

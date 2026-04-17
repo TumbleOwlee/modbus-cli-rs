@@ -4,23 +4,15 @@ mod dialog;
 mod instance;
 mod module;
 
-use std::{
-    io::{Stdout, stdout},
-    sync::{Arc, Mutex},
-    time::Duration,
-};
+use std::{io::Stdout, time::Duration};
 
 use clap::Parser;
-use crossterm::{
-    event::{self, Event, KeyCode, KeyEventKind, KeyModifiers},
-    execute,
-    terminal::{LeaveAlternateScreen, disable_raw_mode},
-};
+use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use modbus_ui::{AlternateScreen, EventResult, traits::HandleEvents};
-use modbus_util::{Expect, async_cloned, tokio::spawn_detach};
+use modbus_util::{Expect, tokio::spawn_detach};
 use tokio::runtime::Runtime;
 
-use crate::{dialog::EditDialog, module::Definition};
+use crate::{dialog::EditInputDialog, dialog::EditSelectionDialog, module::Definition};
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -90,7 +82,8 @@ fn main() {
         handler(panic);
     }));
 
-    let mut edit_dialog = EditDialog::new();
+    //let mut edit_dialog = EditInputDialog::new();
+    let mut edit_dialog = EditSelectionDialog::new(vec!["Dog", "Cat", "Horse"]);
 
     loop {
         // Draw app

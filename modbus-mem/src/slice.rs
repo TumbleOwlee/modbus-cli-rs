@@ -53,7 +53,7 @@ impl Slice {
         }
     }
 
-    pub fn writable(&mut self, ty: &Type, range: &Range) -> bool {
+    pub fn writable(&self, ty: &Type, range: &Range) -> bool {
         let in_range = range.start >= self.range.start && range.end <= self.range.end;
         if in_range {
             self.buffer

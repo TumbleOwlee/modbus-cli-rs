@@ -1,3 +1,4 @@
 mod edit;
 
-pub use edit::EditDialog;
+pub use edit::EditInputDialog;
+pub use edit::EditSelectionDialog;

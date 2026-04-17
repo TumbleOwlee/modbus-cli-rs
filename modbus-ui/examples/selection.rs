@@ -44,7 +44,7 @@ fn ui(f: &mut Frame, app: &mut App) {
     let layout = Layout::horizontal([Constraint::Length(30)]);
     let rects = rects[0].layout_vec(&layout);
     let selection = SelectionBuilder::default()
-        .title(Some("Mode".to_string()))
+        .title(Some("Mode".into()))
         .border(Border::Full(Margin::new(1, 1)))
         .margin(Margin {
             vertical: 0,

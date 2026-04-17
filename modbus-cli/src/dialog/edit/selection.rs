@@ -1,3 +1,4 @@
+use crate::dialog::edit::{Alignment, Endian, Format, ValueType};
 use derive_builder::Builder;
 use modbus_derive::{Focus, focusable};
 use modbus_reg::format::{
@@ -6,7 +7,7 @@ use modbus_reg::format::{
 use modbus_ui::{
     state::{InputFieldState, InputFieldStateBuilder, SelectionState, SelectionStateBuilder},
     style::{InputFieldStyle, SelectionStyle},
-    traits::ToLabel,
+    traits::{HandleEvents, SetFocus, ToLabel},
     types::Border,
     widgets::{
         GetValue, InputField, InputFieldBuilder, Selection, SelectionBuilder, Validate, Widget,
@@ -20,75 +21,12 @@ use ratatui::{
 };
 use std::fmt::Debug;
 
-#[derive(Debug, Clone)]
-pub struct Format(RegisterFormat);
-
-impl ToLabel for Format {
-    fn to_label(&self) -> String {
-        match self.0 {
-            RegisterFormat::U8(_) => "U8",
-            RegisterFormat::U16(_) => "U16",
-            RegisterFormat::U32(_) => "U32",
-            RegisterFormat::U64(_) => "U64",
-            RegisterFormat::U128(_) => "U128",
-            RegisterFormat::I8(_) => "I8",
-            RegisterFormat::I16(_) => "I16",
-            RegisterFormat::I32(_) => "I32",
-            RegisterFormat::I64(_) => "I64",
-            RegisterFormat::I128(_) => "I128",
-            RegisterFormat::F32(_) => "F32",
-            RegisterFormat::F64(_) => "F64",
-            RegisterFormat::Ascii(_) => "ASCII",
-        }
-        .to_string()
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Endian(RegisterEndian);
-
-impl ToLabel for Endian {
-    fn to_label(&self) -> String {
-        match self.0 {
-            RegisterEndian::Big => "Big",
-            RegisterEndian::Little => "Little",
-        }
-        .to_string()
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ValueType {
-    Number,
-    Text,
-}
-
-impl ToLabel for ValueType {
-    fn to_label(&self) -> String {
-        match self {
-            ValueType::Number => "Number",
-            ValueType::Text => "Text",
-        }
-        .to_string()
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Alignment(TextAlignment);
-
-impl ToLabel for Alignment {
-    fn to_label(&self) -> String {
-        match self.0 {
-            TextAlignment::Right => "Right",
-            TextAlignment::Left => "Left",
-        }
-        .to_string()
-    }
-}
-
 #[focusable]
 #[derive(Builder, Debug, Focus)]
-pub struct EditDialog {
+pub struct EditSelectionDialog<V>
+where
+    V: ToLabel + Clone,
+{
     // Label for the register
     #[focus]
     pub label: Widget<InputFieldState, InputField<String>>,
@@ -118,12 +56,14 @@ pub struct EditDialog {
     pub text_width: Widget<InputFieldState, InputField<usize>>,
     // Value input
     #[focus]
-    pub value: Widget<InputFieldState, InputField<String>>,
+    pub value: Widget<SelectionState<V>, Selection<V>>,
     // Error display field
     pub error: Widget<InputFieldState, InputField<String>>,
+    // Success display field
+    pub success: Widget<InputFieldState, InputField<String>>,
 }
 
-impl EditDialog {
+impl<V: ToLabel + Clone> EditSelectionDialog<V> {
     fn validate(&self) -> Result<(), String> {
         if let Err(e) = String::validate(self.label.state.input()) {
             return Err(format!("Label: {e}"));
@@ -165,11 +105,11 @@ impl EditDialog {
             Constraint::Min(1),
             Constraint::Length(
                 18 + 2 + 2 + {
-                    if self.error.state.input().is_empty() {
-                        0
-                    } else {
-                        1
-                    }
+                    //  if self.error.state.input().is_empty() {
+                    //      0
+                    //  } else {
+                    3
+                    //  }
                 },
             ),
             Constraint::Min(1),
@@ -191,11 +131,11 @@ impl EditDialog {
             Constraint::Length(3),
             Constraint::Length(3),
             Constraint::Length({
-                if self.error.state.input().is_empty() {
-                    0
-                } else {
-                    1
-                }
+                //if self.error.state.input().is_empty() {
+                //    0
+                //} else {
+                3
+                //}
             }),
         ])
         .areas(area);
@@ -302,10 +242,17 @@ impl EditDialog {
                 buf,
                 &mut self.error.state,
             );
+        } else {
+            StatefulWidget::render(
+                &self.success.widget,
+                vertical_layout[vertical_index],
+                buf,
+                &mut self.success.state,
+            );
         }
     }
 
-    pub fn new() -> Self {
+    pub fn new(values: Vec<V>) -> Self {
         let selection_style = SelectionStyle {
             focused: ratatui::prelude::Style::default()
                 .bg(tailwind::INDIGO.c400)
@@ -326,8 +273,14 @@ impl EditDialog {
             general: ratatui::prelude::Style::default().fg(tailwind::RED.c500),
             ..InputFieldStyle::default()
         };
+        let success_style = InputFieldStyle {
+            focused: ratatui::prelude::Style::default().fg(tailwind::GREEN.c500),
+            cursor: ratatui::prelude::Style::default(),
+            general: ratatui::prelude::Style::default().fg(tailwind::GREEN.c500),
+            ..InputFieldStyle::default()
+        };
 
-        EditDialogBuilder::default()
+        EditSelectionDialogBuilder::<V>::default()
             .label(Widget {
                 state: InputFieldStateBuilder::default()
                     .focused(true)
@@ -337,7 +290,7 @@ impl EditDialog {
                     .unwrap(),
                 widget: InputFieldBuilder::default()
                     .border(Border::Full(Margin::new(1, 0)))
-                    .title(Some("Label".to_string()))
+                    .title(Some("Label".into()))
                     .margin(Margin {
                         vertical: 0,
                         horizontal: 1,
@@ -355,7 +308,7 @@ impl EditDialog {
                     .unwrap(),
                 widget: InputFieldBuilder::default()
                     .border(Border::Full(Margin::new(1, 0)))
-                    .title(Some("Description".to_string()))
+                    .title(Some("Description".into()))
                     .multiline(true)
                     .margin(Margin {
                         vertical: 0,
@@ -374,7 +327,7 @@ impl EditDialog {
                     .unwrap(),
                 widget: InputFieldBuilder::default()
                     .border(Border::Full(Margin::new(1, 0)))
-                    .title(Some("Address".to_string()))
+                    .title(Some("Address".into()))
                     .margin(Margin {
                         vertical: 0,
                         horizontal: 1,
@@ -391,7 +344,7 @@ impl EditDialog {
                     .unwrap(),
                 widget: SelectionBuilder::default()
                     .border(Border::Full(Margin::new(1, 0)))
-                    .title(Some("Type".to_string()))
+                    .title(Some(("Type", HorizontalAlignment::Right).into()))
                     .margin(Margin {
                         vertical: 0,
                         horizontal: 1,
@@ -421,7 +374,7 @@ impl EditDialog {
                     .unwrap(),
                 widget: SelectionBuilder::default()
                     .border(Border::Full(Margin::new(1, 0)))
-                    .title(Some("Format".to_string()))
+                    .title(Some(("Format", HorizontalAlignment::Left).into()))
                     .margin(Margin {
                         vertical: 0,
                         horizontal: 1,
@@ -441,7 +394,7 @@ impl EditDialog {
                     .unwrap(),
                 widget: SelectionBuilder::default()
                     .border(Border::Full(Margin::new(1, 0)))
-                    .title(Some("Endian".to_string()))
+                    .title(Some(("Endian", HorizontalAlignment::Center).into()))
                     .margin(Margin {
                         vertical: 0,
                         horizontal: 1,
@@ -460,7 +413,7 @@ impl EditDialog {
                     .unwrap(),
                 widget: InputFieldBuilder::default()
                     .border(Border::Full(Margin::new(1, 0)))
-                    .title(Some("Reolution".to_string()))
+                    .title(Some(("Reolution", HorizontalAlignment::Right).into()))
                     .margin(Margin {
                         vertical: 0,
                         horizontal: 1,
@@ -480,7 +433,7 @@ impl EditDialog {
                     .unwrap(),
                 widget: SelectionBuilder::default()
                     .border(Border::Full(Margin::new(1, 0)))
-                    .title(Some("Alignment".to_string()))
+                    .title(Some("Alignment".into()))
                     .margin(Margin {
                         vertical: 0,
                         horizontal: 1,
@@ -498,7 +451,7 @@ impl EditDialog {
                     .unwrap(),
                 widget: InputFieldBuilder::default()
                     .border(Border::Full(Margin::new(1, 0)))
-                    .title(Some("Width".to_string()))
+                    .title(Some(("Width", HorizontalAlignment::Right).into()))
                     .margin(Margin {
                         vertical: 0,
                         horizontal: 1,
@@ -508,20 +461,19 @@ impl EditDialog {
                     .unwrap(),
             })
             .value(Widget {
-                state: InputFieldStateBuilder::default()
+                state: SelectionStateBuilder::<V>::default()
                     .focused(false)
-                    .disabled(false)
-                    .placeholder(Some("Enter value...".to_string()))
+                    .values(values)
                     .build()
                     .unwrap(),
-                widget: InputFieldBuilder::default()
+                widget: SelectionBuilder::default()
                     .border(Border::Full(Margin::new(1, 0)))
-                    .title(Some("Value".to_string()))
+                    .title(Some("Value".into()))
                     .margin(Margin {
                         vertical: 0,
                         horizontal: 1,
                     })
-                    .style(input_style.clone())
+                    .style(selection_style.clone())
                     .build()
                     .unwrap(),
             })
@@ -532,7 +484,8 @@ impl EditDialog {
                     .build()
                     .unwrap(),
                 widget: InputFieldBuilder::default()
-                    .title(None)
+                    .title(Some("Error".into()))
+                    .border(Border::Full(Margin::new(1, 0)))
                     .margin(Margin {
                         vertical: 0,
                         horizontal: 1,
@@ -541,7 +494,25 @@ impl EditDialog {
                     .build()
                     .unwrap(),
             })
-            .focus(EditDialogFocus::Label)
+            .success(Widget {
+                state: InputFieldStateBuilder::default()
+                    .focused(true)
+                    .disabled(false)
+                    .input("Everything is fine.".to_string())
+                    .build()
+                    .unwrap(),
+                widget: InputFieldBuilder::default()
+                    .title(Some("Success".into()))
+                    .border(Border::Full(Margin::new(1, 0)))
+                    .margin(Margin {
+                        vertical: 0,
+                        horizontal: 1,
+                    })
+                    .style(success_style.clone())
+                    .build()
+                    .unwrap(),
+            })
+            .focus(EditSelectionDialogFocus::Label)
             .build()
             .unwrap()
     }

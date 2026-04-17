@@ -8,11 +8,7 @@ use modbus_ui::{
     types::Border,
     widgets::{Header, Table, TableBuilder, TableEntry},
 };
-use ratatui::{
-    Frame,
-    layout::Margin,
-    style::{Color, palette::tailwind},
-};
+use ratatui::{Frame, layout::Margin, style::palette::tailwind};
 use std::{io::Stdout, time::Duration};
 
 #[derive(Clone, Debug)]
@@ -72,7 +68,7 @@ impl App {
             )
             .row_margin(Margin::new(0, 1))
             .border(Border::Full(Margin::new(1, 1)))
-            .title(Some("Some Table".to_string()))
+            .title(Some("Some Table".into()))
             .build()
             .unwrap();
         f.render_stateful_widget(table, f.area(), &mut self.state);

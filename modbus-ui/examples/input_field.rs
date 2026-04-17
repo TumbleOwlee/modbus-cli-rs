@@ -39,7 +39,7 @@ impl Default for App {
 // Render simple input field
 fn ui(f: &mut Frame, app: &mut App) {
     let input: InputField<String> = InputFieldBuilder::default()
-        .title(Some("Input".to_string()))
+        .title(Some("Input".into()))
         .border(Border::Full(Margin::new(1, 0)))
         .multiline(false)
         .margin(Margin {
@@ -57,7 +57,7 @@ fn ui(f: &mut Frame, app: &mut App) {
         .unwrap();
 
     let input_multiline: InputField<String> = InputFieldBuilder::default()
-        .title(Some("Input (M)".to_string()))
+        .title(Some("Input (M)".into()))
         .border(Border::Full(Margin::new(1, 0)))
         .multiline(true)
         .margin(Margin {

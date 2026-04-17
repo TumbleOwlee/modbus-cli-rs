@@ -1,5 +1,3 @@
-#![feature(btree_cursors)]
-
 mod memory;
 mod range;
 mod value;

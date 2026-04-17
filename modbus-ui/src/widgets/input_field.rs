@@ -12,6 +12,7 @@ use crate::state::InputFieldState;
 use crate::style::InputFieldStyle;
 use crate::traits::Margins;
 use crate::types::Border;
+use crate::widgets::Title;
 
 pub trait Validate {
     fn validate(input: &str) -> Result<(), String>;
@@ -65,7 +66,7 @@ where
     style: InputFieldStyle,
     #[getset(get = "pub")]
     #[builder(default = "None")]
-    title: Option<String>,
+    title: Option<Title>,
     #[getset(get = "pub")]
     #[builder(default = "Margin::default()")]
     margin: Margin,
@@ -186,7 +187,9 @@ where
             };
             let mut block = Block::bordered().style(style);
             if let Some(title) = self.title.as_ref() {
-                block = block.title(title.clone());
+                block = block
+                    .title(title.name.as_str())
+                    .title_alignment(title.alignment);
             }
             let inner = block.inner(area);
             block.render(area, buf);

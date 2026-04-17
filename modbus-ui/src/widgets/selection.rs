@@ -9,13 +9,13 @@ use ratatui::{
 };
 use std::marker::PhantomData;
 
-use crate::style::SelectionStyle;
 use crate::traits::ToLabel;
 use crate::{
     state::{SelectionState, SelectionStateBuilder},
     traits::Margins,
     types::Border,
 };
+use crate::{style::SelectionStyle, widgets::Title};
 
 #[derive(Builder, Debug, Clone, Getters, Setters, CopyGetters, WithSetters)]
 #[getset(set = "pub")]
@@ -25,7 +25,7 @@ where
 {
     #[getset(get = "pub")]
     #[builder(default = "None")]
-    title: Option<String>,
+    title: Option<Title>,
     #[getset(get = "pub")]
     #[builder(default = "Border::None")]
     border: Border,
@@ -135,7 +135,9 @@ impl<ValueType: ToLabel + Clone> StatefulWidget for &Selection<ValueType> {
             };
             let mut block = Block::bordered().style(style);
             if let Some(title) = self.title.as_ref() {
-                block = block.title(title.clone());
+                block = block
+                    .title(title.name.as_str())
+                    .title_alignment(title.alignment);
             }
             let inner = block.inner(area);
             block.render(area, buf);

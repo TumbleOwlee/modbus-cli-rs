@@ -18,6 +18,7 @@ struct Definition {
 pub fn derive_focus(item: TokenStream) -> TokenStream {
     let mut input = syn::parse_macro_input!(item as syn::DeriveInput);
     let identifier = &input.ident;
+    let (impl_generic, ty_generic, where_clause) = &input.generics.split_for_impl();
 
     match &mut input.data {
         syn::Data::Struct(s) => {
@@ -186,7 +187,7 @@ pub fn derive_focus(item: TokenStream) -> TokenStream {
 
             // Generate implementation for focus switching methods
             let focus_def = quote! {
-                impl #identifier {
+                impl #impl_generic #identifier #ty_generic #where_clause {
                     pub fn focus_previous(&mut self) {
                         #impl_previous
                     }
@@ -216,7 +217,7 @@ pub fn derive_focus(item: TokenStream) -> TokenStream {
             }
 
             let handle_def = quote! {
-                impl modbus_ui::traits::HandleEvents for #identifier {
+                impl #impl_generic modbus_ui::traits::HandleEvents for #identifier #ty_generic #where_clause {
                     fn handle_events(&mut self, modifiers: crossterm::event::KeyModifiers, code: crossterm::event::KeyCode) -> modbus_ui::EventResult {
                         match self.focus {
                             #impl_handle_events
@@ -227,11 +228,14 @@ pub fn derive_focus(item: TokenStream) -> TokenStream {
             };
 
             // Output genereted code
-            TokenStream::from(quote! {
+            let stream = TokenStream::from(quote! {
                 #enum_def
                 #focus_def
                 #handle_def
-            })
+            });
+            println!("{}", stream);
+
+            stream
         }
         _ => unimplemented!("State not implemented for type"),
     }
