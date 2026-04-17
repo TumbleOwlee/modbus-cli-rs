@@ -49,15 +49,15 @@ impl IsFocus for InputFieldState {
 impl HandleEvents for InputFieldState {
     fn handle_events(&mut self, modifiers: KeyModifiers, code: KeyCode) -> EventResult {
         match (modifiers, code) {
-            (_, KeyCode::Home) => {
+            (KeyModifiers::NONE, KeyCode::Home) => {
                 self.cursor = 0;
                 EventResult::Consumed
             }
-            (_, KeyCode::End) => {
+            (KeyModifiers::NONE, KeyCode::End) => {
                 self.cursor = self.input.chars().count();
                 EventResult::Consumed
             }
-            (_, KeyCode::Char(c)) => {
+            (KeyModifiers::NONE, KeyCode::Char(c)) => {
                 if !self.disabled {
                     if self.input.is_empty() || self.input.chars().count() == self.cursor {
                         self.input.push(c);
@@ -77,7 +77,7 @@ impl HandleEvents for InputFieldState {
                 }
                 EventResult::Consumed
             }
-            (_, KeyCode::Backspace) => {
+            (KeyModifiers::NONE, KeyCode::Backspace) => {
                 if !self.disabled {
                     if self.cursor > 0 {
                         if self.input.chars().count() >= self.cursor {
@@ -96,7 +96,7 @@ impl HandleEvents for InputFieldState {
                 }
                 EventResult::Consumed
             }
-            (_, KeyCode::Delete) => {
+            (KeyModifiers::NONE, KeyCode::Delete) => {
                 if !self.disabled {
                     if self.input.chars().count() > self.cursor {
                         self.input = self.input.chars().enumerate().fold(
@@ -112,13 +112,13 @@ impl HandleEvents for InputFieldState {
                 }
                 EventResult::Consumed
             }
-            (_, KeyCode::Left) => {
+            (KeyModifiers::NONE, KeyCode::Left) => {
                 if self.cursor > 0 {
                     self.cursor -= 1;
                 }
                 EventResult::Consumed
             }
-            (_, KeyCode::Right) => {
+            (KeyModifiers::NONE, KeyCode::Right) => {
                 self.cursor = std::cmp::min(self.cursor + 1, self.input.chars().count());
                 EventResult::Consumed
             }
