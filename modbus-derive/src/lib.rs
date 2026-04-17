@@ -228,14 +228,11 @@ pub fn derive_focus(item: TokenStream) -> TokenStream {
             };
 
             // Output genereted code
-            let stream = TokenStream::from(quote! {
+            TokenStream::from(quote! {
                 #enum_def
                 #focus_def
                 #handle_def
-            });
-            println!("{}", stream);
-
-            stream
+            })
         }
         _ => unimplemented!("State not implemented for type"),
     }

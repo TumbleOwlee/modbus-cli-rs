@@ -6,10 +6,11 @@ use modbus_reg::format::{
 };
 use modbus_ui::{
     state::{InputFieldState, InputFieldStateBuilder, SelectionState, SelectionStateBuilder},
-    style::{InputFieldStyle, SelectionStyle},
+    style::{InputFieldStyle, SelectionStyle, TextStyle},
     types::Border,
     widgets::{
-        GetValue, InputField, InputFieldBuilder, Selection, SelectionBuilder, Validate, Widget,
+        GetValue, InputField, InputFieldBuilder, Selection, SelectionBuilder, Text, TextBuilder,
+        Validate, Widget,
     },
 };
 use ratatui::{
@@ -54,9 +55,11 @@ pub struct EditInputDialog {
     #[focus]
     pub value: Widget<InputFieldState, InputField<String>>,
     // Error display field
-    pub error: Widget<InputFieldState, InputField<String>>,
+    pub error: Widget<String, Text>,
     // Success display field
-    pub success: Widget<InputFieldState, InputField<String>>,
+    pub success: Widget<String, Text>,
+    // Keybinds display field
+    pub keybinds: Widget<String, Text>,
 }
 
 impl EditInputDialog {
@@ -86,10 +89,10 @@ impl EditInputDialog {
         // Show error
         match self.validate() {
             Ok(_) => {
-                self.error.state.set_input(String::new());
+                self.error.state.clear();
             }
             Err(e) => {
-                self.error.state.set_input(e);
+                self.error.state = e;
             }
         }
 
@@ -99,15 +102,7 @@ impl EditInputDialog {
 
         let vertical_layout: [Rect; 3] = Layout::vertical([
             Constraint::Min(1),
-            Constraint::Length(
-                18 + 2 + 2 + {
-                    //  if self.error.state.input().is_empty() {
-                    //      0
-                    //  } else {
-                    3
-                    //  }
-                },
-            ),
+            Constraint::Length(25),
             Constraint::Min(1),
         ])
         .areas(horizontal_layout[1]);
@@ -120,19 +115,15 @@ impl EditInputDialog {
         block.render(vertical_layout[1], buf);
 
         let mut vertical_index = 0;
-        let vertical_layout: [Rect; 6] = Layout::vertical([
+        let vertical_layout: [Rect; 8] = Layout::vertical([
             Constraint::Length(3),
             Constraint::Length(6),
             Constraint::Length(3),
             Constraint::Length(3),
             Constraint::Length(3),
-            Constraint::Length({
-                //if self.error.state.input().is_empty() {
-                //    0
-                //} else {
-                3
-                //}
-            }),
+            Constraint::Length(3),
+            Constraint::Length(1),
+            Constraint::Length(1),
         ])
         .areas(area);
 
@@ -231,7 +222,7 @@ impl EditInputDialog {
         );
         vertical_index += 1;
 
-        if !self.error.state.input().is_empty() {
+        if !self.error.state.is_empty() {
             StatefulWidget::render(
                 &self.error.widget,
                 vertical_layout[vertical_index],
@@ -246,6 +237,15 @@ impl EditInputDialog {
                 &mut self.success.state,
             );
         }
+        vertical_index += 1;
+        vertical_index += 1;
+
+        StatefulWidget::render(
+            &self.keybinds.widget,
+            vertical_layout[vertical_index],
+            buf,
+            &mut self.keybinds.state,
+        );
     }
 
     pub fn new() -> Self {
@@ -263,18 +263,13 @@ impl EditInputDialog {
                 .fg(tailwind::WHITE),
             ..InputFieldStyle::default()
         };
-        let error_style = InputFieldStyle {
-            focused: ratatui::prelude::Style::default().fg(tailwind::RED.c500),
-            cursor: ratatui::prelude::Style::default(),
+        let error_style = TextStyle {
             general: ratatui::prelude::Style::default().fg(tailwind::RED.c500),
-            ..InputFieldStyle::default()
         };
-        let success_style = InputFieldStyle {
-            focused: ratatui::prelude::Style::default().fg(tailwind::GREEN.c500),
-            cursor: ratatui::prelude::Style::default(),
+        let success_style = TextStyle {
             general: ratatui::prelude::Style::default().fg(tailwind::GREEN.c500),
-            ..InputFieldStyle::default()
         };
+        let text_style = TextStyle::default();
 
         EditInputDialogBuilder::default()
             .label(Widget {
@@ -475,12 +470,8 @@ impl EditInputDialog {
                     .unwrap(),
             })
             .error(Widget {
-                state: InputFieldStateBuilder::default()
-                    .focused(true)
-                    .disabled(false)
-                    .build()
-                    .unwrap(),
-                widget: InputFieldBuilder::default()
+                state: "".to_string(),
+                widget: TextBuilder::default()
                     .title(Some("Error".into()))
                     .border(Border::Full(Margin::new(1, 0)))
                     .margin(Margin {
@@ -492,13 +483,8 @@ impl EditInputDialog {
                     .unwrap(),
             })
             .success(Widget {
-                state: InputFieldStateBuilder::default()
-                    .focused(true)
-                    .disabled(false)
-                    .input("Everything is fine.".to_string())
-                    .build()
-                    .unwrap(),
-                widget: InputFieldBuilder::default()
+                state: "Everything is fine.".to_string(),
+                widget: TextBuilder::default()
                     .title(Some("Success".into()))
                     .border(Border::Full(Margin::new(1, 0)))
                     .margin(Margin {
@@ -506,6 +492,18 @@ impl EditInputDialog {
                         horizontal: 1,
                     })
                     .style(success_style.clone())
+                    .build()
+                    .unwrap(),
+            })
+            .keybinds(Widget {
+                state: "<E>: Edit | <ENTER>: Confirm".to_string(),
+                widget: TextBuilder::default()
+                    .margin(Margin {
+                        vertical: 0,
+                        horizontal: 1,
+                    })
+                    .horizontal_alignment(HorizontalAlignment::Center)
+                    .style(text_style.clone())
                     .build()
                     .unwrap(),
             })

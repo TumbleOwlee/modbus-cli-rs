@@ -1,6 +1,7 @@
 mod input_field;
 mod selection;
 mod table;
+mod text;
 
 use crossterm::event::{KeyCode, KeyModifiers};
 pub use input_field::*;
@@ -9,6 +10,7 @@ use ratatui::widgets::{StatefulWidget, Widget as RenderWidget};
 use ratatui::{buffer::Buffer, layout::Rect};
 pub use selection::*;
 pub use table::*;
+pub use text::*;
 
 use crate::traits::{IsFocus, Margins};
 use crate::{

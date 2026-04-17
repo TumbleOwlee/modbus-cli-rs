@@ -10,6 +10,7 @@ use clap::Parser;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use modbus_ui::{AlternateScreen, EventResult, traits::HandleEvents};
 use modbus_util::{Expect, tokio::spawn_detach};
+use ratatui::layout::{Constraint, Layout, Rect};
 use tokio::runtime::Runtime;
 
 use crate::{dialog::EditInputDialog, dialog::EditSelectionDialog, module::Definition};
@@ -82,12 +83,17 @@ fn main() {
         handler(panic);
     }));
 
-    //let mut edit_dialog = EditInputDialog::new();
-    let mut edit_dialog = EditSelectionDialog::new(vec!["Dog", "Cat", "Horse"]);
+    let mut edit_input_dialog = EditInputDialog::new();
+    let mut edit_selection_dialog = EditSelectionDialog::new(vec!["Dog", "Cat", "Horse"]);
 
     loop {
         // Draw app
-        if let Err(e) = screen.draw(|f| edit_dialog.render(f.area(), f.buffer_mut())) {
+        if let Err(e) = screen.draw(|f| {
+            let layout: [Rect; 2] =
+                Layout::horizontal([Constraint::Min(1), Constraint::Min(1)]).areas(f.area());
+            edit_selection_dialog.render(layout[0], f.buffer_mut());
+            edit_input_dialog.render(layout[1], f.buffer_mut());
+        }) {
             drop(screen);
             eprintln!("Failed to draw screen. [{}]", e);
             return;
@@ -101,17 +107,17 @@ fn main() {
                         break;
                     } else {
                         let event_result: EventResult =
-                            edit_dialog.handle_events(key.modifiers, key.code);
+                            edit_input_dialog.handle_events(key.modifiers, key.code);
                         match event_result {
                             EventResult::Unhandled(_, KeyCode::Enter) => {
                                 break;
                             }
                             EventResult::Unhandled(KeyModifiers::SHIFT, KeyCode::BackTab)
                             | EventResult::Unhandled(KeyModifiers::SHIFT, KeyCode::Tab) => {
-                                edit_dialog.focus_previous();
+                                edit_input_dialog.focus_previous();
                             }
                             EventResult::Unhandled(_, KeyCode::Tab) => {
-                                edit_dialog.focus_next();
+                                edit_input_dialog.focus_next();
                             }
                             _ => {}
                         }
