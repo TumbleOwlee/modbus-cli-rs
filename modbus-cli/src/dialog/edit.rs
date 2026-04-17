@@ -92,6 +92,9 @@ pub struct EditDialog {
     // Label for the register
     #[focus]
     pub label: Widget<InputFieldState, InputField<String>>,
+    // Description for the register
+    #[focus]
+    pub description: Widget<InputFieldState, InputField<String>>,
     // Address of the start register
     #[focus]
     pub address: Widget<InputFieldState, InputField<u16>>,
@@ -161,7 +164,7 @@ impl EditDialog {
         let vertical_layout: [Rect; 3] = Layout::vertical([
             Constraint::Min(1),
             Constraint::Length(
-                12 + 2 + 2 + {
+                18 + 2 + 2 + {
                     if self.error.state.input().is_empty() {
                         0
                     } else {
@@ -180,8 +183,10 @@ impl EditDialog {
         let area = block.inner(vertical_layout[1]).inner(Margin::new(2, 1));
         block.render(vertical_layout[1], buf);
 
-        let vertical_layout: [Rect; 5] = Layout::vertical([
+        let mut vertical_index = 0;
+        let vertical_layout: [Rect; 6] = Layout::vertical([
             Constraint::Length(3),
+            Constraint::Length(6),
             Constraint::Length(3),
             Constraint::Length(3),
             Constraint::Length(3),
@@ -197,13 +202,24 @@ impl EditDialog {
 
         StatefulWidget::render(
             &self.label.widget,
-            vertical_layout[0],
+            vertical_layout[vertical_index],
             buf,
             &mut self.label.state,
         );
+        vertical_index += 1;
+
+        StatefulWidget::render(
+            &self.description.widget,
+            vertical_layout[vertical_index],
+            buf,
+            &mut self.description.state,
+        );
+        vertical_index += 1;
 
         let horizontal_layout: [Rect; 2] =
-            Layout::horizontal([Constraint::Min(1), Constraint::Min(1)]).areas(vertical_layout[1]);
+            Layout::horizontal([Constraint::Min(1), Constraint::Min(1)])
+                .areas(vertical_layout[vertical_index]);
+        vertical_index += 1;
 
         StatefulWidget::render(
             &self.address.widget,
@@ -226,7 +242,7 @@ impl EditDialog {
                     Constraint::Min(1),
                     Constraint::Min(1),
                 ])
-                .areas(vertical_layout[2]);
+                .areas(vertical_layout[vertical_index]);
 
                 StatefulWidget::render(
                     &self.number_format.widget,
@@ -252,7 +268,7 @@ impl EditDialog {
             ValueType::Text => {
                 let horizontal_layout: [Rect; 2] =
                     Layout::horizontal([Constraint::Min(1), Constraint::Min(1)])
-                        .areas(vertical_layout[2]);
+                        .areas(vertical_layout[vertical_index]);
 
                 StatefulWidget::render(
                     &self.text_alignment.widget,
@@ -269,18 +285,20 @@ impl EditDialog {
                 );
             }
         }
+        vertical_index += 1;
 
         StatefulWidget::render(
             &self.value.widget,
-            vertical_layout[3],
+            vertical_layout[vertical_index],
             buf,
             &mut self.value.state,
         );
+        vertical_index += 1;
 
         if !self.error.state.input().is_empty() {
             StatefulWidget::render(
                 &self.error.widget,
-                vertical_layout[4],
+                vertical_layout[vertical_index],
                 buf,
                 &mut self.error.state,
             );
@@ -320,6 +338,25 @@ impl EditDialog {
                 widget: InputFieldBuilder::default()
                     .border(Border::Full(Margin::new(1, 0)))
                     .title(Some("Label".to_string()))
+                    .margin(Margin {
+                        vertical: 0,
+                        horizontal: 1,
+                    })
+                    .style(input_style.clone())
+                    .build()
+                    .unwrap(),
+            })
+            .description(Widget {
+                state: InputFieldStateBuilder::default()
+                    .focused(false)
+                    .disabled(false)
+                    .placeholder(Some("Some description...".to_string()))
+                    .build()
+                    .unwrap(),
+                widget: InputFieldBuilder::default()
+                    .border(Border::Full(Margin::new(1, 0)))
+                    .title(Some("Description".to_string()))
+                    .multiline(true)
                     .margin(Margin {
                         vertical: 0,
                         horizontal: 1,

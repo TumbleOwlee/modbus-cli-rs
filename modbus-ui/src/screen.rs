@@ -7,7 +7,7 @@ use ratatui::{
     CompletedFrame, Frame, Terminal,
     prelude::{Backend, CrosstermBackend},
 };
-use std::io::{Stdout, Write};
+use std::io::{Stdout, Write, stdout};
 
 use crate::traits::Init;
 
@@ -45,6 +45,13 @@ where
         F: FnOnce(&mut Frame),
     {
         self.terminal.draw(render_callback)
+    }
+
+    pub fn release() {
+        // restore terminal
+        disable_raw_mode().expect("Disable raw mode failed.");
+        execute!(stdout(), LeaveAlternateScreen, DisableMouseCapture)
+            .expect("Failed to leave alternate screen.");
     }
 }
 

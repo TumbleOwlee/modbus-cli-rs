@@ -4,10 +4,18 @@ mod dialog;
 mod instance;
 mod module;
 
-use std::{io::Stdout, time::Duration};
+use std::{
+    io::{Stdout, stdout},
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
 use clap::Parser;
-use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
+use crossterm::{
+    event::{self, Event, KeyCode, KeyEventKind, KeyModifiers},
+    execute,
+    terminal::{LeaveAlternateScreen, disable_raw_mode},
+};
 use modbus_ui::{AlternateScreen, EventResult, traits::HandleEvents};
 use modbus_util::{Expect, async_cloned, tokio::spawn_detach};
 use tokio::runtime::Runtime;
@@ -74,6 +82,13 @@ fn main() {
 
     let mut screen: AlternateScreen<Stdout> =
         AlternateScreen::new().expect("Failed to create alternate screen.");
+
+    // Release terminal on panic to show error messages
+    let handler = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |panic| {
+        AlternateScreen::<Stdout>::release();
+        handler(panic);
+    }));
 
     let mut edit_dialog = EditDialog::new();
 
