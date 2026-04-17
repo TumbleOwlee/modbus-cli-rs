@@ -4,8 +4,8 @@ use getset::{CopyGetters, Getters, Setters};
 use ratatui::widgets::{ScrollbarState, TableState as UiTableState};
 
 use crate::EventResult;
-use crate::traits::{HandleEvents, SetFocus};
-use crate::widgets::TableEntry;
+use crate::traits::{HandleEvents, IsFocus, SetFocus};
+use crate::widgets::{GetValue, TableEntry};
 
 #[derive(Builder, Debug, Clone, Getters, Setters, CopyGetters)]
 #[getset(set = "pub")]
@@ -35,6 +35,20 @@ where
     table_state: UiTableState,
 }
 
+impl<V, const N: usize> GetValue for TableState<V, N>
+where
+    V: TableEntry<N> + Clone + Default,
+{
+    type ValueType = V;
+
+    fn get_value(&self) -> Self::ValueType {
+        self.values
+            .get(self.table_state.selected().unwrap_or(0))
+            .map(|v| (*v).clone())
+            .unwrap_or_default()
+    }
+}
+
 impl<V, const N: usize> SetFocus for TableState<V, N>
 where
     V: TableEntry<N>,
@@ -42,7 +56,12 @@ where
     fn set_focused(&mut self, focus: bool) {
         self.focused = focus;
     }
+}
 
+impl<V, const N: usize> IsFocus for TableState<V, N>
+where
+    V: TableEntry<N>,
+{
     fn is_focused(&self) -> bool {
         self.focused
     }

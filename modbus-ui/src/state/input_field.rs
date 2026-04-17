@@ -1,10 +1,10 @@
 use crossterm::event::{KeyCode, KeyModifiers};
 use derive_builder::Builder;
 use getset::{CopyGetters, Getters, Setters};
-use ratatui::layout::Margin;
 
 use crate::EventResult;
-use crate::traits::{HandleEvents, Margins, SetFocus};
+use crate::traits::{HandleEvents, IsFocus, SetFocus};
+use crate::widgets::GetValue;
 
 #[derive(Builder, Debug, Default, Clone, Getters, Setters, CopyGetters)]
 #[getset(set = "pub")]
@@ -26,11 +26,21 @@ pub struct InputFieldState {
     placeholder: Option<String>,
 }
 
+impl GetValue for InputFieldState {
+    type ValueType = String;
+
+    fn get_value(&self) -> Self::ValueType {
+        self.input.clone()
+    }
+}
+
 impl SetFocus for InputFieldState {
     fn set_focused(&mut self, focus: bool) {
         self.focused = focus;
     }
+}
 
+impl IsFocus for InputFieldState {
     fn is_focused(&self) -> bool {
         self.focused
     }

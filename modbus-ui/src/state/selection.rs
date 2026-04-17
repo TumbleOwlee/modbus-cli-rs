@@ -4,8 +4,10 @@ use getset::{CopyGetters, Getters, Setters};
 
 use crate::EventResult;
 use crate::traits::HandleEvents;
+use crate::traits::IsFocus;
 use crate::traits::SetFocus;
 use crate::traits::ToLabel;
+use crate::widgets::GetValue;
 
 #[derive(Builder, Debug, Clone, Getters, Setters, CopyGetters)]
 #[getset(set = "pub")]
@@ -33,7 +35,23 @@ where
     fn set_focused(&mut self, focus: bool) {
         self.focused = focus;
     }
+}
 
+impl<ValueType> GetValue for SelectionState<ValueType>
+where
+    ValueType: ToLabel + Clone,
+{
+    type ValueType = ValueType;
+
+    fn get_value(&self) -> Self::ValueType {
+        self.values[self.selection].clone()
+    }
+}
+
+impl<ValueType> IsFocus for SelectionState<ValueType>
+where
+    ValueType: ToLabel + Clone,
+{
     fn is_focused(&self) -> bool {
         self.focused
     }

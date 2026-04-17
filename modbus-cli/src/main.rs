@@ -9,7 +9,7 @@ use std::{io::Stdout, time::Duration};
 use clap::Parser;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use modbus_ui::{AlternateScreen, EventResult, traits::HandleEvents};
-use modbus_util::Expect;
+use modbus_util::{Expect, async_cloned, tokio::spawn_detach};
 use tokio::runtime::Runtime;
 
 use crate::{dialog::EditDialog, module::Definition};
@@ -38,7 +38,6 @@ async fn run() {
             }],
         },
     );
-    module1.start().await.panic(|e| format!("{}", e));
 
     let mut module2 = module::Module::new(
         modbus_net::Key::create(1),
@@ -51,39 +50,39 @@ async fn run() {
             }],
         },
     );
+
+    module1.start().await.panic(|e| format!("{}", e));
     module2.start().await.panic(|e| format!("{}", e));
 
     tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
 
     module1.stop().await.panic(|e| format!("{}", e));
     module2.stop().await.panic(|e| format!("{}", e));
-
-    println!("Module 1 Log:");
-    module1.print_log().await;
-    println!("Module 2 Log:");
-    module2.print_log().await;
 }
 
 fn main() {
-    //    let _ = CliArgs::parse();
-    //
-    //    // Initialize tokio runtime for modbus server
-    //    let runtime = Runtime::new().panic(|e| format!("Failed to create runtime. [{}]", e));
-    //    runtime.block_on(async {
-    //        run().await;
-    //    });
+    // Initialize tokio runtime for modbus server
+    let runtime = Runtime::new().panic(|e| format!("Failed to create runtime. [{}]", e));
 
-    let mut edit_dialog = EditDialog::new();
+    // Spawn modbus modules in the background
+    runtime.block_on(async move {
+        spawn_detach(async move {
+            run().await;
+        })
+        .await
+    });
 
     let mut screen: AlternateScreen<Stdout> =
         AlternateScreen::new().expect("Failed to create alternate screen.");
 
-    let mut result = None;
+    let mut edit_dialog = EditDialog::new();
 
     loop {
         // Draw app
         if let Err(e) = screen.draw(|f| edit_dialog.render(f.area(), f.buffer_mut())) {
-            result = Some(e);
+            drop(screen);
+            eprintln!("Failed to draw screen. [{}]", e);
+            return;
         }
 
         // Check for events
@@ -112,10 +111,5 @@ fn main() {
                 }
             }
         }
-    }
-    drop(screen);
-
-    if let Some(e) = result {
-        println!("{}", e);
     }
 }

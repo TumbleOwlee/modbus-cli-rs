@@ -6,14 +6,16 @@ use modbus_reg::format::{
 use modbus_ui::{
     state::{InputFieldState, InputFieldStateBuilder, SelectionState, SelectionStateBuilder},
     style::{InputFieldStyle, SelectionStyle},
-    traits::{SetFocus, ToLabel},
+    traits::ToLabel,
     types::Border,
-    widgets::{InputField, InputFieldBuilder, Selection, SelectionBuilder, Validate, Widget},
+    widgets::{
+        GetValue, InputField, InputFieldBuilder, Selection, SelectionBuilder, Validate, Widget,
+    },
 };
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, HorizontalAlignment, Layout, Margin, Rect},
-    style::{Style, palette::tailwind},
+    style::palette::tailwind,
     widgets::{Block, StatefulWidget, Widget as UiWidget},
 };
 use std::fmt::Debug;
@@ -55,7 +57,7 @@ impl ToLabel for Endian {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValueType {
     Number,
     Text,
@@ -90,23 +92,26 @@ pub struct EditDialog {
     // Label for the register
     #[focus]
     pub label: Widget<InputFieldState, InputField<String>>,
+    // Address of the start register
+    #[focus]
+    pub address: Widget<InputFieldState, InputField<u16>>,
     // Type selection
     #[focus]
     pub value_type: Widget<SelectionState<ValueType>, Selection<ValueType>>,
     // Number format selection
-    #[focus]
+    #[focus(when = {self.value_type.get_value() == ValueType::Number})]
     pub number_format: Widget<SelectionState<Format>, Selection<Format>>,
     // Number endianess selection
-    #[focus]
+    #[focus(when = {self.value_type.get_value() == ValueType::Number})]
     pub number_endian: Widget<SelectionState<Endian>, Selection<Endian>>,
     // Number resolution input
-    #[focus]
+    #[focus(when = {self.value_type.get_value() == ValueType::Number})]
     pub number_resolution: Widget<InputFieldState, InputField<f64>>,
     // Text alignment selection
-    #[focus]
+    #[focus(when = {self.value_type.get_value() == ValueType::Text})]
     pub text_alignment: Widget<SelectionState<Alignment>, Selection<Alignment>>,
     // Text length input
-    #[focus]
+    #[focus(when = {self.value_type.get_value() == ValueType::Text})]
     pub text_width: Widget<InputFieldState, InputField<usize>>,
     // Value input
     #[focus]
@@ -116,9 +121,11 @@ pub struct EditDialog {
 }
 
 impl EditDialog {
-    fn result(&self) -> Result<(), String> {
+    fn validate(&self) -> Result<(), String> {
         if let Err(e) = String::validate(self.label.state.input()) {
             return Err(format!("Label: {e}"));
+        } else if let Err(e) = u16::validate(self.address.state.input()) {
+            return Err(format!("Address: {e}"));
         }
 
         match self.value_type.state.values()[self.value_type.state.selection()] {
@@ -138,7 +145,7 @@ impl EditDialog {
 
     pub fn render(&mut self, area: Rect, buf: &mut Buffer) {
         // Show error
-        match self.result() {
+        match self.validate() {
             Ok(_) => {
                 self.error.state.set_input(String::new());
             }
@@ -154,7 +161,7 @@ impl EditDialog {
         let vertical_layout: [Rect; 3] = Layout::vertical([
             Constraint::Min(1),
             Constraint::Length(
-                9 + 2 + 2 + {
+                12 + 2 + 2 + {
                     if self.error.state.input().is_empty() {
                         0
                     } else {
@@ -173,7 +180,8 @@ impl EditDialog {
         let area = block.inner(vertical_layout[1]).inner(Margin::new(2, 1));
         block.render(vertical_layout[1], buf);
 
-        let vertical_layout: [Rect; 4] = Layout::vertical([
+        let vertical_layout: [Rect; 5] = Layout::vertical([
+            Constraint::Length(3),
             Constraint::Length(3),
             Constraint::Length(3),
             Constraint::Length(3),
@@ -187,14 +195,21 @@ impl EditDialog {
         ])
         .areas(area);
 
-        let horizontal_layout: [Rect; 2] =
-            Layout::horizontal([Constraint::Min(1), Constraint::Min(1)]).areas(vertical_layout[0]);
-
         StatefulWidget::render(
             &self.label.widget,
-            horizontal_layout[0],
+            vertical_layout[0],
             buf,
             &mut self.label.state,
+        );
+
+        let horizontal_layout: [Rect; 2] =
+            Layout::horizontal([Constraint::Min(1), Constraint::Min(1)]).areas(vertical_layout[1]);
+
+        StatefulWidget::render(
+            &self.address.widget,
+            horizontal_layout[0],
+            buf,
+            &mut self.address.state,
         );
 
         StatefulWidget::render(
@@ -206,20 +221,12 @@ impl EditDialog {
 
         match self.value_type.state.values()[self.value_type.state.selection()] {
             ValueType::Number => {
-                if self.text_alignment.is_focused() {
-                    self.focus_next();
-                    self.focus_next();
-                } else if self.text_width.is_focused() {
-                    self.focus_previous();
-                    self.focus_previous();
-                }
-
                 let horizontal_layout: [Rect; 3] = Layout::horizontal([
                     Constraint::Min(1),
                     Constraint::Min(1),
                     Constraint::Min(1),
                 ])
-                .areas(vertical_layout[1]);
+                .areas(vertical_layout[2]);
 
                 StatefulWidget::render(
                     &self.number_format.widget,
@@ -243,19 +250,9 @@ impl EditDialog {
                 );
             }
             ValueType::Text => {
-                if self.number_format.is_focused() {
-                    self.focus_next();
-                    self.focus_next();
-                    self.focus_next();
-                } else if self.number_resolution.is_focused() {
-                    self.focus_previous();
-                    self.focus_previous();
-                    self.focus_previous();
-                }
-
                 let horizontal_layout: [Rect; 2] =
                     Layout::horizontal([Constraint::Min(1), Constraint::Min(1)])
-                        .areas(vertical_layout[1]);
+                        .areas(vertical_layout[2]);
 
                 StatefulWidget::render(
                     &self.text_alignment.widget,
@@ -275,7 +272,7 @@ impl EditDialog {
 
         StatefulWidget::render(
             &self.value.widget,
-            vertical_layout[2],
+            vertical_layout[3],
             buf,
             &mut self.value.state,
         );
@@ -283,7 +280,7 @@ impl EditDialog {
         if !self.error.state.input().is_empty() {
             StatefulWidget::render(
                 &self.error.widget,
-                vertical_layout[3],
+                vertical_layout[4],
                 buf,
                 &mut self.error.state,
             );
@@ -323,6 +320,24 @@ impl EditDialog {
                 widget: InputFieldBuilder::default()
                     .border(Border::Full(Margin::new(1, 0)))
                     .title(Some("Label".to_string()))
+                    .margin(Margin {
+                        vertical: 0,
+                        horizontal: 1,
+                    })
+                    .style(input_style.clone())
+                    .build()
+                    .unwrap(),
+            })
+            .address(Widget {
+                state: InputFieldStateBuilder::default()
+                    .focused(false)
+                    .disabled(false)
+                    .placeholder(Some("e.g. 100".to_string()))
+                    .build()
+                    .unwrap(),
+                widget: InputFieldBuilder::default()
+                    .border(Border::Full(Margin::new(1, 0)))
+                    .title(Some("Address".to_string()))
                     .margin(Margin {
                         vertical: 0,
                         horizontal: 1,
@@ -489,7 +504,7 @@ impl EditDialog {
                     .build()
                     .unwrap(),
             })
-            .focus(0)
+            .focus(EditDialogFocus::Label)
             .build()
             .unwrap()
     }

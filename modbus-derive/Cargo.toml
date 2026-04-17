@@ -8,6 +8,7 @@ authors = ["David Loewe <49597367+TumbleOwlee@users.noreply.github.com>"]
 proc-macro = true
 
 [dependencies]
+convert_case = "0.11.0"
 proc-macro2 = "1.0.106"
 quote = "1.0.45"
 syn = "2.0.117"
@@ -15,3 +16,4 @@ syn = "2.0.117"
 [dev-dependencies]
 modbus-ui = { path = "../modbus-ui" }
 crossterm = "0.29.0"
+derive_builder = "0.20.2"

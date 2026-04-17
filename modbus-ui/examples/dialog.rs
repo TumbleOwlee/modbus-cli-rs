@@ -404,7 +404,7 @@ fn main() {
                 .build()
                 .unwrap(),
         })
-        .focus(0)
+        .focus(AppFocus::Name)
         .build()
         .unwrap();
 

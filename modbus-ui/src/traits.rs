@@ -36,6 +36,9 @@ impl ToLabel for String {
 
 pub trait SetFocus {
     fn set_focused(&mut self, focus: bool);
+}
+
+pub trait IsFocus {
     fn is_focused(&self) -> bool;
 }
 

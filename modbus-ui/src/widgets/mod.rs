@@ -10,17 +10,34 @@ use ratatui::{buffer::Buffer, layout::Rect};
 pub use selection::*;
 pub use table::*;
 
-use crate::traits::Margins;
+use crate::traits::{IsFocus, Margins};
 use crate::{
     EventResult,
     traits::{HandleEvents, SetFocus},
 };
 use std::fmt::Debug;
 
+pub trait GetValue {
+    type ValueType;
+
+    fn get_value(&self) -> Self::ValueType;
+}
+
 #[derive(Debug, Clone)]
 pub struct Widget<S, W> {
     pub state: S,
     pub widget: W,
+}
+
+impl<S, W> GetValue for Widget<S, W>
+where
+    S: GetValue,
+{
+    type ValueType = S::ValueType;
+
+    fn get_value(&self) -> S::ValueType {
+        self.state.get_value()
+    }
 }
 
 impl<S, W> Margins for Widget<S, W>
@@ -39,7 +56,12 @@ where
     fn set_focused(&mut self, focus: bool) {
         self.state.set_focused(focus);
     }
+}
 
+impl<S, W> IsFocus for Widget<S, W>
+where
+    S: IsFocus,
+{
     fn is_focused(&self) -> bool {
         self.state.is_focused()
     }
