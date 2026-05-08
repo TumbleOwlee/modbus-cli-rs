@@ -1,4 +1,5 @@
 use crate::mem::memory::{Memory, Range};
+use crate::mem::register::AccessType;
 use crate::msg::LogMsg;
 use crate::tcp::TcpConfig;
 use crate::util::{str, Expect};
@@ -46,7 +47,7 @@ impl Client {
         let sorted_defs = config
             .definitions
             .iter()
-            .filter(|d| !d.1.is_virtual())
+            .filter(|d| !d.1.is_virtual() && d.1.access_type() != AccessType::WriteOnly)
             .sorted_by(|a, b| {
                 a.1.get_slave_id()
                     .unwrap_or(1)

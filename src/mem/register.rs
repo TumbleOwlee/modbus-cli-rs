@@ -46,7 +46,7 @@ impl Address {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub enum AccessType {
     ReadWrite,
     ReadOnly,
