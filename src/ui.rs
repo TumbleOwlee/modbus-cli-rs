@@ -1,5 +1,5 @@
 use crate::mem::register::Values::ValueDef;
-use crate::mem::register::{Handler, Register};
+use crate::mem::register::{AccessType, Handler, Register};
 use crate::util::str;
 use crate::widgets::{EditDialog, EditFieldType};
 use crate::{lua, AppConfig, Command, LogMsg, Status};
@@ -523,11 +523,17 @@ impl App {
                         if let Some(input) = self.edit_dialog.get_input(EditFieldType::Value) {
                             match register.r#type().encode(&input) {
                                 Ok(v) => {
+                                    let mut update_memory = true;
+                                    let mut close_popup = false;
                                     if v.len() > register.raw().len() {
                                         self.log_entries.push(LogMsg::err(
                                                                 "Provided input requires a longer register as available.",
                                                             ));
                                     } else if let Some(ref sender) = cmd_sender {
+                                        if register.access_type() != AccessType::WriteOnly {
+                                            update_memory = false;
+                                        }
+
                                         let command: Option<Command>;
                                         match register.function_code() {
                                             tokio_modbus::FunctionCode::ReadCoils
@@ -559,7 +565,7 @@ impl App {
                                                         Some(Command::WriteMultipleRegisters((
                                                             register.slave_id(),
                                                             register.address(),
-                                                            v,
+                                                            v.clone(),
                                                         )))
                                                 }
                                             }
@@ -568,24 +574,40 @@ impl App {
                                                 register.function_code()
                                             ),
                                         }
+
                                         if let Some(c) = command {
                                             if let Err(e) = sender.blocking_send(c) {
                                                 self.log_entries
                                                     .push(LogMsg::err(&format!("{}", e)));
                                             } else {
-                                                self.popup = Popup::None;
+                                                close_popup = true;
                                             }
                                         }
-                                    } else if let Err(e) = self.register_handler.set_values(
-                                        register.slave_id(),
-                                        register.address(),
-                                        &v,
-                                    ) {
-                                        self.log_entries.push(LogMsg::err(&format!("{}", e)));
-                                        if let Some(ref mut f) = self.file {
-                                            let _ = writeln!(f, "{}", e);
+                                    }
+
+                                    self.log_entries.push(LogMsg::err(&format!(
+                                        "Update memory {}",
+                                        update_memory
+                                    )));
+                                    if update_memory && close_popup {
+                                        close_popup = false;
+                                        if let Err(e) = self.register_handler.set_values(
+                                            register.slave_id(),
+                                            register.address(),
+                                            &v,
+                                        ) {
+                                            self.log_entries.push(LogMsg::err(&format!("{}", e)));
+                                            if let Some(ref mut f) = self.file {
+                                                let _ = writeln!(f, "{}", e);
+                                            }
+                                        } else {
+                                            close_popup = true;
                                         }
                                     } else {
+                                        close_popup = true;
+                                    }
+
+                                    if close_popup {
                                         self.popup = Popup::None;
                                     }
                                 }
