@@ -23,6 +23,14 @@ pub enum Kind {
     Separated(Type),
 }
 
+impl Kind {
+    fn get_type(&self) -> Type {
+        match self {
+            Kind::Read(t) | Kind::Write(t) | Kind::Combined(t) | Kind::Separated(t) => t.clone(),
+        }
+    }
+}
+
 impl Value {
     pub fn default(kind: &Kind) -> Self {
         Self::from_u16(kind, 0)

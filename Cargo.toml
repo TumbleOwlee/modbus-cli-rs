@@ -8,6 +8,6 @@ members = [
     "modbus-net",
     "modbus-util",
     "modbus-ui",
-    "modbus-cli",
+#    "modbus-cli",
     "modbus-derive",
 ]

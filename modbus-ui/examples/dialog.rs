@@ -5,7 +5,7 @@ use ratatui::{
     layout::{Constraint, Layout, Margin, Rect},
     style::palette::tailwind,
 };
-use std::{fmt::Debug, io::Stdout, time::Duration};
+use std::{fmt::Debug, io::Stdout, process::ExitCode, time::Duration};
 
 use modbus_ui::{
     AlternateScreen, EventResult,
@@ -208,7 +208,7 @@ impl App {
     }
 }
 
-fn main() {
+fn main() -> ExitCode {
     let selection_style = SelectionStyle {
         focused: ratatui::prelude::Style::default()
             .bg(tailwind::INDIGO.c400)
@@ -453,5 +453,14 @@ fn main() {
     }
     drop(screen);
 
-    println!("{:?}", app.result());
+    match app.result() {
+        Ok(v) => {
+            println!("{:?}", v);
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("ERROR: {}", e);
+            ExitCode::FAILURE
+        }
+    }
 }

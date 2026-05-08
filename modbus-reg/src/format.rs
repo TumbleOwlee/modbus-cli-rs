@@ -47,6 +47,24 @@ impl Format {
         }
     }
 
+    pub fn resolution(&self) -> Option<Resolution> {
+        match self {
+            Self::Ascii((_, w)) => None,
+            Self::U8((_, resolution))
+            | Self::U16((_, resolution))
+            | Self::I8((_, resolution))
+            | Self::I16((_, resolution))
+            | Self::U32((_, resolution))
+            | Self::I32((_, resolution))
+            | Self::F32((_, resolution))
+            | Self::U64((_, resolution))
+            | Self::I64((_, resolution))
+            | Self::F64((_, resolution))
+            | Self::U128((_, resolution))
+            | Self::I128((_, resolution)) => Some(resolution.clone()),
+        }
+    }
+
     /// The length in bytes (u8) of the format
     pub fn length(&self) -> usize {
         self.width() * 2

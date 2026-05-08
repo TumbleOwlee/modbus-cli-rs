@@ -28,7 +28,7 @@ impl Builder {
         Self {
             slave_id: 0,
             access: Access::ReadWrite,
-            kind: Kind::InputRegisters,
+            kind: Kind::InputRegister,
             address: Address::Virtual,
             format,
         }

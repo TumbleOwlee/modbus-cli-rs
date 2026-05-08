@@ -9,7 +9,7 @@ use modbus_ui::{
     widgets::{Header, Table, TableBuilder, TableEntry},
 };
 use ratatui::{Frame, layout::Margin, style::palette::tailwind};
-use std::{io::Stdout, time::Duration};
+use std::{io::Stdout, process::ExitCode, time::Duration};
 
 #[derive(Clone, Debug)]
 struct Item {
@@ -75,7 +75,7 @@ impl App {
     }
 }
 
-fn main() {
+fn main() -> ExitCode {
     let mut screen: AlternateScreen<Stdout> =
         AlternateScreen::new().expect("Failed to create alternate screen.");
 
@@ -123,13 +123,22 @@ fn main() {
     }
 
     drop(screen);
-    let value = app
+
+    match app
         .state
         .values()
         .get(app.state.table_state().selected().unwrap_or(0))
-        .unwrap();
-    println!(
-        "Selection: {{ name: {}, value: {} }}",
-        value.name, value.value
-    );
+    {
+        Some(item) => {
+            println!(
+                "Selection: {{ name: {}, value: {} }}",
+                item.name, item.value
+            );
+            ExitCode::SUCCESS
+        }
+        None => {
+            eprintln!("No selection present.");
+            ExitCode::FAILURE
+        }
+    }
 }

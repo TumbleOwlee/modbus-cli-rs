@@ -3,6 +3,7 @@
 mod dialog;
 mod instance;
 mod module;
+mod ui;
 
 use std::{io::Stdout, time::Duration};
 
@@ -86,13 +87,18 @@ fn main() {
     let mut edit_input_dialog = EditInputDialog::new();
     let mut edit_selection_dialog = EditSelectionDialog::new(vec!["Dog", "Cat", "Horse"]);
 
+    let mut i = 0;
+
     loop {
         // Draw app
         if let Err(e) = screen.draw(|f| {
             let layout: [Rect; 2] =
                 Layout::horizontal([Constraint::Min(1), Constraint::Min(1)]).areas(f.area());
-            edit_selection_dialog.render(layout[0], f.buffer_mut());
-            edit_input_dialog.render(layout[1], f.buffer_mut());
+            if i == 0 {
+                edit_input_dialog.render(layout[0], f.buffer_mut());
+            } else {
+                edit_selection_dialog.render(layout[1], f.buffer_mut());
+            }
         }) {
             drop(screen);
             eprintln!("Failed to draw screen. [{}]", e);
@@ -109,6 +115,9 @@ fn main() {
                         let event_result: EventResult =
                             edit_input_dialog.handle_events(key.modifiers, key.code);
                         match event_result {
+                            EventResult::Unhandled(KeyModifiers::ALT, KeyCode::Char('k')) => {
+                                i = (i + 1) % 2;
+                            }
                             EventResult::Unhandled(_, KeyCode::Enter) => {
                                 break;
                             }
