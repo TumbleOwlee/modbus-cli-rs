@@ -523,16 +523,13 @@ impl App {
                         if let Some(input) = self.edit_dialog.get_input(EditFieldType::Value) {
                             match register.r#type().encode(&input) {
                                 Ok(v) => {
-                                    let mut update_memory = true;
-                                    let mut close_popup = false;
                                     if v.len() > register.raw().len() {
                                         self.log_entries.push(LogMsg::err(
                                                                 "Provided input requires a longer register as available.",
                                                             ));
                                     } else if let Some(ref sender) = cmd_sender {
-                                        if register.access_type() != AccessType::WriteOnly {
-                                            update_memory = false;
-                                        }
+                                        let write_only =
+                                            register.access_type() == AccessType::WriteOnly;
 
                                         let command: Option<Command>;
                                         match register.function_code() {
@@ -543,12 +540,14 @@ impl App {
                                                         register.slave_id(),
                                                         register.address(),
                                                         v[0] != 0,
+                                                        write_only,
                                                     )))
                                                 } else {
                                                     command = Some(Command::WriteMultipleCoils((
                                                         register.slave_id(),
                                                         register.address(),
                                                         v.iter().map(|e| *e != 0).collect(),
+                                                        write_only,
                                                     )))
                                                 }
                                             }
@@ -559,6 +558,7 @@ impl App {
                                                         register.slave_id(),
                                                         register.address(),
                                                         v[0],
+                                                        write_only,
                                                     )))
                                                 } else {
                                                     command =
@@ -566,6 +566,7 @@ impl App {
                                                             register.slave_id(),
                                                             register.address(),
                                                             v.clone(),
+                                                            write_only,
                                                         )))
                                                 }
                                             }
@@ -580,34 +581,19 @@ impl App {
                                                 self.log_entries
                                                     .push(LogMsg::err(&format!("{}", e)));
                                             } else {
-                                                close_popup = true;
+                                                self.popup = Popup::None;
                                             }
                                         }
-                                    }
-
-                                    self.log_entries.push(LogMsg::err(&format!(
-                                        "Update memory {}",
-                                        update_memory
-                                    )));
-                                    if update_memory && close_popup {
-                                        close_popup = false;
-                                        if let Err(e) = self.register_handler.set_values(
-                                            register.slave_id(),
-                                            register.address(),
-                                            &v,
-                                        ) {
-                                            self.log_entries.push(LogMsg::err(&format!("{}", e)));
-                                            if let Some(ref mut f) = self.file {
-                                                let _ = writeln!(f, "{}", e);
-                                            }
-                                        } else {
-                                            close_popup = true;
+                                    } else if let Err(e) = self.register_handler.set_values(
+                                        register.slave_id(),
+                                        register.address(),
+                                        &v,
+                                    ) {
+                                        self.log_entries.push(LogMsg::err(&format!("{}", e)));
+                                        if let Some(ref mut f) = self.file {
+                                            let _ = writeln!(f, "{}", e);
                                         }
                                     } else {
-                                        close_popup = true;
-                                    }
-
-                                    if close_popup {
                                         self.popup = Popup::None;
                                     }
                                 }

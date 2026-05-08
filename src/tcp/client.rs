@@ -325,7 +325,7 @@ impl Client {
                         Command::Connect => {
                             reconnect = true;
                         }
-                        Command::WriteSingleCoil((slave, addr, coil)) => {
+                        Command::WriteSingleCoil((slave, addr, coil, write_only)) => {
                             context.set_slave(Slave(slave));
                             if let Err(e) = tokio::time::timeout(
                                 std::time::Duration::from_millis(timeout_ms),
@@ -347,9 +347,20 @@ impl Client {
                                         "Successfully written address {addr} with values {coil:?}."
                                     )))
                                     .await;
+                                if write_only {
+                                    let mut memory =
+                                        self.memory.lock().expect("Unable to lock memory");
+                                    memory
+                                        .write(
+                                            slave,
+                                            Range::new(addr, addr + 1),
+                                            &vec![if coil { 1 } else { 0 }],
+                                        )
+                                        .panic(|e| format!("Failed to write to memory ({})", e));
+                                }
                             }
                         }
-                        Command::WriteMultipleCoils((slave, addr, coils)) => {
+                        Command::WriteMultipleCoils((slave, addr, coils, write_only)) => {
                             context.set_slave(Slave(slave));
                             if let Err(e) = tokio::time::timeout(
                                 std::time::Duration::from_millis(timeout_ms),
@@ -371,9 +382,24 @@ impl Client {
                                         "Successfully written address {addr} with values {coils:?}."
                                     )))
                                     .await;
+
+                                if write_only {
+                                    let mut memory =
+                                        self.memory.lock().expect("Unable to lock memory");
+                                    memory
+                                        .write(
+                                            slave,
+                                            Range::new(addr, addr + coils.len() as u16),
+                                            &coils
+                                                .iter()
+                                                .map(|c| if *c { 1 } else { 0 })
+                                                .collect::<Vec<u16>>(),
+                                        )
+                                        .panic(|e| format!("Failed to write to memory ({})", e));
+                                }
                             }
                         }
-                        Command::WriteSingleRegister((slave, addr, value)) => {
+                        Command::WriteSingleRegister((slave, addr, value, write_only)) => {
                             context.set_slave(Slave(slave));
                             if let Err(e) = tokio::time::timeout(
                                 std::time::Duration::from_millis(timeout_ms),
@@ -395,9 +421,16 @@ impl Client {
                                         "Successfully written address {addr} with values {value:?}."
                                     )))
                                     .await;
+                                if write_only {
+                                    let mut memory =
+                                        self.memory.lock().expect("Unable to lock memory");
+                                    memory
+                                        .write(slave, Range::new(addr, addr + 1), &vec![value])
+                                        .panic(|e| format!("Failed to write to memory ({})", e));
+                                }
                             }
                         }
-                        Command::WriteMultipleRegisters((slave, addr, vec)) => {
+                        Command::WriteMultipleRegisters((slave, addr, vec, write_only)) => {
                             context.set_slave(Slave(slave));
                             if let Err(e) = tokio::time::timeout(
                                 std::time::Duration::from_millis(timeout_ms),
@@ -419,6 +452,17 @@ impl Client {
                                         "Successfully written address {addr} with values {vec:?}."
                                     )))
                                     .await;
+                                if write_only {
+                                    let mut memory =
+                                        self.memory.lock().expect("Unable to lock memory");
+                                    memory
+                                        .write(
+                                            slave,
+                                            Range::new(addr, addr + vec.len() as u16),
+                                            &vec,
+                                        )
+                                        .panic(|e| format!("Failed to write to memory ({})", e));
+                                }
                             }
                         }
                     }
