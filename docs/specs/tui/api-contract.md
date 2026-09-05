@@ -296,7 +296,7 @@ Yank/delete also copy to the system clipboard via OSC 52. A `language` setting d
 
 ## Markdown input field — modes and commands
 
-The widget uses the mode transitions, motions, edits and Insert-mode keys of the code editor tables above (UI-R-125).
+The widget uses the mode transitions, motions, edits and Insert-mode keys of the code editor tables above (UI-R-181).
 
 | Key | Mode | Action | Req |
 |---|---|---|---|
@@ -308,10 +308,10 @@ The widget uses the mode transitions, motions, edits and Insert-mode keys of the
 | `Ctrl+U` | Normal / Visual / read-only | Half a screen of display rows up, cursor moved the same number of rows | UI-R-136, UI-R-139 |
 | `j` / `k` | Normal / Visual / read-only | Down / up one source line, wrapping ignored | UI-R-134 |
 | `yy` | Normal / read-only | Yank current source line | UI-R-134, UI-R-139 |
-| `h` / `l` / `0` / `$` / `w` / `b` / `e` | read-only | Consumed, no movement | UI-E-072 |
+| `h` / `l` / `0` / `$` / `w` / `b` / `e` | read-only | Consumed, no movement | UI-E-089 |
 | mutating keys, `i` / `a` / `I` / `A` / `o` / `O` / `v` / `V` | read-only | Ignored, reported unhandled | UI-R-155 |
 
-Public surface: content get and set (UI-R-125), read-only toggle (UI-R-128, UI-R-155), focus set and query (UI-R-126, UI-R-128), current vim mode and its display label (UI-R-125), builder options for the markdown theme (UI-R-141), the syntax theme (UI-R-129) and the line-number gutter, default off (UI-R-140).
+Public surface: content get and set (UI-R-181), read-only toggle (UI-R-184, UI-R-155), focus set and query (UI-R-182, UI-R-184), current vim mode and its display label (UI-R-181), builder options for the markdown theme (UI-R-141), the syntax theme (UI-R-129) and the line-number gutter, default off (UI-R-140).
 
 ## Code editor and syntax public surface
 

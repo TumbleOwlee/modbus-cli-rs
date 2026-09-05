@@ -20,7 +20,7 @@ use crate::widgets::Title;
 
 /// A markdown editor rendered from a
 /// [`MarkdownInputFieldState`](crate::state::MarkdownInputFieldState): source lines are
-/// shown rendered except where editing requires revealing their markup (UI-R-126..UI-R-128),
+/// shown rendered except where editing requires revealing their markup (UI-R-182..UI-R-184),
 /// always wrapped to the widget width (UI-R-130). Configure border, title, margins, and the
 /// syntax/markdown themes via [`MarkdownInputFieldBuilder`].
 #[derive(Builder, Debug, Clone, Getters, Setters, CopyGetters, WithSetters)]
@@ -77,7 +77,7 @@ impl MarkdownInputField {
     /// Builds the styled-source form of `line` (UI-R-129) as a word-wrapped
     /// [`RenderedLine`] — the same wrap layout a rendered paragraph gets (UI-R-131: a
     /// break only at a space, falling back to a character break only when a single word is
-    /// itself wider than the line, UI-E-070), so the source and rendered paths never
+    /// itself wider than the line, UI-E-087), so the source and rendered paths never
     /// disagree on where a line breaks.
     fn styled_source_line(&self, line: &str) -> RenderedLine {
         let (spans, _) =
@@ -121,8 +121,8 @@ impl MarkdownInputField {
 /// output of wrapping that same line's chars: word-wrap only ever drops a run of spaces
 /// exactly at a row break (UI-R-131), never reorders or alters other characters, so a row's
 /// text is otherwise a verbatim slice of `original` — walking both in lockstep and skipping
-/// `original` past a dropped run finds the row/column pair (UI-E-071). Clamps to the last
-/// row/column so a cursor at the exact end of the line is always drawn (UI-E-071).
+/// `original` past a dropped run finds the row/column pair (UI-E-088). Clamps to the last
+/// row/column so a cursor at the exact end of the line is always drawn (UI-E-088).
 fn locate_wrapped_position(
     original: &[char],
     rows: &[Vec<(String, Style)>],
@@ -152,7 +152,7 @@ fn locate_wrapped_position(
     (0, 0)
 }
 
-/// Whether `line_idx` is drawn in its rendered form or as styled source, per UI-R-126..UI-R-128.
+/// Whether `line_idx` is drawn in its rendered form or as styled source, per UI-R-182..UI-R-184.
 fn reveal_as_source(
     line_idx: usize,
     active_line: usize,

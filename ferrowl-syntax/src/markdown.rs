@@ -1,5 +1,5 @@
 //! Markdown inline model: pure text-to-spans parsing of the inline constructs a
-//! consumer needs to render (hide markers) or highlight (UI-R-122).
+//! consumer needs to render (hide markers) or highlight (UI-R-178).
 
 use std::collections::HashSet;
 
@@ -24,7 +24,7 @@ pub struct InlineSpan {
 }
 
 /// Inline constructs of one source line, sorted by content start, non-overlapping except for
-/// the deliberate Bold/Italic pair `***x***` resolves to over the same text (UI-E-075).
+/// the deliberate Bold/Italic pair `***x***` resolves to over the same text (UI-E-092).
 pub fn inline_spans(line: &str) -> Vec<InlineSpan> {
     let chars: Vec<char> = line.chars().collect();
     let escaped = escaped_positions(&chars);
@@ -555,7 +555,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-122 — bold, code and strike each separate their marker columns from their content columns.
+    /// UI-R-178 — bold, code and strike each separate their marker columns from their content columns.
     fn ut_emphasis_code_and_strike_separate_markers_from_content() {
         let spans = inline_spans("**bold**");
         assert_eq!(spans.len(), 1);
@@ -586,7 +586,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-122 — a link and an image each separate bracket/paren/URL marker columns from their text content.
+    /// UI-R-178 — a link and an image each separate bracket/paren/URL marker columns from their text content.
     fn ut_link_and_image_separate_markers_from_content() {
         let spans = inline_spans("[text](url)");
         assert_eq!(spans.len(), 1);
@@ -603,7 +603,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-123 — an escaped `*` neither opens nor closes an italic construct; the backslash is a marker column.
+    /// UI-R-179 — an escaped `*` neither opens nor closes an italic construct; the backslash is a marker column.
     fn ut_backslash_escape_neither_opens_nor_closes_a_construct() {
         let line = r"\*not italic\*";
         assert!(inline_spans(line).is_empty());
@@ -650,7 +650,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-E-075 — `***x***` resolves best-effort as nested Bold and Italic over the same text.
+    /// UI-E-092 — `***x***` resolves best-effort as nested Bold and Italic over the same text.
     fn ut_triple_marker_yields_bold_and_italic() {
         let ks = kinds("***x***");
         assert_eq!(ks, vec![InlineKind::Bold, InlineKind::Italic]);
@@ -668,7 +668,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-120 — headings, list items, quotes and rules classify to their `BlockKind`.
+    /// UI-R-176 — headings, list items, quotes and rules classify to their `BlockKind`.
     fn ut_block_kinds_cover_headings_lists_quotes_and_rules() {
         let (bl, _) = block_line("### Title", &BlockState::default());
         assert_eq!(bl.kind, BlockKind::Heading { level: 3 });
@@ -713,7 +713,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-120 — a task item reports its checked state, case-insensitively.
+    /// UI-R-176 — a task item reports its checked state, case-insensitively.
     fn ut_task_item_reports_checked_state() {
         let (bl, _) = block_line("- [ ] todo", &BlockState::default());
         assert_eq!(
@@ -744,7 +744,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-120 — `inline` carries the source line's inline constructs, offset by `content_start`.
+    /// UI-R-176 — `inline` carries the source line's inline constructs, offset by `content_start`.
     fn ut_block_line_reports_inline_spans_of_its_content() {
         let (bl, _) = block_line("- a **bold** item", &BlockState::default());
         assert_eq!(bl.inline.len(), 1);
@@ -756,7 +756,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-121 — every line inside an open fence is `FenceBody` regardless of content, and a
+    /// UI-R-177 — every line inside an open fence is `FenceBody` regardless of content, and a
     /// matching closing delimiter clears the carry.
     fn ut_fence_carry_classifies_every_body_line_and_closes_on_matching_delimiter() {
         let state = BlockState::default();
@@ -790,7 +790,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-121 — a closing fence delimiter must be at least as long as the opening one; a
+    /// UI-R-177 — a closing fence delimiter must be at least as long as the opening one; a
     /// shorter backtick run stays fence body.
     fn ut_fence_closing_run_must_be_at_least_the_opening_length() {
         let state = BlockState::default();
@@ -817,7 +817,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-E-073 — a fence opened and never closed keeps every following line a fence body.
+    /// UI-E-090 — a fence opened and never closed keeps every following line a fence body.
     fn ut_unclosed_fence_keeps_every_following_line_a_fence_body() {
         let mut state = BlockState::default();
         let (open, next) = block_line("```", &state);
@@ -842,7 +842,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-124 — tables, raw HTML, footnotes, reference links, setext headings and autolinks
+    /// UI-R-180 — tables, raw HTML, footnotes, reference links, setext headings and autolinks
     /// classify as `Paragraph` with no inline spans over them.
     fn ut_tables_html_footnotes_reference_links_setext_and_autolinks_are_paragraphs() {
         let cases = [

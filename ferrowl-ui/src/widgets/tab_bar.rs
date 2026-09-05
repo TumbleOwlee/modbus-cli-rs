@@ -189,6 +189,10 @@ impl<T: ToLabel + Clone> StatefulWidget for &TabBar<T> {
         }
         let total_slots = start;
 
+        if active_block.is_none() && state.offset >= total_slots {
+            state.offset = total_slots.saturating_sub(h);
+        }
+
         let mut end = (state.offset + h).min(total_slots);
         if total > h
             && let Some((block_start, block_height)) = active_block
@@ -1009,6 +1013,27 @@ mod tests {
         }
     }
 
+    /// UI-E-085 — an out-of-range active index leaves a stored offset past
+    /// the last cell the current tabs occupy; the offset is clamped so the
+    /// widget draws tabs rather than a blank area.
+    #[test]
+    fn ut_stale_offset_past_end_is_clamped_to_show_tabs() {
+        let w = TabBarBuilder::<String>::default()
+            .direction(Direction::Vertical)
+            .build()
+            .unwrap();
+        let mut st = TabBarState {
+            titles: titles(&["Abc"]),
+            active: 9,
+            offset: 10,
+        };
+        let mut b = buffer(1, 3);
+        StatefulWidget::render(&w, Rect::new(0, 0, 1, 3), &mut b, &mut st);
+        assert_eq!(st.offset, 0);
+        let rendered: String = (0..3).map(|y| b[(0, y)].symbol().to_string()).collect();
+        assert_eq!(rendered, "Abc");
+    }
+
     /// UI-E-073 — an empty title with zero vertical padding still takes
     /// part in the spare-row division and so becomes visible.
     #[test]
@@ -1615,7 +1640,11 @@ mod tests {
     }
 
     /// UI-E-084 — a double-width title character counts as one cell in the
-    /// extent computation and is written unchanged.
+    /// extent computation and is written unchanged. A natural extent of 4
+    /// (miscounting each wide character as its 2-column display width)
+    /// instead of 2 would center the title one cell later than a correct
+    /// count of 2 does, so the gap before and after the title discriminates
+    /// the count as well as the character glyphs themselves.
     #[test]
     fn ut_horizontal_wide_title_char_is_written_as_is() {
         let w = TabBarBuilder::<String>::default().build().unwrap();
@@ -1624,9 +1653,12 @@ mod tests {
             active: 0,
             offset: 0,
         };
-        let mut b = buffer(2, 1);
-        StatefulWidget::render(&w, Rect::new(0, 0, 2, 1), &mut b, &mut st);
-        assert_eq!(b[(0, 0)].symbol(), "日");
-        assert_eq!(b[(1, 0)].symbol(), "本");
+        let mut b = buffer(5, 1);
+        StatefulWidget::render(&w, Rect::new(0, 0, 5, 1), &mut b, &mut st);
+        assert_eq!(b[(0, 0)].symbol(), " ");
+        assert_eq!(b[(1, 0)].symbol(), "日");
+        assert_eq!(b[(2, 0)].symbol(), "本");
+        assert_eq!(b[(3, 0)].symbol(), " ");
+        assert_eq!(b[(4, 0)].symbol(), " ");
     }
 }

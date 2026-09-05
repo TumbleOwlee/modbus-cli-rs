@@ -87,8 +87,8 @@ mod tests {
         }
     }
 
-    /// UI-R-114, UI-E-050 — the tab names are written adjacent across the
-    /// bar's one row, and an empty tab list does not panic.
+    /// UI-R-114 — the tab names are written adjacent across the bar's one
+    /// row, and an empty tab list does not panic.
     #[test]
     fn ut_render_tabs() {
         let area = Rect::new(0, 0, 9, 1);

@@ -483,7 +483,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-E-075 — `***x***` renders with bold and italic merged over the same text, not one
+    /// UI-E-092 — `***x***` renders with bold and italic merged over the same text, not one
     /// style overwriting the other.
     fn ut_triple_marker_merges_bold_and_italic_over_the_same_text() {
         let rl = render("***x***");
@@ -801,7 +801,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-E-074 — tables, raw HTML, footnotes, reference links and autolinks render as plain text.
+    /// UI-E-091 — tables, raw HTML, footnotes, reference links and autolinks render as plain text.
     fn ut_unsupported_constructs_render_as_plain_text() {
         for line in [
             "| a | b |",
@@ -925,7 +925,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-E-069 — when the hanging indent leaves no room for content, it is dropped and
+    /// UI-E-086 — when the hanging indent leaves no room for content, it is dropped and
     /// continuation rows start at column zero.
     fn ut_hanging_indent_is_dropped_when_the_width_is_too_narrow() {
         let rl = RenderedLine {
@@ -946,7 +946,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-E-070 — a long word is never truncated: every character reappears across the rows.
+    /// UI-E-087 — a long word is never truncated: every character reappears across the rows.
     fn ut_long_word_is_never_truncated() {
         let word = "abcdefghijklmnopqrstuvwxyz";
         let rl = render(word);
@@ -956,7 +956,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-E-070 — a leading whitespace run wider than the row cap is kept, never silently
+    /// UI-E-087 — a leading whitespace run wider than the row cap is kept, never silently
     /// dropped into an empty row.
     fn ut_leading_space_run_wider_than_width_is_kept_not_dropped() {
         let spaces = " ".repeat(10);

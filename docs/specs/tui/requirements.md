@@ -192,15 +192,15 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 
 ## Markdown input field
 
-**UI-R-125** — The markdown input field is a multi-line widget composing the vim-modal code-editor state (UI-R-027 through UI-R-036): buffer, `Normal`/`Insert`/`Visual` modes, motions and operators, registers, single-level undo and the disabled flag, which the markdown widget surfaces as read-only.
+**UI-R-181** — The markdown input field is a multi-line widget composing the vim-modal code-editor state (UI-R-027 through UI-R-036): buffer, `Normal`/`Insert`/`Visual` modes, motions and operators, registers, single-level undo and the disabled flag, which the markdown widget surfaces as read-only.
 
-**UI-R-126** — Focused, editable, in `Normal` mode: every source line is drawn in its rendered form except the line holding the cursor, which is drawn as styled source, revealing that line's markup for editing.
+**UI-R-182** — Focused, editable, in `Normal` mode: every source line is drawn in its rendered form except the line holding the cursor, which is drawn as styled source, revealing that line's markup for editing.
 
-**UI-R-127** — Focused, editable, in `Insert` or `Visual` mode: every source line is drawn as styled source, with no rendered lines.
+**UI-R-183** — Focused, editable, in `Insert` or `Visual` mode: every source line is drawn as styled source, with no rendered lines.
 
-**UI-R-128** — Unfocused, or read-only in any state, every source line is drawn in its rendered form, including the cursor line; no line reveals its source.
+**UI-R-184** — Unfocused, or read-only in any state, every source line is drawn in its rendered form, including the cursor line; no line reveals its source.
 
-**UI-R-129** — The styled-source view of UI-R-126 and UI-R-127 is produced by the Markdown language of UI-R-037: source characters are drawn unchanged, styled by highlight span.
+**UI-R-129** — The styled-source view of UI-R-182 and UI-R-183 is produced by the Markdown language of UI-R-037: source characters are drawn unchanged, styled by highlight span.
 
 **UI-R-130** — Line wrapping is always on and cannot be disabled: content never overflows the widget width horizontally and the widget never scrolls horizontally.
 
@@ -282,15 +282,15 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **UI-R-171** — The Diff language's per-line block-balance delta is always zero, so auto-indent on newline (UI-R-032) in a Diff field only inherits the current line's leading indentation.
 
-**UI-R-120** — The Markdown language exposes, beside the span path of UI-R-037, a per-line block-model entry point: given one source line and a carried state it returns that line's block kind — paragraph, heading with level 1–6, unordered list item with nesting depth and marker character, ordered list item with nesting depth, task item with checked state, block quote with nesting depth, horizontal rule, fence delimiter with info string, or fence body — together with the inline spans of UI-R-122.
+**UI-R-176** — The Markdown language exposes, beside the span path of UI-R-037, a per-line block-model entry point: given one source line and a carried state it returns that line's block kind — paragraph, heading with level 1–6, unordered list item with nesting depth and marker character, ordered list item with nesting depth, task item with checked state, block quote with nesting depth, horizontal rule, fence delimiter with info string, or fence body — together with the inline spans of UI-R-178.
 
-**UI-R-121** — The block-model carried state of UI-R-120 records whether the parser is inside a fenced code block and that fence's info string; while inside a fence every line is classified as fence body regardless of its own content, until a matching closing fence delimiter line.
+**UI-R-177** — The block-model carried state of UI-R-176 records whether the parser is inside a fenced code block and that fence's info string; while inside a fence every line is classified as fence body regardless of its own content, until a matching closing fence delimiter line.
 
-**UI-R-122** — Inline parsing reports, over source character columns of one line, spans for `**bold**`, `*italic*`, `_italic_`, `` `code` ``, `~~strike~~`, `[text](url)` and `![alt](url)`, each distinguishing its marker columns (delimiters, brackets, URL) from its content columns, so a consumer can hide markers without recomputing positions.
+**UI-R-178** — Inline parsing reports, over source character columns of one line, spans for `**bold**`, `*italic*`, `_italic_`, `` `code` ``, `~~strike~~`, `[text](url)` and `![alt](url)`, each distinguishing its marker columns (delimiters, brackets, URL) from its content columns, so a consumer can hide markers without recomputing positions.
 
-**UI-R-123** — A character preceded by a backslash is literal: the backslash is a marker column and the escaped character never opens or closes an inline construct.
+**UI-R-179** — A character preceded by a backslash is literal: the backslash is a marker column and the escaped character never opens or closes an inline construct.
 
-**UI-R-124** — Constructs the block model does not recognize — tables, raw HTML, footnotes, reference links, setext headings, autolinks — are reported as paragraph text with no inline spans over them.
+**UI-R-180** — Constructs the block model does not recognize — tables, raw HTML, footnotes, reference links, setext headings, autolinks — are reported as paragraph text with no inline spans over them.
 
 ## Tables, live updates & logging
 

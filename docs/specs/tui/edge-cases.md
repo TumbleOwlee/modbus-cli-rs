@@ -85,11 +85,11 @@ Boundary behavior, error semantics, intentional or known constraints. The known-
 
 | ID | Condition | Behavior |
 |---|---|---|
-| **UI-E-069** | Width too narrow for a list item's or block quote's hanging indent (UI-R-132) | the hanging indent is dropped and continuation rows start at column zero |
-| **UI-E-070** | Single word longer than the available width (UI-R-131) | broken mid-word at a character boundary; never truncated, never overflowed |
-| **UI-E-071** | Cursor line revealed as source in `Normal` (UI-R-126) | cursor column is a source column; no mapping between rendered and source columns is kept, so the reveal is the only place the cursor is positioned against markup |
-| **UI-E-072** | `h`, `l`, `0`, `$`, `w`, `b`, `e` in a read-only markdown input field | consumed and ignored; only line/display-row navigation (`j`, `k`, `gg`, `G`, `Ctrl+D`, `Ctrl+U`) and yank act (UI-R-139) |
-| **UI-E-073** | Fence opened and never closed before the end of the buffer (UI-R-121) | every following line stays fence body to the last line of the buffer |
+| **UI-E-086** | Width too narrow for a list item's or block quote's hanging indent (UI-R-132) | the hanging indent is dropped and continuation rows start at column zero |
+| **UI-E-087** | Single word longer than the available width (UI-R-131) | broken mid-word at a character boundary; never truncated, never overflowed |
+| **UI-E-088** | Cursor line revealed as source in `Normal` (UI-R-182) | cursor column is a source column; no mapping between rendered and source columns is kept, so the reveal is the only place the cursor is positioned against markup |
+| **UI-E-089** | `h`, `l`, `0`, `$`, `w`, `b`, `e` in a read-only markdown input field | consumed and ignored; only line/display-row navigation (`j`, `k`, `gg`, `G`, `Ctrl+D`, `Ctrl+U`) and yank act (UI-R-139) |
+| **UI-E-090** | Fence opened and never closed before the end of the buffer (UI-R-177) | every following line stays fence body to the last line of the buffer |
 | **UI-E-076** | `Ctrl+D` / `Ctrl+U` near the first or last display row (UI-R-136) | movement clamps to the first/last row; no wrap-around |
 
 ## Rendering and terminal size
@@ -105,7 +105,7 @@ Boundary behavior, error semantics, intentional or known constraints. The known-
 | **UI-E-063** | Tab widget drawn into an area of zero width or zero height | skips drawing; because no window is computed the recorded scroll offset (UI-R-175) keeps the value the previous render left, rather than being recomputed (UI-E-047) |
 | **UI-E-064** | Tab widget drawn into an area larger across its layout direction than its rendered extent (UI-R-121) | draws into the first `1 + 2c` lines from the near edge only — leftmost columns under `Vertical`, topmost rows under `Horizontal` — and leaves the rest untouched |
 | **UI-E-065** | Tab widget with an empty tab list | nothing drawn; scroll offset reset to zero |
-| **UI-E-066** | Tab widget active index out of range (UI-R-119) | no cell takes the active style; with no in-range active block to centre on, no new window is computed and the recorded scroll offset (UI-R-175) keeps the value the previous render left; never panics |
+| **UI-E-066** | Tab widget active index out of range (UI-R-119) | no cell takes the active style; with no in-range active block to centre on, no new window is computed and the recorded scroll offset (UI-R-175) keeps the value the previous render left, clamped per UI-E-085 if it is now past the last cell the current tabs occupy; never panics |
 | **UI-E-067** | Tab widget title that is the empty string (UI-R-115, UI-R-174) | occupies no character cells, only its twice-the-along-direction-padding cells (UI-R-120), which still take the active style when it is the active tab; with that padding count 0 the tab occupies no cells at all and is invisible |
 | **UI-E-068** | Tab widget under `Vertical` layout with a double-width title character (CJK, emoji) | drawn as-is into the one-column character column and clipped there; no substitution or fallback glyph. Intentional |
 | **UI-E-069** | Tab widget drawn into an area smaller across its layout direction than its rendered extent (UI-R-121) | the rendered lines are clipped at the far edge of the area; no reflow, no padding reduction, never panics |
@@ -116,6 +116,7 @@ Boundary behavior, error semantics, intentional or known constraints. The known-
 | **UI-E-074** | Tab widget tab gaining exactly one cell under `Center` (UI-R-127) | the gained cell goes after the tab's trailing padding cell; the title sits one cell before centre |
 | **UI-E-075** | Tab widget tab that gains no cells (UI-R-123) while others do | its own render is identical under all three alignments; only the stretched tabs move |
 | **UI-E-084** | Tab widget under `Horizontal` layout with a double-width title character (CJK, emoji) | counted as one cell when extents are computed (UI-R-174, UI-R-122) and drawn as-is, so the drawn tab covers more terminal cells than its computed extent and the fill is off by one cell per such character; no substitution or fallback glyph. Intentional |
+| **UI-E-085** | Tab widget whose recorded scroll offset (UI-R-175) is past the last cell the current tabs occupy, because the active index is out of range (UI-E-066) and no new window was computed | the offset is clamped to the largest window start that still shows tabs, so the widget draws tabs rather than a blank area; never panics |
 
 ## Known limitations and stated constraints
 
@@ -157,11 +158,11 @@ Boundary behavior, error semantics, intentional or known constraints. The known-
 
 ### Markdown rendering covers a fixed construct set
 
-**UI-E-074** — Tables, raw HTML, footnotes, reference links, setext headings and autolinks render as plain text (UI-R-124). Rendering is line-preserving (UI-R-142), so a table is never laid out into columns and adjacent lines are never reflowed into one paragraph.
+**UI-E-091** — Tables, raw HTML, footnotes, reference links, setext headings and autolinks render as plain text (UI-R-180). Rendering is line-preserving (UI-R-142), so a table is never laid out into columns and adjacent lines are never reflowed into one paragraph.
 
 ### Nested inline emphasis is best-effort
 
-**UI-E-075** — Nested inline markers are resolved best-effort rather than by a full CommonMark inline parser: `***x***` yields bold and italic together, but unusual or ambiguous nestings may leave a marker visible or drop a style.
+**UI-E-092** — Nested inline markers are resolved best-effort rather than by a full CommonMark inline parser: `***x***` yields bold and italic together, but unusual or ambiguous nestings may leave a marker visible or drop a style.
 
 ### Intraword underscore never opens italic
 

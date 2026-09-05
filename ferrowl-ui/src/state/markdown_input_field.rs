@@ -7,12 +7,12 @@ use super::vim::VimMode;
 use crate::EventResult;
 use crate::traits::{HandleEvents, IsFocus, SetFocus};
 
-/// Markdown input field state: a vim-modal editor (UI-R-125) plus the display-row layout
+/// Markdown input field state: a vim-modal editor (UI-R-181) plus the display-row layout
 /// and scroll bookkeeping wrapping requires.
 #[derive(Builder, Debug, Clone, Getters, CopyGetters, Setters)]
 #[getset(set = "pub")]
 pub struct MarkdownInputFieldState {
-    /// The composed vim-modal editor state (UI-R-125): buffer, modes, motions, operators,
+    /// The composed vim-modal editor state (UI-R-181): buffer, modes, motions, operators,
     /// registers, single-level undo, disabled flag. Built with `vim(true)`; its `language`
     /// stays `None` (markdown gets no auto-indent and no format-on-blur).
     #[getset(get = "pub")]
@@ -41,7 +41,7 @@ pub struct MarkdownInputFieldState {
     #[builder(setter(skip), default)]
     pending_g: bool,
     /// Display row within the active source line, set by `gj`/`gk` stepping and reset by
-    /// any motion that changes the active line (UI-E-071: no rendered-to-source column
+    /// any motion that changes the active line (UI-E-088: no rendered-to-source column
     /// mapping is kept, so this tracks viewport position only, never the cursor column).
     #[getset(skip)]
     #[builder(setter(skip), default)]
@@ -73,7 +73,7 @@ impl MarkdownInputFieldState {
         self.line_row = 0;
     }
 
-    /// Whether the field is read-only (the composed editor's `disabled` flag, UI-R-125).
+    /// Whether the field is read-only (the composed editor's `disabled` flag, UI-R-181).
     pub fn read_only(&self) -> bool {
         self.inner.disabled()
     }
@@ -223,7 +223,7 @@ impl IsFocus for MarkdownInputFieldState {
 
 impl HandleEvents for MarkdownInputFieldState {
     fn handle_events(&mut self, modifiers: KeyModifiers, code: KeyCode) -> EventResult {
-        // UI-R-125: Insert mode is the composed editor's, unmodified — every key (digits,
+        // UI-R-181: Insert mode is the composed editor's, unmodified — every key (digits,
         // `g`, `j`/`k`, `d`, `y`, `G`, Ctrl+D/Ctrl+U, everything) goes straight to it before
         // any of this wrapper's Normal-mode count/prefix/read-only logic runs, so nothing
         // the wrapper intercepts elsewhere can be swallowed here instead of typed. No
@@ -384,7 +384,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-125 — the markdown state composes the code editor's buffer, modes, motions,
+    /// UI-R-181 — the markdown state composes the code editor's buffer, modes, motions,
     /// registers and single-level undo.
     fn ut_composes_code_editor_modes_motions_registers_and_undo() {
         let mut s = state_with("one\ntwo\nthree");
@@ -624,7 +624,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-E-071 — the cursor column on the revealed cursor line is a source column.
+    /// UI-E-088 — the cursor column on the revealed cursor line is a source column.
     fn ut_cursor_column_is_a_source_column_on_the_revealed_line() {
         let mut s = state_with("hello world");
         s.handle_events(KeyModifiers::NONE, KeyCode::Char('l'));
@@ -637,7 +637,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-E-072 — read-only, `h`/`l`/`0`/`$`/`w`/`b`/`e` are consumed and ignored.
+    /// UI-E-089 — read-only, `h`/`l`/`0`/`$`/`w`/`b`/`e` are consumed and ignored.
     fn ut_read_only_horizontal_motions_are_consumed_without_moving() {
         let mut s = state_with("hello world");
         s.set_read_only(true);
@@ -701,7 +701,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-125 — Insert mode is the composed editor's, unmodified: `g` is not a
+    /// UI-R-181 — Insert mode is the composed editor's, unmodified: `g` is not a
     /// pending-chord prefix there, so `g` then a letter inserts both characters.
     fn ut_g_is_typed_verbatim_in_insert_mode() {
         let mut s = state_with("");
@@ -713,7 +713,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-125 — Insert mode forwards every key the wrapper intercepts elsewhere (a digit,
+    /// UI-R-181 — Insert mode forwards every key the wrapper intercepts elsewhere (a digit,
     /// `g`, `j`, `d`, `y`, `G`, Ctrl+D/Ctrl+U) straight to the composed editor unchanged:
     /// the printable ones type verbatim and the mode never leaves Insert.
     fn ut_insert_mode_forwards_every_wrapper_intercepted_key_verbatim() {
