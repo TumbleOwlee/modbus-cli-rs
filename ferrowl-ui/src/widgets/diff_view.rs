@@ -143,37 +143,41 @@ fn marker_for(kind: &DiffKind, side: Side, has_entry: bool) -> char {
 /// Highlighting is computed per line, not threaded across rows: the old and new sides
 /// interleave and a hunk starts mid-file, so carrying a `LineState` between them would mix
 /// two unrelated documents' running state.
-fn styled_spans(
+fn styled_chars(
     text: &str,
     diff_style: Style,
     language: Option<ferrowl_syntax::Language>,
     syntax_theme: &SyntaxTheme,
-) -> Vec<(String, Style)> {
-    let Some(lang) = language else {
-        return vec![(text.to_string(), diff_style)];
-    };
+) -> Vec<(char, Style)> {
     let chars: Vec<char> = text.chars().collect();
+    let Some(lang) = language else {
+        return chars.into_iter().map(|c| (c, diff_style)).collect();
+    };
     let (spans, _) =
         ferrowl_syntax::highlight_line(lang, text, ferrowl_syntax::LineState::default());
-    let mut out = Vec::new();
-    let mut cursor = 0usize;
+    let mut styles = vec![diff_style; chars.len()];
     for (start, end, kind) in spans {
-        if cursor < start {
-            out.push((chars[cursor..start].iter().collect(), diff_style));
-        }
         let end = end.min(chars.len());
         let style = match syntax_theme.style(kind).fg {
             Some(fg) => diff_style.fg(fg),
             None => diff_style,
         };
-        out.push((chars[start..end].iter().collect(), style));
-        cursor = end;
+        for slot in styles.iter_mut().take(end).skip(start) {
+            *slot = style;
+        }
     }
-    if cursor < chars.len() {
-        out.push((chars[cursor..].iter().collect(), diff_style));
-    }
-    if out.is_empty() {
-        out.push((String::new(), diff_style));
+    chars.into_iter().zip(styles).collect()
+}
+
+/// Groups consecutive same-style characters into `(text, style)` runs, cutting `Span`
+/// count without changing what is drawn.
+fn group_runs(chars: Vec<(char, Style)>) -> Vec<(String, Style)> {
+    let mut out: Vec<(String, Style)> = Vec::new();
+    for (c, style) in chars {
+        match out.last_mut() {
+            Some((s, last_style)) if *last_style == style => s.push(c),
+            _ => out.push((c.to_string(), style)),
+        }
     }
     out
 }
@@ -214,7 +218,11 @@ impl DiffView {
         labels: Option<&Vec<String>>,
         gutter_width: u16,
         language: Option<ferrowl_syntax::Language>,
+        h_scroll: usize,
     ) {
+        if rect.width == 0 {
+            return;
+        }
         let style = self.side_style(kind, side);
         buf.set_style(rect, self.style.general);
         if gutter_width > 0 {
@@ -234,9 +242,13 @@ impl DiffView {
             return;
         }
         if let Some(e) = entry {
-            let spans = styled_spans(&e.text, style, language, &self.syntax_theme);
+            // Highlighting is computed against the entry's full text, then `h_scroll`
+            // drops leading characters (UI-R-232): highlighting a pre-truncated string
+            // would shift every span's start against the language's real column.
+            let chars = styled_chars(&e.text, style, language, &self.syntax_theme);
+            let visible: Vec<(char, Style)> = chars.into_iter().skip(h_scroll).collect();
             let line = Line::from(
-                spans
+                group_runs(visible)
                     .into_iter()
                     .map(|(t, s)| Span::styled(t, s))
                     .collect::<Vec<_>>(),
@@ -248,7 +260,10 @@ impl DiffView {
     /// Draws a meta row (UI-R-210): one screen row across the full width, meta style,
     /// blank gutter on every side, no marker column.
     fn draw_meta(&self, buf: &mut Buffer, rect: Rect, text: &str) {
-        buf.set_style(rect, self.style.general);
+        // The meta style covers the whole rect first: a `Paragraph` only paints the cells
+        // its text occupies, so a row wider than `text` would otherwise show a trailing
+        // run of unstyled (`general`) cells past the end of the line (UI-R-210).
+        buf.set_style(rect, self.syntax_theme.meta);
         Paragraph::new(Text::from(text.to_string()).style(self.syntax_theme.meta))
             .render(rect, buf);
     }
@@ -310,8 +325,9 @@ impl StatefulWidget for &DiffView {
         let focused_side = state.focused_side();
         let old_labels = state.old_labels().clone();
         let new_labels = state.new_labels().clone();
-        let old_language = state.old_language;
-        let new_language = state.new_language;
+        let language = state.language;
+        let scroll_offset = state.scroll_offset();
+        let h_scroll = state.h_scroll();
 
         match state.layout() {
             DiffLayout::Split => {
@@ -346,12 +362,30 @@ impl StatefulWidget for &DiffView {
                 );
 
                 let visible_height = old_area.height as usize;
-                for (row_idx, row) in rows.iter().enumerate().take(visible_height) {
-                    let y_old = old_area.y + row_idx as u16;
-                    let y_new = new_area.y + row_idx as u16;
+                // The rendered row window starts at `scroll_offset` (UI-R-230), not row
+                // zero; `display_idx` is the aligned row's position within that window.
+                for (display_idx, (row_idx, row)) in rows
+                    .iter()
+                    .enumerate()
+                    .skip(scroll_offset)
+                    .take(visible_height)
+                    .enumerate()
+                {
+                    let y_old = old_area.y + display_idx as u16;
+                    let y_new = new_area.y + display_idx as u16;
                     match row {
                         DiffRow::Meta { text } => {
-                            let width = new_area.x + new_area.width - old_area.x;
+                            // Without a border, extend to the outer area's own right edge:
+                            // an odd inner width leaves one column unused by either pane
+                            // (`Length(half)` twice), and UI-R-210 spans the full width.
+                            // With a border each pane already owns its border cells, so
+                            // stop at the new pane's inner edge as before.
+                            let right = if matches!(self.border, Border::Full(_)) {
+                                new_area.x + new_area.width
+                            } else {
+                                area.x + area.width
+                            };
+                            let width = right.saturating_sub(old_area.x);
                             self.draw_meta(buf, Rect::new(old_area.x, y_old, width, 1), text);
                         }
                         DiffRow::Pair { kind, old, new } => {
@@ -364,7 +398,8 @@ impl StatefulWidget for &DiffView {
                                 old.as_ref(),
                                 old_labels.as_ref(),
                                 old_gutter,
-                                old_language,
+                                language,
+                                h_scroll,
                             );
                             self.draw_entry(
                                 buf,
@@ -375,7 +410,8 @@ impl StatefulWidget for &DiffView {
                                 new.as_ref(),
                                 new_labels.as_ref(),
                                 new_gutter,
-                                new_language,
+                                language,
+                                h_scroll,
                             );
                         }
                     }
@@ -396,7 +432,7 @@ impl StatefulWidget for &DiffView {
                     return;
                 }
                 // Screen rows, not aligned rows: a changed pair draws two of them here, so
-                // s5's paging counts screen rows when in this layout and aligned rows
+                // paging code must count screen rows in this layout and aligned rows
                 // (`state.rows().len()`) in split, rather than assuming the two agree.
                 state.set_visible_height(pane.height as usize);
 
@@ -410,7 +446,7 @@ impl StatefulWidget for &DiffView {
 
                 let mut y = pane.y;
                 let visible_end = pane.y + pane.height;
-                for (row_idx, row) in rows.iter().enumerate() {
+                for (row_idx, row) in rows.iter().enumerate().skip(scroll_offset) {
                     if y >= visible_end {
                         break;
                     }
@@ -438,7 +474,8 @@ impl StatefulWidget for &DiffView {
                                     old.as_ref(),
                                     old_labels.as_ref(),
                                     gutter,
-                                    old_language,
+                                    language,
+                                    h_scroll,
                                 );
                                 let rect1 = Rect::new(pane.x, y, pane.width, 1);
                                 y += 1;
@@ -455,7 +492,8 @@ impl StatefulWidget for &DiffView {
                                     new.as_ref(),
                                     new_labels.as_ref(),
                                     gutter,
-                                    new_language,
+                                    language,
+                                    h_scroll,
                                 );
                                 let rect2 = Rect::new(pane.x, y, pane.width, 1);
                                 self.paint_row_highlight(buf, state, row_idx, &[rect1, rect2]);
@@ -468,11 +506,6 @@ impl StatefulWidget for &DiffView {
                                 } else {
                                     new_labels.as_ref()
                                 };
-                                let language = if old.is_some() {
-                                    old_language
-                                } else {
-                                    new_language
-                                };
                                 self.draw_entry(
                                     buf,
                                     Rect::new(pane.x, y, pane.width, 1),
@@ -483,6 +516,7 @@ impl StatefulWidget for &DiffView {
                                     labels,
                                     gutter,
                                     language,
+                                    h_scroll,
                                 );
                                 let rect = Rect::new(pane.x, y, pane.width, 1);
                                 self.paint_row_highlight(buf, state, row_idx, &[rect]);
@@ -560,14 +594,24 @@ mod tests {
     fn ut_meta_row_spans_the_full_width_in_the_meta_style_with_blank_gutters() {
         let mut st = state_with("@@ -1,1 +1,1 @@\n context\n");
         let w = DiffView::default();
-        let mut b = buffer(20, 2);
-        StatefulWidget::render(&w, Rect::new(0, 0, 20, 2), &mut b, &mut st);
-        let line = row_text(&b, 0, 20);
+        let mut b = buffer(21, 2);
+        StatefulWidget::render(&w, Rect::new(0, 0, 21, 2), &mut b, &mut st);
+        let line = row_text(&b, 0, 21);
         assert!(line.starts_with("@@ -1,1 +1,1 @@"));
-        assert_eq!(
-            b[(0, 0)].fg,
-            w.syntax_theme.meta.fg.expect("style sets a color")
-        );
+        // Full width (UI-R-210), including the odd trailing column an even split leaves
+        // unused by either pane, and the meta style across the whole row, not just its
+        // first cell.
+        for x in 0..21 {
+            assert_eq!(
+                b[(x, 0)].fg,
+                w.syntax_theme.meta.fg.expect("style sets a color"),
+                "column {x} not in the meta style"
+            );
+        }
+        // Blank gutter on every side: the content row below carries a gutter digit at
+        // column 0, the meta row above it does not.
+        assert_ne!(b[(0, 0)].symbol(), b[(0, 1)].symbol());
+        assert_eq!(b[(0, 0)].symbol(), "@");
     }
 
     #[test]
@@ -691,16 +735,45 @@ mod tests {
     /// the diff-kind style; the diff style's background survives.
     fn ut_language_highlight_supplies_foreground_only_over_the_diff_style() {
         let mut st = state_with("@@ -1,1 +1,1 @@\n-local x = 1\n+local x = 2\n");
-        st.old_language = Some(ferrowl_syntax::Language::Lua);
+        st.language = Some(ferrowl_syntax::Language::Lua);
+        let mut w = DiffView::default();
+        // A `removed` style carrying its own background and a modifier, distinct from
+        // `general`'s: an implementation that used the syntax theme's span style wholesale
+        // (dropping the diff style's background/modifiers) would still pass an assertion
+        // against `general`'s background alone, since `keyword` sets no background either.
+        w.syntax_theme.set_removed(
+            Style::default()
+                .fg(ratatui::style::Color::Red)
+                .bg(ratatui::style::Color::Blue)
+                .add_modifier(ratatui::style::Modifier::BOLD),
+        );
+        let mut b = buffer(30, 2);
+        StatefulWidget::render(&w, Rect::new(0, 0, 30, 2), &mut b, &mut st);
+        assert_eq!(b[(2, 1)].bg, ratatui::style::Color::Blue);
+        assert!(b[(2, 1)].modifier.contains(ratatui::style::Modifier::BOLD));
+        assert_eq!(
+            b[(2, 1)].fg,
+            w.syntax_theme.keyword.fg.expect("style sets a color")
+        );
+    }
+
+    #[test]
+    /// UI-R-220 — the one `language` option (the per-side pair's collapse) highlights both
+    /// sides: an added line on the new side and a removed line on the old side.
+    fn ut_one_language_highlights_both_sides() {
+        let mut st = state_with("@@ -1,1 +1,1 @@\n-local x = 1\n+local y = 2\n");
+        st.language = Some(ferrowl_syntax::Language::Lua);
         let w = DiffView::default();
         let mut b = buffer(30, 2);
         StatefulWidget::render(&w, Rect::new(0, 0, 30, 2), &mut b, &mut st);
-        assert_eq!(
-            b[(2, 1)].bg,
-            w.style.general.bg.expect("style sets a color")
-        );
+        // The removed line's old side and the added line's new side (one aligned row,
+        // both sides present) each take the keyword foreground on their `local`.
         assert_eq!(
             b[(2, 1)].fg,
+            w.syntax_theme.keyword.fg.expect("style sets a color")
+        );
+        assert_eq!(
+            b[(17, 1)].fg,
             w.syntax_theme.keyword.fg.expect("style sets a color")
         );
     }
@@ -824,5 +897,40 @@ mod tests {
             b[(0, 0)].fg,
             w.style.focused.fg.expect("style sets a color")
         );
+    }
+
+    #[test]
+    /// UI-R-230 (rendering half) — a nonzero vertical scroll offset selects the rendered
+    /// row window on both panes: the first drawn row is `scroll_offset`, not row zero.
+    fn ut_vertical_scroll_offset_selects_the_rendered_row_window_on_both_panes() {
+        let mut st = state_with("@@ -1,3 +1,3 @@\n a\n b\n c\n");
+        st.set_scroll_offset(2);
+        let w = DiffView::default();
+        let mut b = buffer(20, 2);
+        StatefulWidget::render(&w, Rect::new(0, 0, 20, 2), &mut b, &mut st);
+        assert!(row_text(&b, 0, 20).contains('b'));
+        assert!(row_text(&b, 1, 20).contains('c'));
+    }
+
+    #[test]
+    /// UI-R-232 (rendering half) — a nonzero horizontal offset shifts the text of every
+    /// pane, dropping that many leading characters, while the gutter and marker columns
+    /// stay put.
+    fn ut_horizontal_offset_shifts_the_text_of_every_pane_leaving_gutters_in_place() {
+        let mut st = state_with("@@ -1,1 +1,1 @@\n-abcdefgh\n+xyzuvwtq\n");
+        st.set_h_scroll(2);
+        let w = DiffView::default();
+        let mut b = buffer(40, 2);
+        StatefulWidget::render(&w, Rect::new(0, 0, 40, 2), &mut b, &mut st);
+        let line = row_text(&b, 1, 40);
+        // Old pane: gutter "1", marker '-' still at their columns; text starts with 'c'
+        // (the third character), the first two dropped.
+        assert_eq!(&line[0..1], "1");
+        assert_eq!(&line[1..2], "-");
+        assert!(line[2..20].starts_with('c'));
+        // New pane: same shift applied independently, at its own gutter/marker columns.
+        assert_eq!(&line[20..21], "1");
+        assert_eq!(&line[21..22], "+");
+        assert!(line[22..].starts_with('z'));
     }
 }
