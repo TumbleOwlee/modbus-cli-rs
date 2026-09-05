@@ -2,6 +2,7 @@
 
 mod button;
 mod code_input_field;
+mod diff_view;
 mod input_field;
 mod markdown_input_field;
 mod scrolling_tabs;
@@ -13,6 +14,7 @@ mod vim;
 
 pub use button::*;
 pub use code_input_field::*;
+pub use diff_view::*;
 pub use input_field::*;
 pub use markdown_input_field::*;
 pub use scrolling_tabs::*;
