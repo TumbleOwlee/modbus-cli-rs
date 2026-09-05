@@ -114,6 +114,18 @@ Boundary behavior, error semantics, intentional or known constraints. The known-
 | **UI-E-101** | Layout toggled (UI-R-215) while a Visual selection is active | active row and selection are unchanged: both layouts address the same aligned rows (UI-R-213) |
 | **UI-E-102** | Gutter-label list longer than the widget's row count (UI-R-218) | the surplus labels are never rendered but still count toward the gutter width, as UI-E-080 |
 
+## File tree widget
+
+| ID | Condition | Behavior |
+|---|---|---|
+| **UI-E-103** | File tree built from an empty path list (UI-R-234) | no rows; the selection query (UI-R-243) reports no node |
+| **UI-E-110** | Rendering a file tree built from an empty path list (UI-R-252, UI-E-103) | no row carries the highlighted-row style, since there is no selected node; the widget draws its border and an empty interior |
+| **UI-E-104** | Path with no directory component (UI-R-234) | a file node at depth zero, directly under the root |
+| **UI-E-105** | `h` or `Left` on a top-level node that is not an expanded directory (UI-R-241) | the selection is unchanged; there is no parent to move to |
+| **UI-E-106** | Row wider than the file tree's area (UI-R-238) | the row is clipped at the area width; the file tree never scrolls horizontally |
+| **UI-E-107** | Example started outside a git repository, or with git unavailable (UI-R-248) | the branch lists stay empty and the panes show the failure as text; the example stays interactive and does not exit |
+| **UI-E-108** | Example with base and branch set to the same ref (UI-R-251) | an empty file browser and an empty diff viewer (UI-E-099), no error |
+
 ## Rendering and terminal size
 
 | ID | Condition | Behavior |
@@ -195,3 +207,5 @@ Boundary behavior, error semantics, intentional or known constraints. The known-
 ### Review-flow widgets have no consumer in the application
 
 **UI-E-096** — The diff widget, the markdown measurement, the command-line widget and the editor dialog are library surface in the TUI crate with no use in any application view; each is exercised only by runnable examples and automated tests. Absence of a consumer is deliberate, not an oversight, as for the markdown input field (UI-E-077).
+
+**UI-E-109** — The file tree widget in the application: library surface with no consumer in any application view, exercised by the example and automated tests only, as UI-E-096 records for the other widgets of this change.

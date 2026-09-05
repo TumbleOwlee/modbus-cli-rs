@@ -372,3 +372,15 @@ Public surface: construction from a unified diff text (UI-R-207); layout option 
 | `y` | Visual | Yank the focused side's text of the selected rows | UI-R-229 |
 | `Ctrl+T` | Normal / Visual | Toggle layout | UI-R-215 |
 | mutating and Insert-entering keys | Normal / Visual | Reported unhandled | UI-R-222 |
+
+## File tree widget
+
+Public surface: construction from a path list (UI-R-234), expand-all and collapse-all (UI-R-235), per-file change status (UI-R-244), selected path and directory query (UI-R-243), focus setter (UI-R-246), event handling returning an activation outcome carrying the activated file's path, a directory-toggle outcome, or consumed (UI-R-242).
+
+| Key | Mode | Action | Req |
+|---|---|---|---|
+| `j` / `Down` / `k` / `Up`, `gg`, `G` | — | Move the selection | UI-R-239 |
+| `l` / `Right` | — | Expand or descend | UI-R-240 |
+| `h` / `Left` | — | Collapse or ascend | UI-R-241 |
+| `Enter` | — | Toggle a directory, activate a file | UI-R-242 |
+| `PageDown` / `PageUp` / `Ctrl+D` / `Ctrl+U` | — | Page and half page | UI-R-245 |

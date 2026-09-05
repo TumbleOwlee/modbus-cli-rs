@@ -368,6 +368,48 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **UI-R-233** — `]c` moves the active row to the first row of the next hunk and `[c` to the first row of the previous hunk, each clamping at the last and first hunk.
 
+## File tree widget
+
+**UI-R-234** — The file tree widget's state is built from a list of file paths and derives the directory nodes from the paths' components, so a caller supplies paths alone and never assembles a tree.
+
+**UI-R-235** — Every directory node is expanded when the tree is built, and the state can expand all directories or collapse all of them in one call.
+
+**UI-R-236** — A collapsed directory's subtree contributes no rows, so the widget's visible rows are the root's children plus, recursively, the children of every expanded directory.
+
+**UI-R-237** — Sibling nodes are ordered directories first and files second, each group ordered by name, so the same path list always renders in the same order.
+
+**UI-R-238** — Each row is drawn indented by its depth, a directory carrying an expansion marker — `▾` expanded, `▸` collapsed — and a file carrying none.
+
+**UI-R-239** — `j`, `Down`, `k` and `Up` move the selection one visible row, and `gg` and `G` move it to the first and last visible row, clamping at the ends (UI-R-013).
+
+**UI-R-240** — `l` and `Right` expand the selected directory when it is collapsed, move the selection to its first child when it is already expanded, and do nothing on a file.
+
+**UI-R-241** — `h` and `Left` collapse the selected directory when it is expanded, and otherwise move the selection to the node's parent directory.
+
+**UI-R-242** — `Enter` toggles the selected directory's expansion, and on a file reports an activation outcome carrying that file's full path.
+
+**UI-R-243** — The file tree widget answers the selected node's full path and whether that node is a directory.
+
+**UI-R-244** — A file node may carry a change status of added, removed or modified, drawn as a leading `+`, `-` or `~` marker and styling that row with the syntax theme's added, removed and meta styles (UI-R-162, UI-R-163); a node with no status takes the normal text style.
+
+**UI-R-245** — The file tree's viewport scrolls vertically to keep the selected row visible, and `PageDown`, `PageUp`, `Ctrl+D` and `Ctrl+U` move the selection with the remembered-height and clamping semantics of UI-R-173 through UI-R-175.
+
+**UI-R-246** — The file tree paints the focused border style while focused and the normal border otherwise (UI-R-110).
+
+**UI-R-252** — The file tree draws its selected row in the theme's highlighted-row style across the widget's full width, as the diff widget draws its active row (UI-R-224), the row's change-status styling (UI-R-244) supplying the foreground.
+
+## Diff-review example
+
+**UI-R-247** — The TUI crate ships a runnable diff-review example whose layout is a top row of two selection inputs, labelled as base and branch, above a file browser on the left and a diff widget on the right.
+
+**UI-R-248** — The example's two selection inputs offer the local repository's git branches, and the example shows the real diff between the selected base and branch.
+
+**UI-R-249** — `Tab` cycles focus through the example's four panes — base input, branch input, file browser, diff viewer — in that order and wrapping, and `Shift+Tab` cycles in reverse.
+
+**UI-R-250** — The example's file browser holds the paths changed between the selected base and branch, each carrying its change status (UI-R-244).
+
+**UI-R-251** — Activating a file in the example's browser (UI-R-242) shows that file's diff in the diff widget, and changing either selection rebuilds both the browser's paths and the shown diff.
+
 ## Syntax highlighting
 
 **UI-R-037** — Syntax highlighting is pure text-to-span computation: for a language and one line of source (plus a carry-over line state for multi-line constructs) it returns `(start_char, end_char, kind)` spans, sorted by start, non-overlapping, character indices. Four languages: Lua, JSON, Markdown and Diff.
