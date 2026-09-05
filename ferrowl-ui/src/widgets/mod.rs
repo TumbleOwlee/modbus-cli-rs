@@ -4,6 +4,7 @@
 mod build;
 mod button;
 mod code_input_field;
+mod command_line;
 mod diff_view;
 mod input_field;
 mod markdown_input_field;
@@ -17,6 +18,7 @@ mod text;
 pub use build::*;
 pub use button::*;
 pub use code_input_field::*;
+pub use command_line::*;
 use crossterm::event::{KeyCode, KeyModifiers};
 pub use diff_view::*;
 pub use input_field::*;
