@@ -3,19 +3,19 @@
 mod button;
 mod input_field;
 mod markdown;
-mod scrolling_tabs;
 mod selection;
 mod suggest_input;
 mod syntax;
+mod tab_bar;
 mod table;
 mod text;
 
 pub use button::*;
 pub use input_field::*;
 pub use markdown::*;
-pub use scrolling_tabs::*;
 pub use selection::*;
 pub use suggest_input::*;
 pub use syntax::*;
+pub use tab_bar::*;
 pub use table::*;
 pub use text::*;

@@ -277,6 +277,8 @@ pub struct App<S: DrawSurface = AlternateScreen<Stdout>> {
     /// The `?` keybind help dialog: whether it is open and its scroll offset.
     help_open: bool,
     help_scroll: u16,
+    /// The tab bar's scroll offset, owned by the widget (UI-R-119).
+    tab_scroll: usize,
     /// Live `C_Module` session registry, rebuilt from `tabs` whenever the tab set or a view
     /// changes (see [`Self::rebuild_registry`]).
     registry: ModuleRegistry,
@@ -361,6 +363,7 @@ impl<S: DrawSurface> App<S> {
             keymode: None,
             help_open: false,
             help_scroll: 0,
+            tab_scroll: 0,
             registry,
             serial_paths,
             session_dialog: None,
@@ -549,6 +552,7 @@ impl<S: DrawSurface> App<S> {
         let focus = self.focus;
         let help_open = self.help_open;
         let help_scroll = &mut self.help_scroll;
+        let tab_scroll = &mut self.tab_scroll;
         screen.draw(|f| {
             render(
                 f,
@@ -560,6 +564,7 @@ impl<S: DrawSurface> App<S> {
                 session_dialog,
                 help_open,
                 help_scroll,
+                tab_scroll,
             )
         })?;
         Ok(())

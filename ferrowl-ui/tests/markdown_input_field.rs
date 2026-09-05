@@ -37,7 +37,7 @@ fn state_with(content: &str) -> MarkdownInputFieldState {
 }
 
 #[test]
-/// UI-R-126 — focused, editable, Normal mode: only the cursor's source line is drawn as
+/// UI-R-182 — focused, editable, Normal mode: only the cursor's source line is drawn as
 /// styled source (with markup visible); every other line is rendered (its own markup, a
 /// bold marker, hidden — proving it is not drawn as source).
 fn it_normal_mode_reveals_only_the_cursor_line_as_source() {
@@ -54,7 +54,7 @@ fn it_normal_mode_reveals_only_the_cursor_line_as_source() {
 }
 
 #[test]
-/// UI-R-127 — focused, editable, Insert or Visual mode: every line is drawn as styled
+/// UI-R-183 — focused, editable, Insert or Visual mode: every line is drawn as styled
 /// source, none rendered — the second line's bold markers stay visible in both modes.
 fn it_insert_and_visual_draw_every_line_as_source() {
     let w = MarkdownInputFieldBuilder::default().build().unwrap();
@@ -72,7 +72,7 @@ fn it_insert_and_visual_draw_every_line_as_source() {
 }
 
 #[test]
-/// UI-R-128 — unfocused, or read-only in any state, every line renders, cursor line
+/// UI-R-184 — unfocused, or read-only in any state, every line renders, cursor line
 /// included: no line reveals its source.
 fn it_unfocused_and_read_only_render_every_line_including_the_cursor_line() {
     let w = MarkdownInputFieldBuilder::default().build().unwrap();
@@ -104,7 +104,7 @@ fn it_revealed_source_line_is_styled_by_the_markdown_highlighter() {
     let mut b = buffer(30, 1);
     StatefulWidget::render(&w, Rect::new(0, 0, 30, 1), &mut b, &mut s);
     let keyword = w.syntax_theme().style(SyntaxKind::Keyword);
-    // Column 0 holds the cursor cell (UI-E-071), so assert on a later column of the
+    // Column 0 holds the cursor cell (UI-E-088), so assert on a later column of the
     // same whole-line Keyword span instead.
     assert_eq!(b[(5, 0)].fg, keyword.fg.unwrap());
 }
@@ -139,7 +139,7 @@ fn it_long_lines_wrap_across_display_rows_in_source_and_rendered_form() {
 }
 
 #[test]
-/// implementation detail (UI-R-131 and UI-E-070 are pinned by `markdown_render.rs`'s own
+/// implementation detail (UI-R-131 and UI-E-087 are pinned by `markdown_render.rs`'s own
 /// tests; this pins only the widget's own use of its wrap layout) — a line of several short
 /// words wider than the width breaks only at spaces, on both the styled-source path (Insert
 /// mode) and the rendered path (Normal mode, inactive line): the character-boundary
@@ -185,7 +185,7 @@ fn it_scrolls_the_viewport_as_typing_wraps_past_the_visible_row() {
 }
 
 #[test]
-/// UI-E-071 — the cursor cell never indexes past a full-width row: a line exactly as wide
+/// UI-E-088 — the cursor cell never indexes past a full-width row: a line exactly as wide
 /// as the content area, with the cursor after its last character, still renders instead of
 /// panicking outside the buffer.
 fn it_does_not_panic_when_the_cursor_sits_at_the_end_of_a_full_width_row() {

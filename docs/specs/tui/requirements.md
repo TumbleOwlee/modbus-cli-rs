@@ -12,7 +12,7 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **UI-R-001** — The application presents a full-screen terminal UI in the alternate screen buffer with raw mode enabled, and restores the terminal (leave alternate screen, disable raw mode) on normal exit, on the error exit path, and from a panic hook.
 
-**UI-R-002** — Screen layout top-to-bottom: one-row tab bar, flexible module content area, fixed-height log pane, one-row command line. The content area absorbs remaining height.
+**UI-R-002** — Screen layout top-to-bottom: the tab bar, a tab widget (UI-R-114) in `Horizontal` layout at its rendered extent across that direction (UI-R-121), one row under the default padding, flexible module content area, fixed-height log pane, one-row command line. The content area absorbs remaining height.
 
 **UI-R-003** — The application owns an ordered list of tabs and one active index. Each tab pairs one module content view with its own log pane. Exactly one tab is active and rendered; the others keep running in the background (UI-R-030).
 
@@ -192,15 +192,15 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 
 ## Markdown input field
 
-**UI-R-125** — The markdown input field is a multi-line widget composing the vim-modal code-editor state (UI-R-027 through UI-R-036): buffer, `Normal`/`Insert`/`Visual` modes, motions and operators, registers, single-level undo and the disabled flag, which the markdown widget surfaces as read-only.
+**UI-R-181** — The markdown input field is a multi-line widget composing the vim-modal code-editor state (UI-R-027 through UI-R-036): buffer, `Normal`/`Insert`/`Visual` modes, motions and operators, registers, single-level undo and the disabled flag, which the markdown widget surfaces as read-only.
 
-**UI-R-126** — Focused, editable, in `Normal` mode: every source line is drawn in its rendered form except the line holding the cursor, which is drawn as styled source, revealing that line's markup for editing.
+**UI-R-182** — Focused, editable, in `Normal` mode: every source line is drawn in its rendered form except the line holding the cursor, which is drawn as styled source, revealing that line's markup for editing.
 
-**UI-R-127** — Focused, editable, in `Insert` or `Visual` mode: every source line is drawn as styled source, with no rendered lines.
+**UI-R-183** — Focused, editable, in `Insert` or `Visual` mode: every source line is drawn as styled source, with no rendered lines.
 
-**UI-R-128** — Unfocused, or read-only in any state, every source line is drawn in its rendered form, including the cursor line; no line reveals its source.
+**UI-R-184** — Unfocused, or read-only in any state, every source line is drawn in its rendered form, including the cursor line; no line reveals its source.
 
-**UI-R-129** — The styled-source view of UI-R-126 and UI-R-127 is produced by the Markdown language of UI-R-037: source characters are drawn unchanged, styled by highlight span.
+**UI-R-129** — The styled-source view of UI-R-182 and UI-R-183 is produced by the Markdown language of UI-R-037: source characters are drawn unchanged, styled by highlight span.
 
 **UI-R-130** — Line wrapping is always on and cannot be disabled: content never overflows the widget width horizontally and the widget never scrolls horizontally.
 
@@ -282,15 +282,15 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **UI-R-171** — The Diff language's per-line block-balance delta is always zero, so auto-indent on newline (UI-R-032) in a Diff field only inherits the current line's leading indentation.
 
-**UI-R-120** — The Markdown language exposes, beside the span path of UI-R-037, a per-line block-model entry point: given one source line and a carried state it returns that line's block kind — paragraph, heading with level 1–6, unordered list item with nesting depth and marker character, ordered list item with nesting depth, task item with checked state, block quote with nesting depth, horizontal rule, fence delimiter with info string, or fence body — together with the inline spans of UI-R-122.
+**UI-R-176** — The Markdown language exposes, beside the span path of UI-R-037, a per-line block-model entry point: given one source line and a carried state it returns that line's block kind — paragraph, heading with level 1–6, unordered list item with nesting depth and marker character, ordered list item with nesting depth, task item with checked state, block quote with nesting depth, horizontal rule, fence delimiter with info string, or fence body — together with the inline spans of UI-R-178.
 
-**UI-R-121** — The block-model carried state of UI-R-120 records whether the parser is inside a fenced code block and that fence's info string; while inside a fence every line is classified as fence body regardless of its own content, until a matching closing fence delimiter line.
+**UI-R-177** — The block-model carried state of UI-R-176 records whether the parser is inside a fenced code block and that fence's info string; while inside a fence every line is classified as fence body regardless of its own content, until a matching closing fence delimiter line.
 
-**UI-R-122** — Inline parsing reports, over source character columns of one line, spans for `**bold**`, `*italic*`, `_italic_`, `` `code` ``, `~~strike~~`, `[text](url)` and `![alt](url)`, each distinguishing its marker columns (delimiters, brackets, URL) from its content columns, so a consumer can hide markers without recomputing positions.
+**UI-R-178** — Inline parsing reports, over source character columns of one line, spans for `**bold**`, `*italic*`, `_italic_`, `` `code` ``, `~~strike~~`, `[text](url)` and `![alt](url)`, each distinguishing its marker columns (delimiters, brackets, URL) from its content columns, so a consumer can hide markers without recomputing positions.
 
-**UI-R-123** — A character preceded by a backslash is literal: the backslash is a marker column and the escaped character never opens or closes an inline construct.
+**UI-R-179** — A character preceded by a backslash is literal: the backslash is a marker column and the escaped character never opens or closes an inline construct.
 
-**UI-R-124** — Constructs the block model does not recognize — tables, raw HTML, footnotes, reference links, setext headings, autolinks — are reported as paragraph text with no inline spans over them.
+**UI-R-180** — Constructs the block model does not recognize — tables, raw HTML, footnotes, reference links, setext headings, autolinks — are reported as paragraph text with no inline spans over them.
 
 ## Tables, live updates & logging
 
@@ -308,7 +308,7 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **UI-R-085** — File-sink logging (`:log <file>`) is module-forwarded, semantics in the module's area; with a file sink configured, buffered lines flush to disk once per UI tick (and on sink teardown), not per line.
 
-**UI-R-046** — A table cell wider than the visible width is reachable by horizontal scroll tied to the selected column; the tab bar keeps the active tab visible by scrolling horizontally on overflow. Live-updated cells can be highlighted briefly after they change.
+**UI-R-046** — A table cell wider than the visible width is reachable by horizontal scroll tied to the selected column. Live-updated cells can be highlighted briefly after they change. The tab bar's own overflow scroll is UI-R-117.
 
 ## Widget & focus-derive contract
 
@@ -324,35 +324,41 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **UI-R-050** — The color scheme is a single compile-time constant selected by build feature; no runtime switch.
 
-**UI-R-114** — A vertical tab line widget renders an ordered list of tab titles stacked downward in list order, each tab occupying as many rows as its title has characters, plus its padding rows (UI-R-120).
+**UI-R-114** — A tab widget renders an ordered list of tab titles laid out one after another in list order along its layout direction (UI-R-173), each tab occupying as many cells along that direction as its title has characters, plus its padding cells (UI-R-120).
 
-**UI-R-115** — A tab's title in the vertical tab line (UI-R-114) is written one character per row, top to bottom in title order, so an n-character title occupies n consecutive character rows.
+**UI-R-115** — Under `Vertical` layout (UI-R-173) a tab's title in the tab widget (UI-R-114) is written one character per row, top to bottom in title order, so an n-character title occupies n consecutive character rows.
 
-**UI-R-116** — The vertical tab line (UI-R-114) renders every cell belonging to the active tab — its character rows, its padding rows and columns (UI-R-120, UI-R-121) and the rows it gains from filling the height (UI-R-122) alike — in the active style, and every cell of every other tab in the inactive style, using the same styles as the horizontal tab bar (UI-R-002).
+**UI-R-116** — The tab widget (UI-R-114) renders every cell belonging to the active tab — its character cells, its padding cells along and across the layout direction (UI-R-120, UI-R-121) and the cells it gains from filling the area (UI-R-122) alike — in the active style, and every cell of every other tab in the inactive style, in either layout direction.
 
-**UI-R-117** — When the tabs of the vertical tab line (UI-R-114) need more rows than the area has, it scrolls vertically so the active tab's block of rows stays visible — the vertical counterpart of the horizontal tab-bar overflow scroll (UI-R-046).
+**UI-R-117** — When the tabs of the tab widget (UI-R-114) need more cells along the layout direction (UI-R-173) than the area offers, the widget scrolls along that direction so the active tab's block of cells stays visible.
 
-**UI-R-118** — The vertical tab line's scroll offset (UI-R-117) is the minimum that keeps the active tab's block visible: unchanged while the whole block is already visible, otherwise moved just far enough to bring the block flush against the nearer edge of the area.
+**UI-R-118** — The tab widget's scroll (UI-R-117) places the active tab's block as near the middle of the area as fits: the cells before the block along the layout direction take at most half the leftover extent and the cells after it take the remainder, and extent one side cannot use never rolls over to the other.
 
-**UI-R-119** — The vertical tab line (UI-R-114) derives no selection of its own: the caller owns the tab list and the active index in the widget's state and updates them before each render, and the only field the widget itself maintains is the scroll offset (UI-R-117).
+**UI-R-119** — The tab widget (UI-R-114) derives no selection of its own: the caller owns the tab list and the active index in the widget's state and updates them before each render, and the only field the widget itself maintains is the scroll offset (UI-R-117), in either layout direction.
 
-**UI-R-120** — The vertical tab line (UI-R-114) takes a padding of a horizontal count H and a vertical count V, both default 0, and renders V blank rows above and V blank rows below every tab's character rows (UI-R-115).
+**UI-R-120** — The tab widget (UI-R-114) takes a padding of a horizontal count H and a vertical count V, both default 0, and renders the count running along its layout direction (UI-R-173) — V under `Vertical`, H under `Horizontal` — as that many blank cells before and that many after every tab's character cells (UI-R-115, UI-R-174).
 
-**UI-R-121** — The horizontal padding count H of the vertical tab line (UI-R-120) renders H blank columns to the left and H to the right of the character column, so the widget's rendered width is `1 + 2H` columns and is never fixed at one; with H = 1, V = 1 and title `Tab` the widget renders the rows `"   "`, `" T "`, `" a "`, `" b "`, `"   "` from top to bottom.
+**UI-R-121** — The padding count running across the tab widget's layout direction (UI-R-120) — H under `Vertical`, V under `Horizontal` — renders that many blank lines on either side of the character line, so the widget's rendered extent across the direction is `1 + 2c` cells for that count `c` and is never fixed at one; with H = 1, V = 1 and title `Tab` the `Vertical` widget renders the rows `"   "`, `" T "`, `" a "`, `" b "`, `"   "` and the `Horizontal` widget the rows `"     "`, `" Tab "`, `"     "`, each from top to bottom.
 
-**UI-R-122** — When the displayed tabs' natural height — character rows plus padding rows (UI-R-115, UI-R-120) — is less than the height of the area, the vertical tab line (UI-R-114) divides the spare rows among those tabs so that the tabs together cover every row of the area.
+**UI-R-122** — When the displayed tabs' natural extent along the layout direction — character cells plus padding cells (UI-R-115, UI-R-120, UI-R-174) — is less than the area's extent along that direction, the tab widget (UI-R-114) divides the spare cells among those tabs so that the tabs together cover every cell of the area along that direction.
 
-**UI-R-123** — The spare rows of UI-R-122 are divided evenly: with `s` spare rows over `n` displayed tabs every tab gains `s / n` rows and the first `s % n` tabs, counted from the top, gain one row more.
+**UI-R-123** — The spare cells of UI-R-122 are divided evenly: with `s` spare cells over `n` displayed tabs every tab gains `s / n` cells and the first `s % n` tabs, counted from the start of the layout direction, gain one cell more.
 
-**UI-R-124** — The rows a tab gains under UI-R-122 are added outside that tab's padding rows, leaving its character rows and its padding rows contiguous and in place.
+**UI-R-124** — The cells a tab gains under UI-R-122 are added outside that tab's padding cells, leaving its character cells and its padding cells contiguous and in place.
 
-**UI-R-125** — The vertical tab line (UI-R-114) stretches no tab when the tabs' natural height is at least the height of the area; the scroll offset (UI-R-117, UI-R-118) governs that case instead.
+**UI-R-125** — The tab widget (UI-R-114) stretches no tab when the tabs' natural extent along the layout direction is at least the area's extent along that direction; the centering scroll (UI-R-117, UI-R-118, UI-R-175) governs that case instead.
 
-**UI-R-126** — The vertical tab line (UI-R-114) takes an alignment of `Top`, `Center` or `Bottom`, default `Center`, which places each tab's character rows together with its padding rows (UI-R-115, UI-R-120) at the top of, in the middle of, or at the bottom of that tab's stretched extent (UI-R-122), the gained rows filling the remainder.
+**UI-R-126** — The tab widget (UI-R-114) takes an alignment of `Start`, `Center` or `End`, default `Center`, which places each tab's character cells together with its padding cells (UI-R-115, UI-R-120, UI-R-174) at the start of, in the middle of, or at the end of that tab's stretched extent along the layout direction (UI-R-122), the gained cells filling the remainder.
 
-**UI-R-127** — Under `Center` alignment (UI-R-126) an odd number of gained rows splits with the smaller half above: a tab gaining `g` rows takes `g / 2` above its top padding row and the rest below its bottom padding row.
+**UI-R-127** — Under `Center` alignment (UI-R-126) an odd number of gained cells splits with the smaller half before the tab: a tab gaining `g` cells takes `g / 2` before its leading padding cell and the rest after its trailing padding cell.
 
-**UI-R-128** — Alignment (UI-R-126) changes nothing when no stretching applies (UI-R-125): with the tabs' natural height at or above the area height, `Top`, `Center` and `Bottom` render identically.
+**UI-R-128** — Alignment (UI-R-126) changes nothing when no stretching applies (UI-R-125): with the tabs' natural extent at or above the area's extent along the layout direction, `Start`, `Center` and `End` render identically.
+
+**UI-R-173** — The tab widget (UI-R-114) takes a layout direction of `Horizontal` or `Vertical`, default `Horizontal`, which lays the tabs out left to right or top to bottom and thereby fixes which axis every along-the-direction rule (UI-R-114, UI-R-117, UI-R-118, UI-R-120, UI-R-122, UI-R-126) applies to.
+
+**UI-R-174** — Under `Horizontal` layout (UI-R-173) a tab's title in the tab widget (UI-R-114) is written one character per column, left to right in title order, so an n-character title occupies n consecutive character columns.
+
+**UI-R-175** — The tab widget recomputes its scroll offset from the active tab's block on every render (UI-R-118) and stores it in its state as the record of the last computed window start, so the stored offset is an output of a render and never an input carried into the next one.
 
 ## Modbus monitor view
 

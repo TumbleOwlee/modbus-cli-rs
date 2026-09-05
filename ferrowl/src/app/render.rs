@@ -13,7 +13,7 @@ use ratatui::{
 use crate::dialog::scripts::ScriptDialog;
 use crate::module::view::CommandDescriptor;
 use crate::view::command::CommandLine;
-use crate::view::tabs::render_tabs;
+use crate::view::tabs::{render_tabs, tab_bar_height};
 
 use super::{Focus, Overlay, Tab, help};
 
@@ -28,10 +28,11 @@ pub(super) fn render(
     session_dialog: Option<&mut ScriptDialog>,
     help_open: bool,
     help_scroll: &mut u16,
+    tab_scroll: &mut usize,
 ) {
     let area = frame.area();
     let [tabs_area, view_area, log_area, cmd_area] = Layout::vertical([
-        Constraint::Length(1),
+        Constraint::Length(tab_bar_height()),
         Constraint::Min(1),
         Constraint::Length(10),
         Constraint::Length(1),
@@ -48,7 +49,7 @@ pub(super) fn render(
             .enumerate()
             .map(|(i, t)| format!(" [{i}] {} ", t.name))
             .collect();
-        render_tabs(&names, active, tabs_area, buf);
+        render_tabs(&names, active, tabs_area, buf, tab_scroll);
     }
 
     // Phase 2: module content view (includes its own status bar). Focus is carried by the view's
