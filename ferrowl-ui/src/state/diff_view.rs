@@ -1,7 +1,12 @@
 use std::ops::RangeInclusive;
 
+use crossterm::event::{KeyCode, KeyModifiers};
 use derive_builder::Builder;
 use getset::{CopyGetters, Getters, Setters};
+
+use super::vim::emit_osc52;
+use crate::EventResult;
+use crate::traits::HandleEvents;
 
 /// A parsed body line's classification (UI-R-208).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -84,6 +89,19 @@ pub struct DiffViewState {
     #[getset(skip)]
     #[builder(setter(skip), default = "DiffMode::Normal")]
     mode: DiffMode,
+    /// The first key of a `gg`, `yy`, `]c` or `[c` chord, awaiting its second.
+    #[getset(skip)]
+    #[builder(setter(skip), default)]
+    pending: Option<char>,
+    /// The count prefix accumulated ahead of `j`/`k` (UI-R-230).
+    #[getset(skip)]
+    #[builder(setter(skip), default)]
+    pending_count: Option<usize>,
+    /// The text a yank (`yy`/`y`) last copied (UI-R-229), for tests to assert without
+    /// adding public surface no `api-contract.md` row names.
+    #[getset(skip)]
+    #[builder(setter(skip), default)]
+    register: Option<String>,
     /// Vertical scroll offset in rows. Read and written by the widget's own navigation
     /// code, keeping the active row visible.
     #[getset(skip)]
@@ -302,6 +320,9 @@ impl DiffViewState {
         self.mode = DiffMode::Normal;
         self.scroll_offset = 0;
         self.h_scroll = 0;
+        self.pending = None;
+        self.pending_count = None;
+        self.register = None;
     }
 
     /// The row and its old/new file line numbers (UI-R-227), reporting `None` for a side
@@ -421,6 +442,328 @@ impl DiffViewState {
     #[allow(dead_code)]
     pub(crate) fn set_h_scroll(&mut self, offset: usize) {
         self.h_scroll = offset;
+    }
+
+    /// The text the last yank copied (UI-R-229), for tests: no `api-contract.md` row
+    /// names a register query, since the clipboard (OSC 52) is the yank's real output.
+    /// No non-test caller exists, since the register has no reader but the clipboard.
+    #[allow(dead_code)]
+    pub(crate) fn register(&self) -> Option<&str> {
+        self.register.as_deref()
+    }
+}
+
+impl DiffViewState {
+    fn clamp_active_row(&mut self) {
+        self.active_row = if self.rows.is_empty() {
+            0
+        } else {
+            self.active_row.min(self.rows.len() - 1)
+        };
+    }
+
+    /// Whether aligned row `index` draws as two screen rows in the unified layout: a
+    /// `Pair` with both sides present and differing text (the same test
+    /// `widgets/diff_view.rs`'s unified renderer uses); everything else draws as one.
+    fn row_screen_height(&self, index: usize) -> usize {
+        match self.rows.get(index) {
+            Some(DiffRow::Pair {
+                old: Some(o),
+                new: Some(n),
+                ..
+            }) if self.layout == DiffLayout::Unified && o.text != n.text => 2,
+            _ => 1,
+        }
+    }
+
+    /// The last aligned row index still inside `visible_height` screen rows starting at
+    /// `from`: in split layout one aligned row is one screen row, but in unified layout a
+    /// changed pair draws as two, so counting aligned rows alone can place the window a
+    /// row short of where the renderer actually stops.
+    fn last_visible_row_from(&self, from: usize) -> usize {
+        let mut used = 0usize;
+        let mut last = from;
+        for i in from..self.rows.len() {
+            let height = self.row_screen_height(i);
+            if used + height > self.visible_height.max(1) {
+                break;
+            }
+            used += height;
+            last = i;
+        }
+        last
+    }
+
+    /// Keeps `active_row` inside the last-rendered visible window (UI-R-230), the same
+    /// remembered-height paging scheme the code editor's `page_move`/`handle_readonly_nav`
+    /// use, adjusted for the unified layout's two-screen-row entries.
+    fn ensure_visible(&mut self) {
+        if self.active_row < self.scroll_offset {
+            self.scroll_offset = self.active_row;
+            return;
+        }
+        while self.active_row > self.last_visible_row_from(self.scroll_offset) {
+            self.scroll_offset += 1;
+        }
+    }
+
+    fn move_active_row_by(&mut self, delta: isize) {
+        if self.rows.is_empty() {
+            return;
+        }
+        let last = self.rows.len() as isize - 1;
+        self.active_row = (self.active_row as isize + delta).clamp(0, last) as usize;
+        self.ensure_visible();
+    }
+
+    fn move_active_row_to(&mut self, row: usize) {
+        self.active_row = row;
+        self.clamp_active_row();
+        self.ensure_visible();
+    }
+
+    /// Mirrors `code_input_field.rs`'s `page_move`: moves by at least one row, clamped at
+    /// the first and last row.
+    fn page_move(&mut self, down: bool, rows: usize) {
+        let rows = rows.max(1) as isize;
+        self.move_active_row_by(if down { rows } else { -rows });
+    }
+
+    /// The last column of the widest rendered text across every row and both sides
+    /// (UI-R-232), the horizontal-scroll clamp for `h`/`l`/`Left`/`Right`. Mirrors
+    /// `code_input_field.rs`'s `max_h_scroll`, widened to both sides and meta rows.
+    fn max_h_scroll(&self) -> usize {
+        self.rows
+            .iter()
+            .map(|row| match row {
+                DiffRow::Meta { text } => text.chars().count(),
+                DiffRow::Pair { old, new, .. } => {
+                    let o = old.as_ref().map_or(0, |e| e.text.chars().count());
+                    let n = new.as_ref().map_or(0, |e| e.text.chars().count());
+                    o.max(n)
+                }
+            })
+            .max()
+            .unwrap_or(0)
+            .saturating_sub(1)
+    }
+
+    /// The active row's own text length on `side`, `0` for a meta row or a filler.
+    fn active_row_text_len(&self, side: Side) -> usize {
+        match self.rows.get(self.active_row) {
+            Some(DiffRow::Pair { old, new, .. }) => {
+                let entry = match side {
+                    Side::Old => old,
+                    Side::New => new,
+                };
+                entry.as_ref().map_or(0, |e| e.text.chars().count())
+            }
+            _ => 0,
+        }
+    }
+
+    /// The row indices of every hunk header (a `DiffRow::Meta` starting `@@`), a hunk
+    /// boundary (UI-R-233).
+    fn hunk_header_rows(&self) -> Vec<usize> {
+        self.rows
+            .iter()
+            .enumerate()
+            .filter(|(_, row)| matches!(row, DiffRow::Meta { text } if text.starts_with("@@")))
+            .map(|(i, _)| i)
+            .collect()
+    }
+
+    /// `]c` (UI-R-233): the first row of the next hunk, clamping at the last hunk.
+    fn jump_to_next_hunk(&mut self) {
+        let headers = self.hunk_header_rows();
+        if let Some(&h) = headers.iter().find(|&&h| h + 1 > self.active_row) {
+            self.move_active_row_to(h + 1);
+        } else if let Some(&last) = headers.last() {
+            self.move_active_row_to(last + 1);
+        }
+    }
+
+    /// `[c` (UI-R-233): the first row of the previous hunk, clamping at the first hunk.
+    fn jump_to_prev_hunk(&mut self) {
+        let headers = self.hunk_header_rows();
+        if let Some(&h) = headers.iter().rev().find(|&&h| h + 1 < self.active_row) {
+            self.move_active_row_to(h + 1);
+        } else if let Some(&first) = headers.first() {
+            self.move_active_row_to(first + 1);
+        }
+    }
+
+    /// `yy`/`y` (UI-R-229): the focused side's text of the selected rows, skipping a row
+    /// whose focused side holds a filler, joined and copied to `register` and the system
+    /// clipboard via the code editor's own best-effort OSC 52 path.
+    fn yank(&mut self) {
+        let Some(range) = self.selected_rows() else {
+            return;
+        };
+        let side = self.focused_side;
+        let mut lines = Vec::new();
+        for i in range {
+            if let Some(DiffRow::Pair { old, new, .. }) = self.rows.get(i) {
+                let entry = match side {
+                    Side::Old => old,
+                    Side::New => new,
+                };
+                if let Some(e) = entry {
+                    lines.push(e.text.clone());
+                }
+            }
+        }
+        let text = lines.join("\n");
+        emit_osc52(&text);
+        self.register = Some(text);
+    }
+}
+
+impl HandleEvents for DiffViewState {
+    /// The diff widget holds no editable buffer (UI-R-222): every mutating and
+    /// Insert-entering key — `i`, `a`, `o`, `x`, `p`, `d` and any printable character —
+    /// simply falls through to the catch-all below and is reported unhandled by
+    /// construction, with no per-key ignore arm written for any of them.
+    fn handle_events(&mut self, modifiers: KeyModifiers, code: KeyCode) -> EventResult {
+        if modifiers == KeyModifiers::NONE
+            && code == KeyCode::Char('c')
+            && matches!(self.pending, Some('[') | Some(']'))
+        {
+            let next = self.pending == Some(']');
+            self.pending = None;
+            if next {
+                self.jump_to_next_hunk();
+            } else {
+                self.jump_to_prev_hunk();
+            }
+            return EventResult::Consumed;
+        }
+        if modifiers == KeyModifiers::NONE
+            && matches!(code, KeyCode::Char('[') | KeyCode::Char(']'))
+        {
+            self.pending = Some(if code == KeyCode::Char(']') { ']' } else { '[' });
+            return EventResult::Consumed;
+        }
+
+        if modifiers == KeyModifiers::NONE && code == KeyCode::Char('g') {
+            if self.pending == Some('g') {
+                self.pending = None;
+                self.pending_count = None;
+                self.move_active_row_to(0);
+            } else {
+                self.pending = Some('g');
+            }
+            return EventResult::Consumed;
+        }
+
+        if modifiers == KeyModifiers::NONE && code == KeyCode::Char('y') {
+            if self.mode == DiffMode::Visual {
+                self.yank();
+                self.mode = DiffMode::Normal;
+                self.anchor = None;
+            } else if self.pending == Some('y') {
+                self.pending = None;
+                self.yank();
+            } else {
+                self.pending = Some('y');
+            }
+            return EventResult::Consumed;
+        }
+
+        self.pending = None;
+
+        if modifiers == KeyModifiers::NONE
+            && let KeyCode::Char(c @ '1'..='9') = code
+        {
+            let digit = c as usize - '0' as usize;
+            self.pending_count = Some(self.pending_count.unwrap_or(0) * 10 + digit);
+            return EventResult::Consumed;
+        }
+        match (modifiers, code) {
+            (KeyModifiers::NONE, KeyCode::Char('j')) => {
+                let count = self.pending_count.take().unwrap_or(1).max(1) as isize;
+                self.move_active_row_by(count);
+                EventResult::Consumed
+            }
+            (KeyModifiers::NONE, KeyCode::Char('k')) => {
+                let count = self.pending_count.take().unwrap_or(1).max(1) as isize;
+                self.move_active_row_by(-count);
+                EventResult::Consumed
+            }
+            (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::Char('G')) => {
+                self.pending_count = None;
+                let last = self.rows.len().saturating_sub(1);
+                self.move_active_row_to(last);
+                EventResult::Consumed
+            }
+            (KeyModifiers::NONE, KeyCode::PageDown) => {
+                self.page_move(true, self.visible_height);
+                EventResult::Consumed
+            }
+            (KeyModifiers::NONE, KeyCode::PageUp) => {
+                self.page_move(false, self.visible_height);
+                EventResult::Consumed
+            }
+            (KeyModifiers::CONTROL, KeyCode::Char('d')) => {
+                self.page_move(true, (self.visible_height / 2).max(1));
+                EventResult::Consumed
+            }
+            (KeyModifiers::CONTROL, KeyCode::Char('u')) => {
+                self.page_move(false, (self.visible_height / 2).max(1));
+                EventResult::Consumed
+            }
+            (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::Char('h')) => {
+                self.h_scroll = self.h_scroll.saturating_sub(1);
+                EventResult::Consumed
+            }
+            (KeyModifiers::NONE, KeyCode::Left) => {
+                self.h_scroll = self.h_scroll.saturating_sub(1);
+                EventResult::Consumed
+            }
+            (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::Char('l')) => {
+                self.h_scroll = (self.h_scroll + 1).min(self.max_h_scroll());
+                EventResult::Consumed
+            }
+            (KeyModifiers::NONE, KeyCode::Right) => {
+                self.h_scroll = (self.h_scroll + 1).min(self.max_h_scroll());
+                EventResult::Consumed
+            }
+            (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::Char('0')) => {
+                self.h_scroll = 0;
+                EventResult::Consumed
+            }
+            (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::Char('$')) => {
+                let len = self.active_row_text_len(self.focused_side);
+                let last = len.saturating_sub(1);
+                self.h_scroll = (last + 1).saturating_sub(self.content_width);
+                EventResult::Consumed
+            }
+            (KeyModifiers::NONE, KeyCode::Char('v')) if self.mode == DiffMode::Normal => {
+                self.mode = DiffMode::Visual;
+                self.anchor = Some(self.active_row);
+                EventResult::Consumed
+            }
+            (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::Char('V'))
+                if self.mode == DiffMode::Normal =>
+            {
+                self.mode = DiffMode::Visual;
+                self.anchor = Some(self.active_row);
+                EventResult::Consumed
+            }
+            (KeyModifiers::NONE, KeyCode::Esc) if self.mode == DiffMode::Visual => {
+                self.mode = DiffMode::Normal;
+                self.anchor = None;
+                EventResult::Consumed
+            }
+            (KeyModifiers::CONTROL, KeyCode::Char('t')) => {
+                self.layout = match self.layout {
+                    DiffLayout::Split => DiffLayout::Unified,
+                    DiffLayout::Unified => DiffLayout::Split,
+                };
+                EventResult::Consumed
+            }
+            _ => EventResult::Unhandled(modifiers, code),
+        }
     }
 }
 
@@ -698,6 +1041,285 @@ mod tests {
             matches!(&rows[2], DiffRow::Meta { text } if text == "\\ No newline at end of file"),
             "the marker follows the row holding the added line it belongs to, not the \
              later filler-only row"
+        );
+    }
+
+    /// Two hunks, an unbalanced first one (filler on the old side), a context row in
+    /// each: row 0 header, row 1 "a" (context), row 2 old "b"/new "x" (a change), row 3
+    /// filler-old/new "y" (a surplus add), row 4 the second header, row 5 "c" (context).
+    fn nav_fixture() -> DiffViewState {
+        let mut s = DiffViewStateBuilder::default()
+            .build_with_diff("@@ -1,2 +1,3 @@\n a\n-b\n+x\n+y\n@@ -5,1 +7,1 @@\n c\n")
+            .unwrap();
+        s.set_visible_height(3);
+        s.set_content_width(10);
+        s
+    }
+
+    #[test]
+    /// UI-R-215, UI-E-101 — `Ctrl+T` toggles between split and unified, leaving the
+    /// active row and any Visual selection exactly where they were.
+    fn ut_ctrl_t_toggles_layout_leaving_the_active_row_and_selection_untouched() {
+        let mut s = nav_fixture();
+        s.set_active_row(2);
+        s.set_mode(DiffMode::Visual);
+        s.set_anchor(Some(1));
+        assert_eq!(s.layout(), DiffLayout::Split);
+
+        assert!(matches!(
+            s.handle_events(KeyModifiers::CONTROL, KeyCode::Char('t')),
+            EventResult::Consumed
+        ));
+        assert_eq!(s.layout(), DiffLayout::Unified);
+        assert_eq!(s.active_row(), 2);
+        assert_eq!(s.selected_rows(), Some(1..=2));
+
+        s.handle_events(KeyModifiers::CONTROL, KeyCode::Char('t'));
+        assert_eq!(s.layout(), DiffLayout::Split);
+        assert_eq!(s.active_row(), 2);
+        assert_eq!(s.selected_rows(), Some(1..=2));
+    }
+
+    #[test]
+    /// UI-R-222 — the diff widget holds no buffer, so every mutating and Insert-entering
+    /// key is reported unhandled: `i`, `a`, `o`, `x`, `p`, `dd` (each press) and a
+    /// printable character that maps to none of the widget's own keys.
+    fn ut_mutating_and_insert_entering_keys_are_reported_unhandled() {
+        for code in [
+            KeyCode::Char('i'),
+            KeyCode::Char('a'),
+            KeyCode::Char('o'),
+            KeyCode::Char('x'),
+            KeyCode::Char('p'),
+            KeyCode::Char('d'),
+            KeyCode::Char('z'),
+        ] {
+            let mut s = nav_fixture();
+            assert!(
+                matches!(
+                    s.handle_events(KeyModifiers::NONE, code),
+                    EventResult::Unhandled(KeyModifiers::NONE, c) if c == code
+                ),
+                "{code:?} should be unhandled"
+            );
+        }
+        let mut s = nav_fixture();
+        s.handle_events(KeyModifiers::NONE, KeyCode::Char('d'));
+        assert!(matches!(
+            s.handle_events(KeyModifiers::NONE, KeyCode::Char('d')),
+            EventResult::Unhandled(KeyModifiers::NONE, KeyCode::Char('d'))
+        ));
+    }
+
+    #[test]
+    /// UI-R-223 — `v`/`V` from Normal enter Visual, `Esc` in Visual returns to Normal,
+    /// and `Esc` in Normal is unhandled so it reaches the enclosing layer.
+    fn ut_v_and_shift_v_enter_visual_esc_returns_to_normal_and_esc_in_normal_is_unhandled() {
+        let mut s = nav_fixture();
+        assert!(matches!(
+            s.handle_events(KeyModifiers::NONE, KeyCode::Esc),
+            EventResult::Unhandled(KeyModifiers::NONE, KeyCode::Esc)
+        ));
+
+        s.handle_events(KeyModifiers::NONE, KeyCode::Char('v'));
+        assert_eq!(s.mode(), DiffMode::Visual);
+        assert!(matches!(
+            s.handle_events(KeyModifiers::NONE, KeyCode::Esc),
+            EventResult::Consumed
+        ));
+        assert_eq!(s.mode(), DiffMode::Normal);
+
+        s.handle_events(KeyModifiers::SHIFT, KeyCode::Char('V'));
+        assert_eq!(s.mode(), DiffMode::Visual);
+        s.handle_events(KeyModifiers::NONE, KeyCode::Esc);
+        assert_eq!(s.mode(), DiffMode::Normal);
+    }
+
+    #[test]
+    /// UI-R-229 — `yy`/`y` copy the focused side's text of the selected rows into the
+    /// register, skipping a row whose focused side is a filler.
+    fn ut_yank_copies_the_focused_sides_selected_text_skipping_filler_rows() {
+        let mut s = nav_fixture();
+        s.set_focused_side(Side::New);
+        s.set_mode(DiffMode::Visual);
+        s.set_active_row(1);
+        s.set_anchor(Some(3));
+        // Rows 1..=3: "a" (context, both sides), "x" (change, new side), "y" (surplus
+        // add, old side a filler — but the focused side is New here, so nothing skips).
+        s.handle_events(KeyModifiers::NONE, KeyCode::Char('y'));
+        assert_eq!(s.register(), Some("a\nx\ny"));
+        assert_eq!(s.mode(), DiffMode::Normal);
+
+        // Normal-mode `yy` on a single row whose focused (New) side holds a filler
+        // skips it, yielding an empty register content for that row alone.
+        let mut s = nav_fixture();
+        s.set_focused_side(Side::Old);
+        s.set_active_row(3);
+        s.handle_events(KeyModifiers::NONE, KeyCode::Char('y'));
+        s.handle_events(KeyModifiers::NONE, KeyCode::Char('y'));
+        assert_eq!(s.register(), Some(""));
+    }
+
+    #[test]
+    /// UI-R-230 (movement half) — `j`/`k`, their count prefixes, `gg` and `G` move the
+    /// active row and keep it inside the visible window.
+    fn ut_j_k_counts_gg_and_g_move_the_active_row_and_keep_it_visible() {
+        let mut s = nav_fixture();
+        s.handle_events(KeyModifiers::NONE, KeyCode::Char('j'));
+        assert_eq!(s.active_row(), 1);
+
+        s.handle_events(KeyModifiers::NONE, KeyCode::Char('2'));
+        s.handle_events(KeyModifiers::NONE, KeyCode::Char('j'));
+        assert_eq!(s.active_row(), 3);
+
+        s.handle_events(KeyModifiers::NONE, KeyCode::Char('k'));
+        assert_eq!(s.active_row(), 2);
+
+        s.handle_events(KeyModifiers::SHIFT, KeyCode::Char('G'));
+        assert_eq!(s.active_row(), 5);
+        assert!(
+            s.scroll_offset() + 3 > s.active_row(),
+            "active row must stay visible"
+        );
+
+        s.handle_events(KeyModifiers::NONE, KeyCode::Char('g'));
+        s.handle_events(KeyModifiers::NONE, KeyCode::Char('g'));
+        assert_eq!(s.active_row(), 0);
+        assert_eq!(s.scroll_offset(), 0);
+
+        // Clamped at the last row: moving past it stays put.
+        s.set_active_row(5);
+        s.handle_events(KeyModifiers::NONE, KeyCode::Char('j'));
+        assert_eq!(s.active_row(), 5);
+    }
+
+    #[test]
+    /// UI-R-231 — paging moves by the visible height and half of it, clamping at the
+    /// first and last row.
+    fn ut_paging_moves_by_the_visible_height_and_half_of_it_and_clamps() {
+        let mut s = nav_fixture();
+        s.handle_events(KeyModifiers::NONE, KeyCode::PageDown);
+        assert_eq!(s.active_row(), 3);
+        s.handle_events(KeyModifiers::CONTROL, KeyCode::Char('u'));
+        assert_eq!(s.active_row(), 2);
+        s.handle_events(KeyModifiers::NONE, KeyCode::PageDown);
+        assert_eq!(s.active_row(), 5, "clamped at the last row");
+        s.handle_events(KeyModifiers::NONE, KeyCode::PageUp);
+        assert_eq!(s.active_row(), 2);
+        s.handle_events(KeyModifiers::CONTROL, KeyCode::Char('d'));
+        assert_eq!(s.active_row(), 3, "Ctrl+D moves by half the visible height");
+        for _ in 0..10 {
+            s.handle_events(KeyModifiers::CONTROL, KeyCode::Char('u'));
+        }
+        assert_eq!(s.active_row(), 0, "clamped at the first row");
+    }
+
+    #[test]
+    /// UI-R-232 (movement half) — `h`/`l`/`Left`/`Right`/`0` move one shared horizontal
+    /// offset, applying to every pane alike (asserted here by reading `h_scroll` itself).
+    fn ut_horizontal_keys_move_one_shared_offset_for_every_pane() {
+        let mut s = nav_fixture();
+        s.handle_events(KeyModifiers::NONE, KeyCode::Char('l'));
+        assert_eq!(s.h_scroll(), 1);
+        s.handle_events(KeyModifiers::NONE, KeyCode::Right);
+        assert_eq!(s.h_scroll(), 2);
+        s.handle_events(KeyModifiers::NONE, KeyCode::Char('h'));
+        assert_eq!(s.h_scroll(), 1);
+        s.handle_events(KeyModifiers::NONE, KeyCode::Left);
+        assert_eq!(s.h_scroll(), 0);
+        s.handle_events(KeyModifiers::NONE, KeyCode::Char('h'));
+        assert_eq!(s.h_scroll(), 0, "clamped at zero");
+
+        for _ in 0..50 {
+            s.handle_events(KeyModifiers::NONE, KeyCode::Char('l'));
+        }
+        let max = s.h_scroll();
+        s.handle_events(KeyModifiers::NONE, KeyCode::Char('l'));
+        assert_eq!(s.h_scroll(), max, "clamped at the widest rendered text");
+
+        s.handle_events(KeyModifiers::NONE, KeyCode::Char('0'));
+        assert_eq!(s.h_scroll(), 0);
+    }
+
+    #[test]
+    /// UI-R-232 (movement half) — `$` brings the active row's focused-side last column
+    /// into view, computed from the remembered content width so it works even unfocused
+    /// (the code editor's UI-R-179 exception, mirrored here).
+    fn ut_dollar_brings_the_last_column_into_view_unfocused_too() {
+        // A row wider than the content width, so `$` must produce a nonzero offset: an
+        // implementation with the `$` arm deleted (or a no-op) would otherwise still pass
+        // an assertion built only from rows shorter than the content width.
+        let mut s = DiffViewStateBuilder::default()
+            .build_with_diff("@@ -1,1 +1,1 @@\n-short\n+a much longer line of text\n")
+            .unwrap();
+        s.set_content_width(5);
+        s.set_focused_side(Side::Old);
+        s.set_active_row(1); // old text "short", length 5
+        s.handle_events(KeyModifiers::NONE, KeyCode::Char('$'));
+        assert_eq!(
+            s.h_scroll(),
+            0,
+            "text no longer than the content width needs no scroll"
+        );
+
+        s.set_focused_side(Side::New);
+        s.handle_events(KeyModifiers::NONE, KeyCode::Char('$'));
+        // new text "a much longer line of text" is 26 characters; last_col = 25, so
+        // h_scroll = (25 + 1) - 5 = 21.
+        assert_eq!(s.h_scroll(), 21);
+
+        // Computed from the remembered content width (UI-R-179's mechanism), not a live
+        // render: changing it directly still moves `$`'s result.
+        s.set_content_width(10);
+        s.handle_events(KeyModifiers::NONE, KeyCode::Char('$'));
+        assert_eq!(s.h_scroll(), 16);
+    }
+
+    #[test]
+    /// UI-R-233 — `]c`/`[c` move to the first row of the next/previous hunk, clamping at
+    /// the last and first hunk.
+    fn ut_bracket_c_moves_to_the_next_and_previous_hunk_and_clamps_at_both_ends() {
+        let mut s = nav_fixture();
+        s.handle_events(KeyModifiers::NONE, KeyCode::Char(']'));
+        s.handle_events(KeyModifiers::NONE, KeyCode::Char('c'));
+        assert_eq!(s.active_row(), 1, "the row after the first hunk's header");
+
+        s.handle_events(KeyModifiers::NONE, KeyCode::Char(']'));
+        s.handle_events(KeyModifiers::NONE, KeyCode::Char('c'));
+        assert_eq!(s.active_row(), 5, "the row after the second hunk's header");
+
+        s.handle_events(KeyModifiers::NONE, KeyCode::Char(']'));
+        s.handle_events(KeyModifiers::NONE, KeyCode::Char('c'));
+        assert_eq!(s.active_row(), 5, "clamped at the last hunk");
+
+        s.handle_events(KeyModifiers::NONE, KeyCode::Char('['));
+        s.handle_events(KeyModifiers::NONE, KeyCode::Char('c'));
+        assert_eq!(s.active_row(), 1, "the previous hunk's first row");
+
+        s.handle_events(KeyModifiers::NONE, KeyCode::Char('['));
+        s.handle_events(KeyModifiers::NONE, KeyCode::Char('c'));
+        assert_eq!(s.active_row(), 1, "clamped at the first hunk");
+    }
+
+    #[test]
+    /// UI-R-230, UI-R-231 — in unified layout a changed pair (both sides present,
+    /// differing text) draws as two screen rows, so keeping the active row visible must
+    /// count screen rows, not aligned rows: three screen rows of visible height can hold
+    /// row 0 and row 1 alone, or rows 1 and 2 (row 2 costing two), but never all three.
+    fn ut_unified_paging_accounts_for_two_screen_row_entries() {
+        let mut s = DiffViewStateBuilder::default()
+            .layout(DiffLayout::Unified)
+            .build_with_diff("@@ -1,2 +1,3 @@\n a\n-b\n+x\n+y\n@@ -5,1 +7,1 @@\n c\n")
+            .unwrap();
+        s.set_visible_height(3);
+        s.handle_events(KeyModifiers::NONE, KeyCode::Char('j'));
+        s.handle_events(KeyModifiers::NONE, KeyCode::Char('j'));
+        assert_eq!(s.active_row(), 2);
+        assert_eq!(
+            s.scroll_offset(),
+            1,
+            "row 2 costs two screen rows, so row 0 must scroll off to fit rows 1 and 2 \
+             within a 3-screen-row window"
         );
     }
 }
