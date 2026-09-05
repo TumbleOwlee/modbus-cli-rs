@@ -4,30 +4,45 @@
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ferrowl_ui::{
     AlternateScreen, Border,
-    state::VerticalTabsState,
-    widgets::{TextBuilder, VerticalTabsBuilder},
+    state::TabBarState,
+    widgets::{TabBarBuilder, TextBuilder},
 };
 use ratatui::{
     Frame,
-    layout::{Constraint, Layout, Margin, Rect},
+    layout::{Constraint, Direction, Layout, Margin, Rect},
 };
 use std::{io::Stdout, time::Duration};
 
 struct App {
-    tabs: VerticalTabsState<String>,
+    tabs: TabBarState<String>,
     body: String,
+    direction: Direction,
 }
 
 fn ui(f: &mut Frame, app: &mut App) {
-    let [tabs_area, body_area]: [Rect; 2] =
-        Layout::horizontal([Constraint::Length(5), Constraint::Min(1)]).areas(f.area());
-
     // Two blank columns each side of the title (H = 2), one blank row above
     // and below each title (V = 1).
-    let tabs = VerticalTabsBuilder::<String>::default()
+    let tabs = TabBarBuilder::<String>::default()
         .padding(Margin::new(2, 1))
+        .direction(app.direction)
         .build()
         .unwrap();
+
+    let (tabs_area, body_area): (Rect, Rect) = match app.direction {
+        Direction::Vertical => {
+            let [tabs_area, body_area]: [Rect; 2] =
+                Layout::horizontal([Constraint::Length(5), Constraint::Min(1)]).areas(f.area());
+            (tabs_area, body_area)
+        }
+        Direction::Horizontal => {
+            let [tabs_area, body_area]: [Rect; 2] = Layout::vertical([
+                Constraint::Length(tabs.rendered_extent()),
+                Constraint::Min(1),
+            ])
+            .areas(f.area());
+            (tabs_area, body_area)
+        }
+    };
     f.render_stateful_widget(&tabs, tabs_area, &mut app.tabs);
 
     let text = TextBuilder::default()
@@ -44,12 +59,13 @@ fn main() {
         AlternateScreen::new().expect("Failed to create alternate screen.");
 
     let mut app = App {
-        tabs: VerticalTabsState {
+        tabs: TabBarState {
             titles: vec!["BOARD".to_string(), "REPOSITORY".to_string()],
             active: 0,
             offset: 0,
         },
         body: String::new(),
+        direction: Direction::Vertical,
     };
 
     loop {
@@ -68,6 +84,12 @@ fn main() {
                 }
                 KeyCode::Up => {
                     app.tabs.active = app.tabs.active.checked_sub(1).unwrap_or(len - 1);
+                }
+                KeyCode::Char('d') => {
+                    app.direction = match app.direction {
+                        Direction::Vertical => Direction::Horizontal,
+                        Direction::Horizontal => Direction::Vertical,
+                    };
                 }
                 _ => {}
             }
