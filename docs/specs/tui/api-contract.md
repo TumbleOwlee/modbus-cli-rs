@@ -357,7 +357,7 @@ Event handling: `Enter` in `Normal` mode with non-blank text returns a confirmed
 
 ## Diff widget
 
-Public surface: construction from a unified diff text (UI-R-207); layout option (`Split` default, `Unified`) and a runtime toggle key (UI-R-214, UI-R-215); per-side syntax language, default none (UI-R-220, UI-R-221); per-side gutter labels, settable at build time and after (UI-R-218); a focused-side setter and query (UI-R-228); a selected-row query (UI-R-226); a per-row query returning that row's diff kind and old/new line numbers (UI-R-227).
+Public surface: construction from a unified diff text (UI-R-207); layout option (`Split` default, `Unified`) and a runtime toggle key (UI-R-214, UI-R-215); syntax language for both sides, default none (UI-R-220, UI-R-221); per-side gutter labels, settable at build time and after (UI-R-218); a focused-side setter and query (UI-R-228); a selected-row query (UI-R-226); a per-row query returning that row's diff kind and old/new line numbers (UI-R-227).
 
 | Key | Mode | Action | Req |
 |---|---|---|---|

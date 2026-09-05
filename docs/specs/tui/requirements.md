@@ -340,7 +340,7 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **UI-R-219** — A row's text is styled by its diff kind, using the syntax theme's added, removed and meta styles (UI-R-162, UI-R-163); a context line takes the theme's normal text style.
 
-**UI-R-220** — The diff widget takes an optional syntax language per side; with a language set, each entry's text is highlighted by that language (UI-R-037) and the highlight spans supply the foreground, the diff-kind style of UI-R-219 supplying every other attribute.
+**UI-R-220** — The diff widget takes one optional syntax language applying to both sides; with a language set, every entry's text is highlighted by that language (UI-R-037) and the highlight spans supply the foreground, the diff-kind style of UI-R-219 supplying every other attribute.
 
 **UI-R-221** — The syntax language of UI-R-220 defaults to none, in which case the diff-kind style of UI-R-219 alone styles the text.
 
