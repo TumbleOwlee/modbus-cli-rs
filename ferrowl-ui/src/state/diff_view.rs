@@ -88,13 +88,11 @@ pub struct DiffViewState {
     /// code, keeping the active row visible.
     #[getset(skip)]
     #[builder(setter(skip), default)]
-    #[allow(dead_code)]
     scroll_offset: usize,
     /// Horizontal scroll offset in columns, one shared by every pane (UI-R-232). Read and
     /// written by the widget's own navigation code.
     #[getset(skip)]
     #[builder(setter(skip), default)]
-    #[allow(dead_code)]
     h_scroll: usize,
     /// Per-row gutter labels for the old side (UI-R-218), settable when built and
     /// afterwards.
@@ -106,18 +104,12 @@ pub struct DiffViewState {
     #[getset(get = "pub", set = "pub")]
     #[builder(default = "None")]
     new_labels: Option<Vec<String>>,
-    /// Syntax language highlighting the old side's text; `None` by default (UI-R-220,
-    /// UI-R-221). Crate-private field, read directly by the widget that renders this
-    /// state: no `api-contract.md` row needs a getter, only the builder setter.
+    /// Syntax language highlighting both sides' text; `None` by default (UI-R-220,
+    /// UI-R-221). A diff is never between two languages — a file has one — so this is one
+    /// field, not a pair. Crate-private field, read directly by the widget that renders
+    /// this state: no `api-contract.md` row needs a getter, only the builder setter.
     #[builder(default = "None")]
-    #[allow(dead_code)]
-    pub(crate) old_language: Option<ferrowl_syntax::Language>,
-    /// Syntax language highlighting the new side's text; `None` by default (UI-R-220,
-    /// UI-R-221). Crate-private field, read directly by the widget that renders this
-    /// state: no `api-contract.md` row needs a getter, only the builder setter.
-    #[builder(default = "None")]
-    #[allow(dead_code)]
-    pub(crate) new_language: Option<ferrowl_syntax::Language>,
+    pub(crate) language: Option<ferrowl_syntax::Language>,
     /// Split or unified rendering layout, defaulting to split (UI-R-214).
     #[getset(get_copy = "pub")]
     #[builder(default = "DiffLayout::Split")]
@@ -401,6 +393,34 @@ impl DiffViewState {
     #[allow(dead_code)]
     pub(crate) fn set_content_width(&mut self, width: usize) {
         self.content_width = width;
+    }
+
+    /// Read by the widget that renders this state, to know which aligned row to draw
+    /// first (UI-R-230).
+    pub(crate) fn scroll_offset(&self) -> usize {
+        self.scroll_offset
+    }
+
+    /// Written by the key-handling code that moves the vertical scroll offset. No
+    /// non-test caller exists until that key handling lands, so a render test can place a
+    /// nonzero offset before it does.
+    #[allow(dead_code)]
+    pub(crate) fn set_scroll_offset(&mut self, offset: usize) {
+        self.scroll_offset = offset;
+    }
+
+    /// Read by the widget that renders this state, to know how many leading columns of
+    /// each entry's text to drop (UI-R-232).
+    pub(crate) fn h_scroll(&self) -> usize {
+        self.h_scroll
+    }
+
+    /// Written by the key-handling code that moves the horizontal scroll offset. No
+    /// non-test caller exists until that key handling lands, so a render test can place a
+    /// nonzero offset before it does.
+    #[allow(dead_code)]
+    pub(crate) fn set_h_scroll(&mut self, offset: usize) {
+        self.h_scroll = offset;
     }
 }
 
