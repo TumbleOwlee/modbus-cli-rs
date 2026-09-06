@@ -357,13 +357,13 @@ Event handling: `Enter` in `Normal` mode with non-blank text returns a confirmed
 
 ## Diff widget
 
-Public surface: construction from a unified diff text (UI-R-207); layout option (`Split` default, `Unified`) and a runtime toggle key (UI-R-214, UI-R-215); syntax language for both sides, default none (UI-R-220, UI-R-221); per-side gutter labels, settable at build time and after (UI-R-218); a focused-side setter and query (UI-R-228); a selected-row query (UI-R-226); a per-row query returning that row's diff kind and old/new line numbers (UI-R-227).
+Public surface: construction from a unified diff text plus an optional full new-side text (UI-R-207, UI-R-253); layout option (`Split` default, `Unified`) and a runtime toggle key (UI-R-214, UI-R-215); syntax language for both sides, default none (UI-R-220, UI-R-221); per-side gutter labels, settable at build time and after (UI-R-218); a focused-side setter and query (UI-R-228); a selected-row query (UI-R-226); a per-row query returning that row's diff kind and old/new line numbers (UI-R-227); display-mode option, default hunk-only (UI-R-257); line-wrap option, default off (UI-R-260); marked ranges, settable at build time and after (UI-R-266); annotations, settable at build time and after (UI-R-269); added, removed and meta row styles, defaulting to white on green, white on red and the theme's meta style (UI-R-276).
 
 | Key | Mode | Action | Req |
 |---|---|---|---|
 | `j` / `k`, counts, `gg`, `G` | Normal / Visual | Move the active row | UI-R-230 |
-| `PageDown` / `PageUp` / `Ctrl+D` / `Ctrl+U` | Normal / Visual | Page / half-page the active row | UI-R-231 |
-| `h` / `l` / `Left` / `Right` / `0` / `$` | Normal / Visual | Horizontal scroll, applied to every pane | UI-R-232 |
+| `PageDown` / `PageUp` / `Ctrl+D` / `Ctrl+U` | Normal / Visual | Page / half-page the active row, counted in display rows | UI-R-231 |
+| `h` / `l` / `Left` / `Right` / `0` / `$` | Normal / Visual | Horizontal scroll, applied to every pane, while wrapping is off | UI-R-232 |
 | `]c` / `[c` | Normal / Visual | Move to the first row of the next / previous hunk | UI-R-233 |
 | `v` / `V` | Normal | Enter Visual | UI-R-223 |
 | `Esc` | Visual | Back to Normal | UI-R-223 |
@@ -371,6 +371,8 @@ Public surface: construction from a unified diff text (UI-R-207); layout option 
 | `yy` | Normal | Yank the focused side's text of the selected rows | UI-R-229 |
 | `y` | Visual | Yank the focused side's text of the selected rows | UI-R-229 |
 | `Ctrl+T` | Normal / Visual | Toggle layout | UI-R-215 |
+| `Ctrl+F` | Normal / Visual | Toggle hunk-only and full-file display | UI-R-258 |
+| `Ctrl+A` | Normal / Visual | Toggle annotation visibility | UI-R-275 |
 | mutating and Insert-entering keys | Normal / Visual | Reported unhandled | UI-R-222 |
 
 ## File tree widget

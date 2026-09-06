@@ -314,11 +314,11 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 
 ## Diff widget
 
-**UI-R-207** — The diff widget takes a unified diff text and parses it into hunks, each hunk's header line supplying the old-side and new-side starting line numbers of its body.
+**UI-R-207** — The diff widget takes a unified diff text and, optionally, the full new-side file text, and parses the diff into hunks, each hunk's header line supplying the old-side and new-side starting line numbers of its body.
 
 **UI-R-208** — The diff widget classifies each parsed body line by its first character — space as context, `+` as added, `-` as removed — and keeps the remainder of the line as that line's text; every other line of the input is a meta line kept verbatim.
 
-**UI-R-209** — The diff widget aligns a hunk's lines into rows holding an optional old-side entry and an optional new-side entry: a context line occupies both entries of one row, a run of removed lines pairs positionwise with the run of added lines that follows it, and a surplus line on either side occupies a row whose other entry is a filler.
+**UI-R-209** — The diff widget aligns the diff into rows holding an optional old-side entry and an optional new-side entry: a context line occupies both entries of one row, a run of removed lines pairs positionwise with the run of added lines that follows it, a surplus line on either side occupies a row whose other entry is a filler, and, with the full new-side text supplied (UI-R-207), every file line between and around the hunks occupies a further row holding that line on both sides.
 
 **UI-R-210** — A meta line (UI-R-208), file header and hunk header included, occupies a row of its own drawn in the theme's meta style across the full width of the widget, with a blank gutter on every side.
 
@@ -338,7 +338,7 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **UI-R-218** — The diff widget takes an optional list of gutter labels per side, settable when built and afterwards, whose entry for a row replaces that side's line number in the gutter, following the gutter rules of the code editor (UI-R-165 through UI-R-169, UI-R-172).
 
-**UI-R-219** — A row's text is styled by its diff kind, using the syntax theme's added, removed and meta styles (UI-R-162, UI-R-163); a context line takes the theme's normal text style.
+**UI-R-219** — A row's text is styled by its diff kind, using the diff widget's own added, removed and meta row styles (UI-R-276); a context line takes the theme's normal text style.
 
 **UI-R-220** — The diff widget takes one optional syntax language applying to both sides; with a language set, every entry's text is highlighted by that language (UI-R-037) and the highlight spans supply the foreground, the diff-kind style of UI-R-219 supplying every other attribute.
 
@@ -362,11 +362,59 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **UI-R-230** — `j`, `k`, their count prefixes, `gg` and `G` move the active row within the widget's aligned rows, and the single vertical scroll offset keeps the active row visible, so both panes always show the same row range.
 
-**UI-R-231** — `PageDown`, `PageUp`, `Ctrl+D` and `Ctrl+U` move the diff widget's active row by the visible height or half of it, with the remembered-height and clamping semantics of UI-R-173 through UI-R-175.
+**UI-R-231** — `PageDown`, `PageUp`, `Ctrl+D` and `Ctrl+U` move the diff widget's active row by as many display rows as the visible height or half of it, landing on the logical row holding the display row reached, with the remembered-height and clamping semantics of UI-R-173 through UI-R-175.
 
-**UI-R-232** — `h`, `l`, `Left`, `Right`, `0` and `$` scroll the diff widget horizontally with the semantics of UI-R-176 through UI-R-179, applying one horizontal offset to every pane at once.
+**UI-R-232** — With wrapping off (UI-R-260), `h`, `l`, `Left`, `Right`, `0` and `$` scroll the diff widget horizontally with the semantics of UI-R-176 through UI-R-179, applying one horizontal offset to every pane at once.
 
 **UI-R-233** — `]c` moves the active row to the first row of the next hunk and `[c` to the first row of the previous hunk, each clamping at the last and first hunk.
+
+**UI-R-253** — With the full new-side text supplied (UI-R-207), each row's new-side entry is the corresponding line of that text, the old side is reconstructed from it — a context line repeated with its old-side number offset by the cumulative line delta of the preceding hunks — and removed lines come from the patch; the widget runs no diff algorithm of its own.
+
+**UI-R-254** — The aligned row list (UI-R-209) is built once per input and is the same list in either display mode, the full-file rows being a superset of the hunk rows.
+
+**UI-R-255** — Hunk-only mode is that same row list (UI-R-254) carrying fold ranges over the unchanged spans outside the hunks, so switching modes flips folds instead of rebuilding and a row keeps its index across the switch.
+
+**UI-R-256** — A folded span (UI-R-255) contributes no display rows: its rows are neither drawn nor reachable by navigation, while their indices remain valid.
+
+**UI-R-257** — The diff widget's display mode is a builder option defaulting to hunk-only.
+
+**UI-R-258** — `Ctrl+F` toggles the diff widget between hunk-only and full-file display at runtime.
+
+**UI-R-259** — Constructing the diff widget from a unified diff text alone (UI-R-207) yields hunk-only display with no full-file mode to switch to.
+
+**UI-R-260** — The diff widget takes a line-wrap option, builder-set and defaulting to off; with it on, a row's text too wide for its pane continues on further display rows, breaking at a whitespace boundary and never inside a word.
+
+**UI-R-261** — A continuation display row of a wrapped row (UI-R-260) carries a blank gutter cell and a blank marker column and starts at the same column as the first row's text.
+
+**UI-R-262** — In the split layout a logical row occupies as many display rows as the taller of its two sides needs when wrapped (UI-R-260), the shorter side padded with blank display rows, so corresponding old and new lines keep starting on the same display row.
+
+**UI-R-263** — With wrapping on (UI-R-260) the horizontal offset is fixed at zero and `h`, `l`, `Left`, `Right`, `0` and `$` are consumed without moving the view.
+
+**UI-R-264** — The active row, the selection anchor and the selected-row query (UI-R-226) address logical rows, so a wrapped row or an annotated row is selected whole.
+
+**UI-R-265** — The vertical scroll offset, the paging of UI-R-231 and the keep-the-active-row-visible settle count display rows, so wrapping and annotations never make part of a row unreachable.
+
+**UI-R-266** — The diff widget takes a list of marked ranges, each naming a side, a file line range on that side and a colour, settable when built and afterwards.
+
+**UI-R-267** — For every row a marked range covers (UI-R-266), the widget fills that side's gutter cell with the range's colour, so a marked span reads as one continuous block down the gutter.
+
+**UI-R-268** — Marked ranges and gutter labels coexist on the same row: the label supplies the gutter's text (UI-R-218) and the range its colour (UI-R-267).
+
+**UI-R-269** — The diff widget takes a list of annotations, each naming a side, a file line range on that side and a markdown text, settable when built and afterwards.
+
+**UI-R-270** — An annotation renders as a bordered block directly beneath the last row of its range, spanning the full width of the widget in the unified layout and both panes in the split layout.
+
+**UI-R-271** — An annotation's text is rendered by a read-only markdown input field, so its body shows the rendered markdown of UI-R-128 rather than its source.
+
+**UI-R-272** — An annotation block's height is the display rows its text measures at the block's inner width (UI-R-188) plus its border rows.
+
+**UI-R-273** — Annotations are display-only: no annotation is ever the active row, none is reachable by navigation, and none appears in the selected-row query (UI-R-226).
+
+**UI-R-274** — Annotations are shown when the widget is built.
+
+**UI-R-275** — `Ctrl+A` toggles every annotation between shown and hidden at once, hidden annotations contributing no display rows.
+
+**UI-R-276** — The diff widget's added, removed and meta row styles are builder-settable and default to white on a green background, white on a red background and the theme's meta style respectively (UI-R-219).
 
 ## File tree widget
 
@@ -409,6 +457,8 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 **UI-R-250** — The example's file browser holds the paths changed between the selected base and branch, each carrying its change status (UI-R-244).
 
 **UI-R-251** — Activating a file in the example's browser (UI-R-242) shows that file's diff in the diff widget, and changing either selection rebuilds both the browser's paths and the shown diff.
+
+**UI-R-277** — The diff-review example supplies the selected file's full new-side text from the selected branch (UI-R-207), so its viewer shows the whole file with the changes marked in place.
 
 ## Syntax highlighting
 

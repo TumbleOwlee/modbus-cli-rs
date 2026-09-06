@@ -113,6 +113,14 @@ Boundary behavior, error semantics, intentional or known constraints. The known-
 | **UI-E-100** | Visual selection spanning rows whose one side is a filler (UI-R-209, UI-R-226) | the filler rows are part of the reported range, and the per-row query (UI-R-227) reports no line number for that side |
 | **UI-E-101** | Layout toggled (UI-R-215) while a Visual selection is active | active row and selection are unchanged: both layouts address the same aligned rows (UI-R-213) |
 | **UI-E-102** | Gutter-label list longer than the widget's row count (UI-R-218) | the surplus labels are never rendered but still count toward the gutter width, as UI-E-080 |
+| **UI-E-111** | Word longer than the available width with wrapping on (UI-R-260) | broken at a character boundary; never truncated, never overflowed, as UI-E-070 |
+| **UI-E-112** | Wrapping on in a pane too narrow for the gutter and marker column (UI-R-260) | the available text width is treated as one column, one character per display row, as UI-E-090 |
+| **UI-E-113** | `Ctrl+F` on a widget built without the full new-side text (UI-R-258, UI-R-259) | consumed and ignored; the display stays hunk-only |
+| **UI-E-114** | Full new-side text disagreeing with the patch's context lines (UI-R-253) | the supplied text supplies the new-side content and the patch supplies the row's classification; no error is raised and nothing is dropped |
+| **UI-E-115** | Annotation or marked range naming a side and file line range no row covers (UI-R-266, UI-R-269) | silently not rendered; the widget raises no error and drops no row |
+| **UI-E-116** | Several annotations anchored to the same row (UI-R-270) | drawn one block after another beneath that row, in the order the consumer supplied them |
+| **UI-E-117** | Marked range covering a row where that side holds a filler (UI-R-267) | that row's gutter cell stays blank and unpainted, so the block is interrupted where the side has no line |
+| **UI-E-118** | Annotations hidden or shown with `Ctrl+A` while the active row is below them (UI-R-275) | the active row is unchanged and the scroll re-settles in display rows (UI-R-265) |
 
 ## File tree widget
 
@@ -125,6 +133,7 @@ Boundary behavior, error semantics, intentional or known constraints. The known-
 | **UI-E-106** | Row wider than the file tree's area (UI-R-238) | the row is clipped at the area width; the file tree never scrolls horizontally |
 | **UI-E-107** | Example started outside a git repository, or with git unavailable (UI-R-248) | the branch lists stay empty and the panes show the failure as text; the example stays interactive and does not exit |
 | **UI-E-108** | Example with base and branch set to the same ref (UI-R-251) | an empty file browser and an empty diff viewer (UI-E-099), no error |
+| **UI-E-119** | Example showing a file deleted on the selected branch, so no new-side text exists (UI-R-277) | that file is shown hunk-only (UI-R-259); the example raises no error |
 
 ## Rendering and terminal size
 
