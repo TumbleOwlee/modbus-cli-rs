@@ -9,7 +9,9 @@ use ratatui::{
 };
 
 use crate::Border;
-use crate::state::{DiffEntry, DiffKind, DiffLayout, DiffMode, DiffRow, DiffViewState, Side};
+use crate::state::{
+    DiffEntry, DiffKind, DiffLayout, DiffMode, DiffRow, DiffViewState, RowPart, Side,
+};
 use crate::style::{DiffViewStyle, SyntaxTheme};
 use crate::traits::Margins;
 use crate::widgets::Title;
@@ -202,7 +204,11 @@ impl DiffView {
 
     /// Draws one side's gutter, marker and text into `rect` (whose width is exactly
     /// `gutter_width + 1 + text_width`). A filler entry (UI-R-212) draws a blank gutter of
-    /// the full width, a space marker and no text.
+    /// the full width, a space marker and no text. `sub_row` selects which wrapped display
+    /// row of the entry's text this call draws (UI-R-260); `sub_row > 0` draws a
+    /// continuation, with a blank gutter and marker of its own (UI-R-261) rather than
+    /// `draw_entry`'s own text-absent blank, so a continuation is visually distinct from a
+    /// filler even though both leave the gutter and marker empty.
     // One argument per independently-varying render input (row position, kind, side,
     // entry, labels, gutter width, language); grouping them into a context struct would
     // just move the same count into field access without reducing it.
@@ -219,23 +225,33 @@ impl DiffView {
         gutter_width: u16,
         language: Option<ferrowl_syntax::Language>,
         h_scroll: usize,
+        wrap: bool,
+        sub_row: usize,
     ) {
         if rect.width == 0 {
             return;
         }
         let style = self.side_style(kind, side);
         buf.set_style(rect, self.style.general);
+        let continuation = sub_row > 0;
         if gutter_width > 0 {
-            let text = gutter_text_for(row_idx, entry, labels);
+            let text = if continuation {
+                String::new()
+            } else {
+                gutter_text_for(row_idx, entry, labels)
+            };
             let gutter_str = format!("{text:>width$}", width = gutter_width as usize);
             Paragraph::new(Text::from(gutter_str).style(self.style.general))
                 .render(Rect::new(rect.x, rect.y, gutter_width, 1), buf);
         }
         let marker_x = rect.x + gutter_width;
-        Paragraph::new(
-            Text::from(marker_for(kind, side, entry.is_some()).to_string()).style(style),
-        )
-        .render(Rect::new(marker_x, rect.y, 1, 1), buf);
+        let marker = if continuation {
+            ' '
+        } else {
+            marker_for(kind, side, entry.is_some())
+        };
+        Paragraph::new(Text::from(marker.to_string()).style(style))
+            .render(Rect::new(marker_x, rect.y, 1, 1), buf);
         let text_x = marker_x + 1;
         let text_width = rect.width.saturating_sub(gutter_width + 1);
         if text_width == 0 {
@@ -246,26 +262,63 @@ impl DiffView {
             // drops leading characters (UI-R-232): highlighting a pre-truncated string
             // would shift every span's start against the language's real column.
             let chars = styled_chars(&e.text, style, language, &self.syntax_theme);
-            let visible: Vec<(char, Style)> = chars.into_iter().skip(h_scroll).collect();
-            let line = Line::from(
-                group_runs(visible)
-                    .into_iter()
-                    .map(|(t, s)| Span::styled(t, s))
-                    .collect::<Vec<_>>(),
-            );
-            Paragraph::new(Text::from(line)).render(Rect::new(text_x, rect.y, text_width, 1), buf);
+            if wrap {
+                let wrapped =
+                    crate::widgets::markdown_render::word_wrap(&chars, text_width as usize, 0);
+                let Some(chunk) = wrapped.get(sub_row) else {
+                    return;
+                };
+                let line = Line::from(
+                    chunk
+                        .iter()
+                        .map(|(t, s)| Span::styled(t.clone(), *s))
+                        .collect::<Vec<_>>(),
+                );
+                Paragraph::new(Text::from(line))
+                    .render(Rect::new(text_x, rect.y, text_width, 1), buf);
+            } else {
+                let visible: Vec<(char, Style)> = chars.into_iter().skip(h_scroll).collect();
+                let line = Line::from(
+                    group_runs(visible)
+                        .into_iter()
+                        .map(|(t, s)| Span::styled(t, s))
+                        .collect::<Vec<_>>(),
+                );
+                Paragraph::new(Text::from(line))
+                    .render(Rect::new(text_x, rect.y, text_width, 1), buf);
+            }
         }
     }
 
     /// Draws a meta row (UI-R-210): one screen row across the full width, meta style,
     /// blank gutter on every side, no marker column.
-    fn draw_meta(&self, buf: &mut Buffer, rect: Rect, text: &str) {
+    /// Draws one display row of a meta row (UI-R-210): the full width, in the meta style.
+    /// A meta row wraps like any other row (UI-R-260 exempts none), so with `wrap` on
+    /// `sub_row` selects which of its wrapped chunks this call draws.
+    fn draw_meta(&self, buf: &mut Buffer, rect: Rect, text: &str, wrap: bool, sub_row: usize) {
         // The meta style covers the whole rect first: a `Paragraph` only paints the cells
         // its text occupies, so a row wider than `text` would otherwise show a trailing
         // run of unstyled (`general`) cells past the end of the line (UI-R-210).
         buf.set_style(rect, self.syntax_theme.meta);
-        Paragraph::new(Text::from(text.to_string()).style(self.syntax_theme.meta))
-            .render(rect, buf);
+        if wrap {
+            let chars: Vec<(char, Style)> =
+                text.chars().map(|c| (c, self.syntax_theme.meta)).collect();
+            let wrapped =
+                crate::widgets::markdown_render::word_wrap(&chars, rect.width.max(1) as usize, 0);
+            let Some(chunk) = wrapped.get(sub_row) else {
+                return;
+            };
+            let line = Line::from(
+                chunk
+                    .iter()
+                    .map(|(t, s)| Span::styled(t.clone(), *s))
+                    .collect::<Vec<_>>(),
+            );
+            Paragraph::new(Text::from(line)).render(rect, buf);
+        } else if sub_row == 0 {
+            Paragraph::new(Text::from(text.to_string()).style(self.syntax_theme.meta))
+                .render(rect, buf);
+        }
     }
 
     fn pane_border_style(&self, side: Side, focused_side: Side) -> Style {
@@ -328,6 +381,7 @@ impl StatefulWidget for &DiffView {
         let language = state.language;
         let scroll_offset = state.scroll_offset();
         let h_scroll = state.h_scroll();
+        let wrap = state.wrap();
 
         match state.layout() {
             DiffLayout::Split => {
@@ -353,66 +407,97 @@ impl StatefulWidget for &DiffView {
                     side_gutter_text_width(&rows, new_labels.as_ref(), Side::New),
                     new_area.width,
                 );
-                state.set_content_width(
-                    (old_area
-                        .width
-                        .saturating_sub(old_gutter + 1)
-                        .max(new_area.width.saturating_sub(new_gutter + 1)))
-                    .max(1) as usize,
+                state.set_content_widths(
+                    old_area.width.saturating_sub(old_gutter + 1).max(1) as usize,
+                    new_area.width.saturating_sub(new_gutter + 1).max(1) as usize,
                 );
+                // Without a border, extend to the outer area's own right edge: an odd
+                // inner width leaves one column unused by either pane (`Length(half)`
+                // twice), and UI-R-210 spans the full width. With a border each pane
+                // already owns its border cells, so stop at the new pane's inner edge.
+                let meta_right = if matches!(self.border, Border::Full(_)) {
+                    new_area.x + new_area.width
+                } else {
+                    area.x + area.width
+                };
+                let meta_width = meta_right.saturating_sub(old_area.x);
+                state.set_meta_width(meta_width as usize);
 
                 let visible_height = old_area.height as usize;
-                // The rendered row window starts at `scroll_offset` (UI-R-230), not row
-                // zero; `display_idx` is the aligned row's position within that window.
-                for (display_idx, (row_idx, row)) in rows
+                let display = state.display_rows();
+                // The rendered row window starts at `scroll_offset` display rows, not
+                // display row zero (amended UI-R-231); `display_idx` is a display row's
+                // position within that window.
+                for (display_idx, d) in display
                     .iter()
                     .enumerate()
                     .skip(scroll_offset)
                     .take(visible_height)
-                    .enumerate()
                 {
-                    let y_old = old_area.y + display_idx as u16;
-                    let y_new = new_area.y + display_idx as u16;
-                    match row {
-                        DiffRow::Meta { text } => {
-                            // Without a border, extend to the outer area's own right edge:
-                            // an odd inner width leaves one column unused by either pane
-                            // (`Length(half)` twice), and UI-R-210 spans the full width.
-                            // With a border each pane already owns its border cells, so
-                            // stop at the new pane's inner edge as before.
-                            let right = if matches!(self.border, Border::Full(_)) {
-                                new_area.x + new_area.width
-                            } else {
-                                area.x + area.width
+                    let row_idx = d.logical;
+                    let y_old = old_area.y + (display_idx - scroll_offset) as u16;
+                    let y_new = new_area.y + (display_idx - scroll_offset) as u16;
+                    match d.part {
+                        RowPart::Meta { sub_row } => {
+                            let DiffRow::Meta { text } = &rows[row_idx] else {
+                                unreachable!(
+                                    "display_rows() pairs RowPart::Meta with DiffRow::Meta"
+                                )
                             };
-                            let width = right.saturating_sub(old_area.x);
-                            self.draw_meta(buf, Rect::new(old_area.x, y_old, width, 1), text);
+                            self.draw_meta(
+                                buf,
+                                Rect::new(old_area.x, y_old, meta_width, 1),
+                                text,
+                                wrap,
+                                sub_row,
+                            );
                         }
-                        DiffRow::Pair { kind, old, new } => {
-                            self.draw_entry(
-                                buf,
-                                Rect::new(old_area.x, y_old, old_area.width, 1),
-                                row_idx,
-                                kind,
-                                Side::Old,
-                                old.as_ref(),
-                                old_labels.as_ref(),
-                                old_gutter,
-                                language,
-                                h_scroll,
-                            );
-                            self.draw_entry(
-                                buf,
-                                Rect::new(new_area.x, y_new, new_area.width, 1),
-                                row_idx,
-                                kind,
-                                Side::New,
-                                new.as_ref(),
-                                new_labels.as_ref(),
-                                new_gutter,
-                                language,
-                                h_scroll,
-                            );
+                        RowPart::Pair { old_sub, new_sub } => {
+                            let DiffRow::Pair { kind, old, new } = &rows[row_idx] else {
+                                unreachable!(
+                                    "display_rows() pairs RowPart::Pair with DiffRow::Pair"
+                                )
+                            };
+                            let old_rect = Rect::new(old_area.x, y_old, old_area.width, 1);
+                            if let Some(sub) = old_sub {
+                                self.draw_entry(
+                                    buf,
+                                    old_rect,
+                                    row_idx,
+                                    kind,
+                                    Side::Old,
+                                    old.as_ref(),
+                                    old_labels.as_ref(),
+                                    old_gutter,
+                                    language,
+                                    h_scroll,
+                                    wrap,
+                                    sub,
+                                );
+                            } else {
+                                // UI-R-262: the shorter side pads its remaining rows
+                                // blank, once the taller side has wrapped past it.
+                                buf.set_style(old_rect, self.style.general);
+                            }
+                            let new_rect = Rect::new(new_area.x, y_new, new_area.width, 1);
+                            if let Some(sub) = new_sub {
+                                self.draw_entry(
+                                    buf,
+                                    new_rect,
+                                    row_idx,
+                                    kind,
+                                    Side::New,
+                                    new.as_ref(),
+                                    new_labels.as_ref(),
+                                    new_gutter,
+                                    language,
+                                    h_scroll,
+                                    wrap,
+                                    sub,
+                                );
+                            } else {
+                                buf.set_style(new_rect, self.style.general);
+                            }
                         }
                     }
                     self.paint_row_highlight(
@@ -432,7 +517,7 @@ impl StatefulWidget for &DiffView {
                     return;
                 }
                 // Screen rows, not aligned rows: a changed pair draws two of them here, so
-                // paging code must count screen rows in this layout and aligned rows
+                // paging code must count display rows in this layout and aligned rows
                 // (`state.rows().len()`) in split, rather than assuming the two agree.
                 state.set_visible_height(pane.height as usize);
 
@@ -442,32 +527,42 @@ impl StatefulWidget for &DiffView {
                     ),
                     pane.width,
                 );
-                state.set_content_width(pane.width.saturating_sub(gutter + 1).max(1) as usize);
+                state.set_content_widths(
+                    pane.width.saturating_sub(gutter + 1).max(1) as usize,
+                    pane.width.saturating_sub(gutter + 1).max(1) as usize,
+                );
+                state.set_meta_width(pane.width as usize);
 
-                let mut y = pane.y;
-                let visible_end = pane.y + pane.height;
-                for (row_idx, row) in rows.iter().enumerate().skip(scroll_offset) {
-                    if y >= visible_end {
-                        break;
-                    }
-                    match row {
-                        DiffRow::Meta { text } => {
-                            self.draw_meta(buf, Rect::new(pane.x, y, pane.width, 1), text);
-                            self.paint_row_highlight(
-                                buf,
-                                state,
-                                row_idx,
-                                &[Rect::new(pane.x, y, pane.width, 1)],
-                            );
-                            y += 1;
+                let display = state.display_rows();
+                let visible_height = pane.height as usize;
+                for (display_idx, d) in display
+                    .iter()
+                    .enumerate()
+                    .skip(scroll_offset)
+                    .take(visible_height)
+                {
+                    let row_idx = d.logical;
+                    let y = pane.y + (display_idx - scroll_offset) as u16;
+                    let rect = Rect::new(pane.x, y, pane.width, 1);
+                    match d.part {
+                        RowPart::Meta { sub_row } => {
+                            let DiffRow::Meta { text } = &rows[row_idx] else {
+                                unreachable!(
+                                    "display_rows() pairs RowPart::Meta with DiffRow::Meta"
+                                )
+                            };
+                            self.draw_meta(buf, rect, text, wrap, sub_row);
                         }
-                        DiffRow::Pair { kind, old, new } => {
-                            let differ =
-                                matches!((old, new), (Some(o), Some(n)) if o.text != n.text);
-                            if differ {
+                        RowPart::Pair { old_sub, new_sub } => {
+                            let DiffRow::Pair { kind, old, new } = &rows[row_idx] else {
+                                unreachable!(
+                                    "display_rows() pairs RowPart::Pair with DiffRow::Pair"
+                                )
+                            };
+                            if let Some(sub) = old_sub {
                                 self.draw_entry(
                                     buf,
-                                    Rect::new(pane.x, y, pane.width, 1),
+                                    rect,
                                     row_idx,
                                     kind,
                                     Side::Old,
@@ -476,16 +571,14 @@ impl StatefulWidget for &DiffView {
                                     gutter,
                                     language,
                                     h_scroll,
+                                    wrap,
+                                    sub,
                                 );
-                                let rect1 = Rect::new(pane.x, y, pane.width, 1);
-                                y += 1;
-                                if y >= visible_end {
-                                    self.paint_row_highlight(buf, state, row_idx, &[rect1]);
-                                    break;
-                                }
+                            }
+                            if let Some(sub) = new_sub {
                                 self.draw_entry(
                                     buf,
-                                    Rect::new(pane.x, y, pane.width, 1),
+                                    rect,
                                     row_idx,
                                     kind,
                                     Side::New,
@@ -494,36 +587,13 @@ impl StatefulWidget for &DiffView {
                                     gutter,
                                     language,
                                     h_scroll,
+                                    wrap,
+                                    sub,
                                 );
-                                let rect2 = Rect::new(pane.x, y, pane.width, 1);
-                                self.paint_row_highlight(buf, state, row_idx, &[rect1, rect2]);
-                                y += 1;
-                            } else {
-                                let entry = old.as_ref().or(new.as_ref());
-                                let side = if old.is_some() { Side::Old } else { Side::New };
-                                let labels = if old.is_some() {
-                                    old_labels.as_ref()
-                                } else {
-                                    new_labels.as_ref()
-                                };
-                                self.draw_entry(
-                                    buf,
-                                    Rect::new(pane.x, y, pane.width, 1),
-                                    row_idx,
-                                    kind,
-                                    side,
-                                    entry,
-                                    labels,
-                                    gutter,
-                                    language,
-                                    h_scroll,
-                                );
-                                let rect = Rect::new(pane.x, y, pane.width, 1);
-                                self.paint_row_highlight(buf, state, row_idx, &[rect]);
-                                y += 1;
                             }
                         }
                     }
+                    self.paint_row_highlight(buf, state, row_idx, &[rect]);
                 }
             }
         }
@@ -932,5 +1002,77 @@ mod tests {
         assert_eq!(&line[20..21], "1");
         assert_eq!(&line[21..22], "+");
         assert!(line[22..].starts_with('z'));
+    }
+
+    #[test]
+    /// UI-R-261 — a continuation display row of a wrapped entry carries a blank gutter
+    /// and a blank marker column, its text starting at the same column as the row's first
+    /// display row.
+    fn ut_continuation_row_has_a_blank_gutter_and_marker_and_aligned_text() {
+        let mut st = DiffViewStateBuilder::default()
+            .wrap(true)
+            .build_with_diff("@@ -1,1 +1,1 @@\n-aaaa bbbb\n+short\n")
+            .unwrap();
+        let w = DiffView::default();
+        // Each 10-wide pane: gutter "1" (1 col) + marker (1 col) + 8 text columns, so
+        // "aaaa bbbb" (9 chars) wraps to "aaaa" then "bbbb" and "short" (5 chars) does not.
+        let mut b = buffer(20, 3);
+        StatefulWidget::render(&w, Rect::new(0, 0, 20, 3), &mut b, &mut st);
+        let first = row_text(&b, 1, 20);
+        assert_eq!(&first[0..1], "1", "first display row carries the gutter");
+        assert_eq!(&first[1..2], "-", "and the marker");
+        assert!(first[2..10].starts_with("aaaa"));
+        let continuation = row_text(&b, 2, 20);
+        assert_eq!(&continuation[0..1], " ", "continuation gutter is blank");
+        assert_eq!(&continuation[1..2], " ", "continuation marker is blank");
+        assert!(
+            continuation[2..10].starts_with("bbbb"),
+            "continuation text starts at the same column as the first row's text"
+        );
+    }
+
+    #[test]
+    /// UI-E-112 — a pane too narrow for the gutter and marker column treats the available
+    /// text width as one column, wrapping one character per display row, rendered.
+    fn ut_pane_too_narrow_for_the_gutter_wraps_one_character_per_row_when_rendered() {
+        let mut st = DiffViewStateBuilder::default()
+            .wrap(true)
+            .build_with_diff("@@1@@\n-abcd\n+x\n")
+            .unwrap();
+        let w = DiffView::default();
+        // Each 3-wide pane: gutter "1" (1 col) + marker (1 col) + 1 text column, so "abcd"
+        // wraps one character per display row. The header ("@@1@@", 5 chars) also wraps at
+        // this width, so scan for the old side's column (2) rather than fixing row indices.
+        let mut b = buffer(6, 10);
+        StatefulWidget::render(&w, Rect::new(0, 0, 6, 10), &mut b, &mut st);
+        let old_column: String = (0..10)
+            .map(|y| row_text(&b, y, 6).chars().nth(2).unwrap_or(' '))
+            .collect();
+        assert!(
+            old_column.contains("abcd"),
+            "old side's text wraps one character per display row: {old_column:?}"
+        );
+    }
+
+    #[test]
+    /// UI-R-262 — in the split layout a logical row occupies as many display rows as the
+    /// taller side needs when wrapped, the shorter side padded blank so both sides keep
+    /// starting on the same display row.
+    fn ut_split_layout_pads_the_shorter_side_so_both_sides_start_on_the_same_display_row() {
+        let mut st = DiffViewStateBuilder::default()
+            .wrap(true)
+            .build_with_diff("@@ -1,1 +1,1 @@\n-aaaa bbbb\n+short\n")
+            .unwrap();
+        let w = DiffView::default();
+        let mut b = buffer(20, 3);
+        StatefulWidget::render(&w, Rect::new(0, 0, 20, 3), &mut b, &mut st);
+        let first = row_text(&b, 1, 20);
+        assert!(first[12..20].starts_with("short"), "new side's one row");
+        let continuation = row_text(&b, 2, 20);
+        assert_eq!(
+            &continuation[10..20],
+            "          ",
+            "new side has nothing more to draw, so its padded row is blank"
+        );
     }
 }
