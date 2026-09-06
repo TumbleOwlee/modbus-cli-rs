@@ -175,6 +175,28 @@ pub struct DiffViewState {
     #[getset(get_copy = "pub")]
     #[builder(default = "false")]
     wrap: bool,
+    /// Full-file display mode (UI-R-257), defaulting to hunk-only.
+    #[getset(get_copy = "pub")]
+    #[builder(default = "DiffDisplay::HunkOnly")]
+    display: DiffDisplay,
+    /// Row-index spans outside every hunk, unreachable and undrawn while `display` is
+    /// `HunkOnly` (UI-R-255, UI-R-256); empty when built from a diff alone (UI-R-259).
+    #[getset(skip)]
+    #[builder(setter(skip), default)]
+    folds: Vec<RangeInclusive<usize>>,
+    /// Whether this state was built with the full new-side text (UI-R-207): `false` means
+    /// there is no full-file mode to switch to, so `Ctrl+F` is consumed and ignored
+    /// (UI-E-113, UI-R-259) regardless of `display`'s value.
+    #[getset(skip)]
+    #[builder(setter(skip), default)]
+    has_full_file: bool,
+}
+
+/// The diff widget's hunk-only or full-file display mode (UI-R-257).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DiffDisplay {
+    HunkOnly,
+    FullFile,
 }
 
 /// One screen line the diff widget draws: a logical row
@@ -360,6 +382,147 @@ fn parse(text: &str) -> Vec<DiffRow> {
     rows
 }
 
+/// Parses a hunk header's declared old/new starting line and line count (defaulting an
+/// omitted count to 1, the unified-diff convention for a one-line range).
+fn hunk_header(header: &str) -> (usize, usize, usize, usize) {
+    let mut old_start = 1usize;
+    let mut old_count = 1usize;
+    let mut new_start = 1usize;
+    let mut new_count = 1usize;
+    let Some(rest) = header.strip_prefix("@@") else {
+        return (old_start, old_count, new_start, new_count);
+    };
+    let counters = rest.split("@@").next().unwrap_or(rest);
+    for tok in counters.split_whitespace() {
+        if let Some(rest) = tok.strip_prefix('-') {
+            let mut parts = rest.splitn(2, ',');
+            old_start = parts.next().unwrap_or("1").parse().unwrap_or(1);
+            old_count = parts.next().map_or(1, |c| c.parse().unwrap_or(1));
+        } else if let Some(rest) = tok.strip_prefix('+') {
+            let mut parts = rest.splitn(2, ',');
+            new_start = parts.next().unwrap_or("1").parse().unwrap_or(1);
+            new_count = parts.next().map_or(1, |c| c.parse().unwrap_or(1));
+        }
+    }
+    (old_start, old_count, new_start, new_count)
+}
+
+/// Builds the full-file row superset (amended UI-R-209, UI-R-253): the hunk-only rows
+/// `parse(diff)` already produces, plus a further row for every line of `new_text` that no
+/// hunk covers, its old-side number offset by the cumulative line-count delta of the hunks
+/// before it. Runs no diff algorithm and no similarity heuristic: it only walks `new_text`
+/// line by line, consulting each hunk's own declared line range to know which of those
+/// lines the patch already classifies. Returns the row list together with the row-index
+/// spans of the rows this walk inserted (the folds of UI-R-255).
+fn parse_full_file(diff: &str, new_text: &str) -> (Vec<DiffRow>, Vec<RangeInclusive<usize>>) {
+    let hunk_rows = parse(diff);
+    let new_lines: Vec<&str> = {
+        let text = new_text.strip_suffix('\n').unwrap_or(new_text);
+        if text.is_empty() {
+            Vec::new()
+        } else {
+            text.split('\n').collect()
+        }
+    };
+
+    // Splits `hunk_rows` into hunks: each a `(old_start, old_count, new_start, new_count,
+    // rows)`, `rows` holding that hunk's header meta, its pairs and any interleaved meta
+    // lines (UI-E-098), in original order.
+    let mut hunks: Vec<(usize, usize, usize, usize, Vec<DiffRow>)> = Vec::new();
+    // Rows preceding the first `@@` header (`diff --git`, `---`, `+++`): UI-R-254 wants
+    // the full-file build a superset of the hunk-only rows, so these are kept rather than
+    // dropped just because no hunk has been opened yet to hold them.
+    let mut leading: Vec<DiffRow> = Vec::new();
+    for row in hunk_rows {
+        if let DiffRow::Meta { text } = &row
+            && text.starts_with("@@")
+        {
+            let (old_start, old_count, new_start, new_count) = hunk_header(text);
+            hunks.push((old_start, old_count, new_start, new_count, vec![row]));
+            continue;
+        }
+        if let Some((.., rows)) = hunks.last_mut() {
+            rows.push(row);
+        } else {
+            leading.push(row);
+        }
+    }
+
+    fn unchanged_row(new_lines: &[&str], line_no: usize, delta: isize) -> DiffRow {
+        let text = new_lines[line_no - 1].to_string();
+        let old_no = (line_no as isize - delta).max(1) as usize;
+        DiffRow::Pair {
+            kind: DiffKind::Context,
+            old: Some(DiffEntry {
+                text: text.clone(),
+                line_no: old_no,
+            }),
+            new: Some(DiffEntry { text, line_no }),
+        }
+    }
+
+    let mut out = leading;
+    let mut folds = Vec::new();
+    let mut next_line = 1usize;
+    let mut delta = 0isize;
+
+    for (_old_start, old_count, new_start, new_count, rows) in hunks {
+        // A hunk header naming a line past the supplied text (mismatched patch/file) must
+        // not panic: the walk stops at `new_lines.len()`, leaving the rest to whatever the
+        // patch itself supplies.
+        let fold_end = new_start.min(new_lines.len() + 1);
+        if next_line < fold_end {
+            let fold_start = out.len();
+            while next_line < fold_end {
+                out.push(unchanged_row(&new_lines, next_line, delta));
+                next_line += 1;
+            }
+            folds.push(fold_start..=out.len() - 1);
+        }
+        // UI-E-114: where the supplied text disagrees with the patch's own context/added
+        // text, the supplied text supplies the new-side content and the patch keeps the
+        // row's classification and line numbers — a removed entry has no new-side
+        // counterpart, so it is untouched.
+        out.extend(rows.into_iter().map(|row| {
+            match row {
+                DiffRow::Pair {
+                    kind,
+                    old,
+                    new: Some(new),
+                } => DiffRow::Pair {
+                    kind,
+                    old,
+                    new: Some(DiffEntry {
+                        text: new
+                            .line_no
+                            .checked_sub(1)
+                            .and_then(|i| new_lines.get(i))
+                            .map_or(new.text.clone(), |t| t.to_string()),
+                        ..new
+                    }),
+                },
+                other => other,
+            }
+        }));
+        // A `+0,0` header (a deleted file's only hunk) would otherwise leave `next_line`
+        // at 0, and the trailing walk below treats line 0 as one past the end rather than
+        // "nothing follows" and indexes `new_lines[usize::MAX]`: clamped to 1, since there
+        // is no line 0 to resume from either way.
+        next_line = (new_start + new_count).max(1);
+        delta += new_count as isize - old_count as isize;
+    }
+    if next_line <= new_lines.len() {
+        let fold_start = out.len();
+        while next_line <= new_lines.len() {
+            out.push(unchanged_row(&new_lines, next_line, delta));
+            next_line += 1;
+        }
+        folds.push(fold_start..=out.len() - 1);
+    }
+
+    (out, folds)
+}
+
 impl DiffViewState {
     /// Replaces the diff text, re-parsing it into rows (UI-R-207) and resetting the
     /// cursor, selection and scroll to their defaults. Crate-private: construction from a
@@ -374,6 +537,57 @@ impl DiffViewState {
         self.pending = None;
         self.pending_count = None;
         self.register = None;
+        self.display = DiffDisplay::HunkOnly;
+        self.folds = Vec::new();
+        self.has_full_file = false;
+    }
+
+    /// Replaces the diff and full new-side file text (UI-R-207, UI-R-253), rebuilding the
+    /// full-file row superset and its folds, and resetting the same navigation state
+    /// `set_diff` does. Unlike `set_diff`, this leaves `self.display` untouched: it was
+    /// already set from the builder's own field (default hunk-only, UI-R-257) by `build()`
+    /// before this runs, and a full-file construction is the one path where a caller can
+    /// legitimately ask to start already in full-file display.
+    pub(crate) fn set_diff_and_file(&mut self, diff: &str, new_text: &str) {
+        let (rows, folds) = parse_full_file(diff, new_text);
+        self.rows = rows;
+        self.folds = folds;
+        self.has_full_file = true;
+        self.active_row = 0;
+        self.anchor = None;
+        self.mode = DiffMode::Normal;
+        self.scroll_offset = 0;
+        self.h_scroll = 0;
+        self.pending = None;
+        self.pending_count = None;
+        self.register = None;
+    }
+
+    /// Whether row `index` is inside a fold (UI-R-255, UI-R-256): always `false` in
+    /// full-file display, since folds are cleared there rather than removed.
+    fn is_folded(&self, index: usize) -> bool {
+        self.display == DiffDisplay::HunkOnly && self.folds.iter().any(|f| f.contains(&index))
+    }
+
+    /// The nearest row to `from` that is not folded, searching forward then back
+    /// (UI-R-256); `from` itself if there are no rows or no fold covers it. Not a pinned
+    /// requirement's choice — the toggle back to hunk-only just needs the active row to
+    /// land somewhere reachable.
+    fn nearest_unfolded(&self, from: usize) -> usize {
+        if self.rows.is_empty() || !self.is_folded(from) {
+            return from.min(self.rows.len().saturating_sub(1));
+        }
+        for i in from..self.rows.len() {
+            if !self.is_folded(i) {
+                return i;
+            }
+        }
+        for i in (0..from).rev() {
+            if !self.is_folded(i) {
+                return i;
+            }
+        }
+        from
     }
 
     /// The row and its old/new file line numbers (UI-R-227), reporting `None` for a side
@@ -469,10 +683,9 @@ impl DiffViewState {
         self.set_content_widths(width, width);
     }
 
-    /// Written by the split layout's renderer, recording each pane's own text width
+    /// Written by both layouts' renderers, recording each pane's own text width
     /// (UI-R-262) alongside their maximum, which the horizontal-scroll arithmetic
     /// (UI-R-232) still reads as one shared `content_width`.
-    #[allow(dead_code)]
     pub(crate) fn set_content_widths(&mut self, old: usize, new: usize) {
         self.content_width_old = old.max(1);
         self.content_width_new = new.max(1);
@@ -620,6 +833,9 @@ impl DiffViewState {
     pub(crate) fn display_rows(&self) -> Vec<DisplayRow> {
         let mut out = Vec::new();
         for (logical, row) in self.rows.iter().enumerate() {
+            if self.is_folded(logical) {
+                continue;
+            }
             for part in self.row_display_parts(row) {
                 out.push(DisplayRow { logical, part });
             }
@@ -652,10 +868,10 @@ impl DiffViewState {
             return;
         }
         let visible = self.visible_height.max(1);
-        // A span wider than the visible window can never fit whole: bottom-anchoring it
-        // (the loop below) would permanently hide its own leading display rows, with no
-        // key scrolling within a single logical row to reach them. Settling at the span's
-        // own start keeps at least its lead reachable instead.
+        // A span wider than the visible window can never fit whole: settling at its own
+        // start, rather than bottom-anchoring it (the loop below), keeps its lead
+        // reachable (UI-E-120 then scrolls display row by display row from here to reach
+        // its tail).
         if end - start + 1 > visible {
             self.scroll_offset = start;
             return;
@@ -686,11 +902,32 @@ impl DiffViewState {
             return;
         }
         let last = self.rows.len() - 1;
-        self.active_row = if down {
+        let mut next = if down {
             (self.active_row + 1).min(last)
         } else {
             self.active_row.saturating_sub(1)
         };
+        // UI-R-256: a folded row is unreachable, so a step in either direction lands on
+        // the next unfolded row, not just the next row.
+        while self.is_folded(next) {
+            let stepped = if down {
+                (next + 1).min(last)
+            } else {
+                next.saturating_sub(1)
+            };
+            if stepped == next {
+                break;
+            }
+            next = stepped;
+        }
+        // A leading/trailing fold can run to the very first or last row, leaving no
+        // unfolded row further in the travel direction; the loop above then stops still
+        // folded, so falls back to the nearest unfolded row in either direction rather
+        // than land the active row inside a fold (UI-R-256).
+        if self.is_folded(next) {
+            next = self.nearest_unfolded(next);
+        }
+        self.active_row = next;
         self.clamp_active_row();
         self.ensure_visible();
     }
@@ -698,6 +935,9 @@ impl DiffViewState {
     fn move_active_row_to(&mut self, row: usize) {
         self.active_row = row;
         self.clamp_active_row();
+        if self.is_folded(self.active_row) {
+            self.active_row = self.nearest_unfolded(self.active_row);
+        }
         self.ensure_visible();
     }
 
@@ -978,6 +1218,32 @@ impl HandleEvents for DiffViewState {
                 };
                 EventResult::Consumed
             }
+            (KeyModifiers::CONTROL, KeyCode::Char('f')) => {
+                // Built from a diff alone, there is no full-file mode to switch to
+                // (UI-R-259): consumed and ignored (UI-E-113).
+                if self.has_full_file {
+                    self.display = match self.display {
+                        DiffDisplay::HunkOnly => DiffDisplay::FullFile,
+                        DiffDisplay::FullFile => DiffDisplay::HunkOnly,
+                    };
+                    if self.display == DiffDisplay::HunkOnly {
+                        // Folding back in can fold the span the active row (and any
+                        // Visual anchor) sits in (UI-R-256): land both on the nearest
+                        // unfolded row before re-settling the scroll.
+                        self.active_row = self.nearest_unfolded(self.active_row);
+                        if let Some(anchor) = self.anchor {
+                            self.anchor = Some(self.nearest_unfolded(anchor));
+                        }
+                    }
+                    // Either direction changes which display rows precede the active row
+                    // (folded spans appear or disappear), which can leave it off the
+                    // currently settled window even though it did not itself move
+                    // (amended UI-R-231): re-settle the scroll every time.
+                    self.scroll_offset = 0;
+                    self.ensure_visible();
+                }
+                EventResult::Consumed
+            }
             _ => EventResult::Unhandled(modifiers, code),
         }
     }
@@ -990,6 +1256,20 @@ impl DiffViewStateBuilder {
     pub fn build_with_diff(&self, text: &str) -> Result<DiffViewState, DiffViewStateBuilderError> {
         let mut state = self.build()?;
         state.set_diff(text);
+        Ok(state)
+    }
+
+    /// Builds the state from a unified diff text plus the full new-side file text
+    /// (UI-R-207, UI-R-253): the row list is the full-file superset (UI-R-254), with fold
+    /// ranges over the spans outside every hunk so hunk-only display (the default,
+    /// UI-R-257) draws the same rows `build_with_diff` alone would have.
+    pub fn build_with_diff_and_file(
+        &self,
+        diff: &str,
+        new_text: &str,
+    ) -> Result<DiffViewState, DiffViewStateBuilderError> {
+        let mut state = self.build()?;
+        state.set_diff_and_file(diff, new_text);
         Ok(state)
     }
 }
@@ -1885,6 +2165,310 @@ mod tests {
             s.scroll_offset(),
             1,
             "settles at the span's own start rather than hiding its leading rows"
+        );
+    }
+
+    #[test]
+    /// UI-R-207, UI-R-253 — with the full new-side text supplied, a row outside every
+    /// hunk holds that text on both sides, the old-side number reconstructed from the
+    /// cumulative delta of the hunks before it.
+    fn ut_full_file_rows_take_new_text_and_reconstruct_the_old_side_numbers() {
+        let s = DiffViewStateBuilder::default()
+            .build_with_diff_and_file(
+                "@@ -2,1 +2,1 @@\n-old line\n+new line\n",
+                "line1\nnew line\nline3\n",
+            )
+            .unwrap();
+        // Row 0: "line1", outside the hunk, no delta yet: old == new == 1.
+        let row0 = s.row(0).unwrap();
+        assert_eq!(row0.old_line, Some(1));
+        assert_eq!(row0.new_line, Some(1));
+        // Row 1: the header meta; row 2: the hunk's own removed/added pair at line 2.
+        let row2 = s.row(2).unwrap();
+        assert_eq!(row2.old_line, Some(2));
+        assert_eq!(row2.new_line, Some(2));
+        // Row 3: "line3", outside the hunk; the hunk removed and added one line each, so
+        // no delta: old == new == 3.
+        let row3 = s.row(3).unwrap();
+        assert_eq!(row3.old_line, Some(3));
+        assert_eq!(row3.new_line, Some(3));
+    }
+
+    #[test]
+    /// UI-E-114 — full new-side text disagreeing with the patch's context line: the
+    /// supplied text supplies the content, the patch the classification; nothing dropped.
+    fn ut_text_disagreeing_with_a_context_line_keeps_the_text_and_the_patch_classification() {
+        let s = DiffViewStateBuilder::default()
+            .build_with_diff_and_file(
+                "@@ -1,2 +1,2 @@\n context line\n-old\n+added\n",
+                "edited context line\nadded\n",
+            )
+            .unwrap();
+        let DiffRow::Pair { kind, new, .. } = &s.rows()[1] else {
+            panic!("expected the context row")
+        };
+        assert_eq!(
+            *kind,
+            DiffKind::Context,
+            "the patch still classifies it Context"
+        );
+        assert_eq!(
+            new.as_ref().unwrap().text,
+            "edited context line",
+            "the supplied text supplies the content"
+        );
+    }
+
+    #[test]
+    /// UI-R-209 — lines between and around hunks become rows on both sides.
+    fn ut_lines_between_and_around_hunks_become_rows_on_both_sides() {
+        let s = DiffViewStateBuilder::default()
+            .build_with_diff_and_file("@@ -2,1 +2,1 @@\n-b\n+B\n", "a\nB\nc\n")
+            .unwrap();
+        assert_eq!(s.rows().len(), 4, "a (before), header, the pair, c (after)");
+        let DiffRow::Pair { old, new, .. } = &s.rows()[0] else {
+            panic!("expected a pair row for the leading unchanged line")
+        };
+        assert_eq!(old.as_ref().unwrap().text, "a");
+        assert_eq!(new.as_ref().unwrap().text, "a");
+        let DiffRow::Pair { old, new, .. } = &s.rows()[3] else {
+            panic!("expected a pair row for the trailing unchanged line")
+        };
+        assert_eq!(old.as_ref().unwrap().text, "c");
+        assert_eq!(new.as_ref().unwrap().text, "c");
+    }
+
+    #[test]
+    /// UI-R-254, UI-R-255 — the row list and every row's index are the same across a
+    /// display-mode toggle; only the folds change.
+    fn ut_row_indices_are_stable_across_a_display_mode_toggle() {
+        let mut s = DiffViewStateBuilder::default()
+            .build_with_diff_and_file("@@ -2,1 +2,1 @@\n-b\n+B\n", "a\nB\nc\n")
+            .unwrap();
+        assert_eq!(s.display(), DiffDisplay::HunkOnly);
+        let before = s.rows().to_vec();
+        s.handle_events(KeyModifiers::CONTROL, KeyCode::Char('f'));
+        assert_eq!(s.display(), DiffDisplay::FullFile);
+        assert_eq!(s.rows().to_vec(), before, "same list, same indices");
+        s.handle_events(KeyModifiers::CONTROL, KeyCode::Char('f'));
+        assert_eq!(s.display(), DiffDisplay::HunkOnly);
+        assert_eq!(s.rows().to_vec(), before);
+    }
+
+    #[test]
+    /// UI-R-256 — a folded row is neither drawn nor reachable by navigation, but keeps
+    /// its index.
+    fn ut_folded_rows_are_neither_drawn_nor_reachable_but_keep_their_indices() {
+        let mut s = DiffViewStateBuilder::default()
+            .build_with_diff_and_file("@@ -2,1 +2,1 @@\n-b\n+B\n", "a\nB\nc\n")
+            .unwrap();
+        // Rows: 0 "a" (folded), 1 header, 2 pair, 3 "c" (folded).
+        assert_eq!(s.rows().len(), 4);
+        let display = s.display_rows();
+        assert!(
+            display.iter().all(|d| d.logical != 0 && d.logical != 3),
+            "the folded rows contribute no display rows"
+        );
+        // `gg` from the pair row must not land inside the leading fold.
+        s.set_active_row(2);
+        s.handle_events(KeyModifiers::NONE, KeyCode::Char('g'));
+        s.handle_events(KeyModifiers::NONE, KeyCode::Char('g'));
+        assert_eq!(
+            s.active_row(),
+            1,
+            "row 0 is folded; gg lands on row 1 instead"
+        );
+        // `G` must not land inside the trailing fold.
+        s.handle_events(KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::Char('G'));
+        assert_eq!(
+            s.active_row(),
+            2,
+            "row 3 is folded; G lands on row 2 instead"
+        );
+        // `k` from row 1 (the header, the first unfolded row) must not step into the
+        // leading fold at row 0 even though row 0 is the only row left in that direction.
+        s.set_active_row(1);
+        s.handle_events(KeyModifiers::NONE, KeyCode::Char('k'));
+        assert_eq!(s.active_row(), 1, "row 0 is folded; k has nowhere to go");
+        // `j` from row 2 (the pair, the last unfolded row) must not step into the
+        // trailing fold at row 3 even though row 3 is the only row left in that direction.
+        s.set_active_row(2);
+        s.handle_events(KeyModifiers::NONE, KeyCode::Char('j'));
+        assert_eq!(s.active_row(), 2, "row 3 is folded; j has nowhere to go");
+    }
+
+    #[test]
+    /// UI-R-257 — the display mode defaults to hunk-only.
+    fn ut_display_mode_defaults_to_hunk_only() {
+        let s = DiffViewStateBuilder::default()
+            .build_with_diff_and_file("@@ -1,1 +1,1 @@\n-a\n+A\n", "A\n")
+            .unwrap();
+        assert_eq!(s.display(), DiffDisplay::HunkOnly);
+    }
+
+    #[test]
+    /// UI-R-254 — rows preceding the first `@@` header (`diff --git`, `---`, `+++`) are
+    /// kept as leading meta rows in the full-file build, not dropped.
+    fn ut_leading_diff_header_lines_are_kept_in_the_full_file_build() {
+        let s = DiffViewStateBuilder::default()
+            .build_with_diff_and_file(
+                "diff --git a/f b/f\n--- a/f\n+++ b/f\n@@ -1,1 +1,1 @@\n-old\n+new\n",
+                "new\n",
+            )
+            .unwrap();
+        let DiffRow::Meta { text } = &s.rows()[0] else {
+            panic!("expected the leading diff --git line to survive")
+        };
+        assert_eq!(text, "diff --git a/f b/f");
+        let DiffRow::Meta { text } = &s.rows()[1] else {
+            panic!("expected the leading --- line to survive")
+        };
+        assert_eq!(text, "--- a/f");
+        let DiffRow::Meta { text } = &s.rows()[2] else {
+            panic!("expected the leading +++ line to survive")
+        };
+        assert_eq!(text, "+++ b/f");
+    }
+
+    #[test]
+    /// A hunk header naming a line past the supplied new-side text must not panic;
+    /// external input (a mismatched patch/file pair) is handled, not trusted.
+    fn ut_hunk_header_past_the_end_of_the_supplied_text_does_not_panic() {
+        let s = DiffViewStateBuilder::default()
+            .build_with_diff_and_file("@@ -1,1 +5,1 @@\n-old\n+new\n", "only one line\n")
+            .unwrap();
+        assert!(!s.rows().is_empty());
+    }
+
+    #[test]
+    /// UI-R-258 — `Ctrl+F` toggles hunk-only and full-file display.
+    fn ut_ctrl_f_toggles_hunk_only_and_full_file() {
+        let mut s = DiffViewStateBuilder::default()
+            .build_with_diff_and_file("@@ -1,1 +1,1 @@\n-a\n+A\n", "A\n")
+            .unwrap();
+        s.handle_events(KeyModifiers::CONTROL, KeyCode::Char('f'));
+        assert_eq!(s.display(), DiffDisplay::FullFile);
+        s.handle_events(KeyModifiers::CONTROL, KeyCode::Char('f'));
+        assert_eq!(s.display(), DiffDisplay::HunkOnly);
+    }
+
+    #[test]
+    /// UI-R-256, UI-R-258 — toggling back to hunk-only moves an active row (and any
+    /// Visual anchor) that a fold would otherwise swallow onto a row that is not folded.
+    fn ut_toggling_back_to_hunk_only_moves_an_active_row_out_of_a_folded_span() {
+        let mut s = DiffViewStateBuilder::default()
+            .build_with_diff_and_file("@@ -2,1 +2,1 @@\n-b\n+B\n", "a\nB\nc\n")
+            .unwrap();
+        let visible_height = 5;
+        s.set_visible_height(visible_height);
+        // Row 3 ("c") folds in hunk-only mode; select it while in full-file mode.
+        s.handle_events(KeyModifiers::CONTROL, KeyCode::Char('f'));
+        s.set_active_row(3);
+        s.handle_events(KeyModifiers::CONTROL, KeyCode::Char('f'));
+        assert_eq!(s.display(), DiffDisplay::HunkOnly);
+        assert!(
+            !s.display_rows().is_empty() && s.active_row() != 3,
+            "the active row is no longer the folded one"
+        );
+        let (start, end) = {
+            let display = s.display_rows();
+            let idx: Vec<usize> = display
+                .iter()
+                .enumerate()
+                .filter(|(_, d)| d.logical == s.active_row())
+                .map(|(i, _)| i)
+                .collect();
+            (*idx.first().unwrap(), *idx.last().unwrap())
+        };
+        assert!(
+            s.scroll_offset() <= start && end < s.scroll_offset() + visible_height,
+            "the scroll settles on the active row's display span"
+        );
+    }
+
+    #[test]
+    /// A `+0,0` hunk header (a deleted-file diff's only hunk) must not leave `next_line`
+    /// at 0: the trailing-rows walk indexes `new_lines[line_no - 1]` and would panic on
+    /// `line_no == 0`, which is external input, not a bug to trust away.
+    fn ut_deleted_file_hunk_with_a_zero_new_side_does_not_panic() {
+        let s = DiffViewStateBuilder::default()
+            .build_with_diff_and_file("@@ -1,1 +0,0 @@\n-a\n", "")
+            .unwrap();
+        assert!(!s.rows().is_empty());
+    }
+
+    #[test]
+    /// A `+0,n` hunk header (a new file's added-lines-only hunk) puts a new-side entry's
+    /// `line_no` at 0; the text lookup must not underflow computing `line_no - 1`.
+    fn ut_new_side_line_no_zero_does_not_underflow_the_text_lookup() {
+        let s = DiffViewStateBuilder::default()
+            .build_with_diff_and_file("@@ -0,0 +0,1 @@\n+added\n", "added\n")
+            .unwrap();
+        assert!(!s.rows().is_empty());
+    }
+
+    #[test]
+    /// UI-R-257 — the display option is a builder field like any other and survives a
+    /// full-file construction, not just a hunk-only one.
+    fn ut_display_builder_option_survives_full_file_construction() {
+        let s = DiffViewStateBuilder::default()
+            .display(DiffDisplay::FullFile)
+            .build_with_diff_and_file("@@ -1,1 +1,1 @@\n-a\n+A\n", "A\n")
+            .unwrap();
+        assert_eq!(
+            s.display(),
+            DiffDisplay::FullFile,
+            "the builder's own display option must not be forced back to hunk-only"
+        );
+    }
+
+    #[test]
+    /// Amended UI-R-231 — toggling into full-file mode inserts the folded spans' rows
+    /// ahead of rows that were already visible, which can push the active row off the
+    /// window even though the active row itself did not move; the scroll must re-settle.
+    fn ut_toggling_into_full_file_re_settles_the_scroll_on_the_active_row() {
+        let mut s = DiffViewStateBuilder::default()
+            .build_with_diff_and_file("@@ -2,1 +2,1 @@\n-b\n+B\n", "a\nB\nc\n")
+            .unwrap();
+        s.set_visible_height(2);
+        // Hunk-only: rows 0 and 3 are folded, so display rows are logical 1 (header) then
+        // 2 (pair) — both fit in the 2-row window at scroll 0.
+        s.set_active_row(2);
+        assert_eq!(s.scroll_offset(), 0);
+        s.handle_events(KeyModifiers::CONTROL, KeyCode::Char('f'));
+        assert_eq!(s.display(), DiffDisplay::FullFile);
+        assert_eq!(s.active_row(), 2, "the active row itself does not move");
+        let (start, end) = {
+            let display = s.display_rows();
+            let idx: Vec<usize> = display
+                .iter()
+                .enumerate()
+                .filter(|(_, d)| d.logical == 2)
+                .map(|(i, _)| i)
+                .collect();
+            (*idx.first().unwrap(), *idx.last().unwrap())
+        };
+        assert!(
+            s.scroll_offset() <= start && end < s.scroll_offset() + 2,
+            "full file mode now shows row 0 ahead of it, pushing row 2 off-window \
+             unless the scroll re-settles"
+        );
+    }
+
+    #[test]
+    /// UI-R-259, UI-E-113 — construction from a unified diff text alone stays hunk-only,
+    /// with no full-file mode to switch to, so `Ctrl+F` is consumed and ignored.
+    fn ut_diff_only_construction_stays_hunk_only_and_ctrl_f_is_consumed_and_ignored() {
+        let mut s = DiffViewStateBuilder::default()
+            .build_with_diff("@@ -1,1 +1,1 @@\n-a\n+A\n")
+            .unwrap();
+        assert_eq!(s.display(), DiffDisplay::HunkOnly);
+        let result = s.handle_events(KeyModifiers::CONTROL, KeyCode::Char('f'));
+        assert!(matches!(result, EventResult::Consumed));
+        assert_eq!(
+            s.display(),
+            DiffDisplay::HunkOnly,
+            "no full-file mode to switch to"
         );
     }
 }
