@@ -1,4 +1,8 @@
+use crossterm::event::{KeyCode, KeyModifiers};
 use derive_builder::Builder;
+
+use crate::EventResult;
+use crate::traits::HandleEvents;
 
 /// A file node's change status (UI-R-244): drawn as a leading marker and styled with the
 /// syntax theme's added/removed/meta styles. Public because the caller sets it per path.
@@ -30,20 +34,26 @@ pub(crate) enum TreeNode {
 /// exposes the row list.
 #[derive(Debug, Clone)]
 pub(crate) struct VisibleRow {
-    // Read by the widget that renders this state, not by anything in this module outside
-    // tests.
-    #[allow(dead_code)]
     pub(crate) depth: usize,
     pub(crate) path: String,
     pub(crate) is_dir: bool,
-    // Read by the widget that renders this state, not by anything in this module outside
-    // tests.
-    #[allow(dead_code)]
     pub(crate) expanded: bool,
+    // Read by the widget that renders this state, not by anything in this module.
     #[allow(dead_code)]
     pub(crate) name: String,
     #[allow(dead_code)]
     pub(crate) status: Option<FileStatus>,
+}
+
+/// Outcome of a key offered to [`FileTreeState`] via [`handle_key`](FileTreeState::handle_key).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FileTreeOutcome {
+    /// `Enter` on a file (UI-R-242): the file's full path.
+    Activated(String),
+    /// `Enter` on a directory flipped its expansion (UI-R-242).
+    Toggled,
+    /// Every other key this state handles.
+    Consumed,
 }
 
 /// Splits each path on `/`, creating the directory nodes its components imply and hanging
@@ -164,16 +174,12 @@ pub struct FileTreeState {
     root: Vec<TreeNode>,
     #[builder(setter(skip), default = "0")]
     selected: usize,
-    // Written by set_paths, read once key handling added on top of this file uses it to
-    // keep the selection visible.
-    #[allow(dead_code)]
     #[builder(setter(skip), default = "0")]
     scroll_offset: usize,
-    // Set by the builder/widget, read once key handling added on top of this file uses it
-    // for paging.
-    #[allow(dead_code)]
     #[builder(default = "1")]
     visible_height: usize,
+    #[builder(setter(skip), default = "None")]
+    pending: Option<char>,
 }
 
 impl FileTreeStateBuilder {
@@ -200,6 +206,7 @@ impl FileTreeState {
         let rows = self.visible_rows();
         self.selected = self.selected.min(rows.len().saturating_sub(1));
         self.scroll_offset = 0;
+        self.ensure_visible();
     }
 
     /// UI-R-235 — expands every directory in the tree.
@@ -234,8 +241,90 @@ impl FileTreeState {
         self.visible_rows().get(self.selected).map(|r| r.is_dir)
     }
 
-    // Used directly by tests here and by key handling added on top of this file.
+    // Read by the widget that renders this state, not by anything in this module outside
+    // tests.
     #[allow(dead_code)]
+    pub(crate) fn selected(&self) -> usize {
+        self.selected
+    }
+
+    // Read by the widget that renders this state, not by anything in this module outside
+    // tests.
+    #[allow(dead_code)]
+    pub(crate) fn scroll_offset(&self) -> usize {
+        self.scroll_offset
+    }
+
+    // Written by the widget that renders this state, not by anything in this module
+    // outside tests.
+    #[allow(dead_code)]
+    pub(crate) fn set_visible_height(&mut self, height: usize) {
+        self.visible_height = height;
+    }
+
+    /// UI-R-245 — keeps the selected row inside the last-rendered visible window, the
+    /// same remembered-height scheme as the code editor's `page_move`/`handle_readonly_nav`.
+    fn ensure_visible(&mut self) {
+        if self.selected < self.scroll_offset {
+            self.scroll_offset = self.selected;
+        } else if self.selected >= self.scroll_offset + self.visible_height {
+            self.scroll_offset = self.selected + 1 - self.visible_height;
+        }
+    }
+
+    /// Mirrors `code_input_field.rs`'s `page_move`: moves by at least one row, clamped at
+    /// the first and last visible row.
+    fn page_move(&mut self, down: bool, rows: usize) {
+        let rows = rows.max(1);
+        let last = self.visible_rows().len().saturating_sub(1);
+        self.selected = if down {
+            (self.selected + rows).min(last)
+        } else {
+            self.selected.saturating_sub(rows)
+        };
+        self.ensure_visible();
+    }
+
+    /// UI-R-240 — expand a collapsed directory, descend into an already-expanded one, do
+    /// nothing on a file.
+    fn expand_or_descend(&mut self) {
+        let rows = self.visible_rows();
+        let Some(row) = rows.get(self.selected) else {
+            return;
+        };
+        if !row.is_dir {
+            return;
+        }
+        if !row.expanded {
+            self.set_expanded(&row.path, true);
+        } else if self.selected + 1 < rows.len() && rows[self.selected + 1].depth > row.depth {
+            self.selected += 1;
+        }
+    }
+
+    /// UI-R-241, UI-E-105 — collapse an expanded directory, otherwise ascend to the
+    /// parent, doing nothing at the top level.
+    fn collapse_or_ascend(&mut self) {
+        let rows = self.visible_rows();
+        let Some(row) = rows.get(self.selected) else {
+            return;
+        };
+        if row.is_dir && row.expanded {
+            self.set_expanded(&row.path, false);
+            return;
+        }
+        let depth = row.depth;
+        if depth == 0 {
+            return;
+        }
+        for i in (0..self.selected).rev() {
+            if rows[i].depth < depth {
+                self.selected = i;
+                break;
+            }
+        }
+    }
+
     fn set_expanded(&mut self, path: &str, expanded: bool) {
         fn go(nodes: &mut [TreeNode], prefix: &str, path: &str, expanded: bool) -> bool {
             for node in nodes {
@@ -262,6 +351,94 @@ impl FileTreeState {
             false
         }
         go(&mut self.root, "", path, expanded);
+    }
+
+    /// `None` for a key this state does not handle. UI-R-239, UI-R-240, UI-R-241, UI-R-242,
+    /// UI-R-245, UI-E-105.
+    pub fn handle_key(
+        &mut self,
+        modifiers: KeyModifiers,
+        code: KeyCode,
+    ) -> Option<FileTreeOutcome> {
+        if modifiers == KeyModifiers::NONE && code == KeyCode::Char('g') {
+            if self.pending == Some('g') {
+                self.pending = None;
+                self.selected = 0;
+                self.ensure_visible();
+            } else {
+                self.pending = Some('g');
+            }
+            return Some(FileTreeOutcome::Consumed);
+        }
+        self.pending = None;
+
+        match (modifiers, code) {
+            (KeyModifiers::NONE, KeyCode::Char('j') | KeyCode::Down) => {
+                let last = self.visible_rows().len().saturating_sub(1);
+                self.selected = (self.selected + 1).min(last);
+                self.ensure_visible();
+                Some(FileTreeOutcome::Consumed)
+            }
+            (KeyModifiers::NONE, KeyCode::Char('k') | KeyCode::Up) => {
+                self.selected = self.selected.saturating_sub(1);
+                self.ensure_visible();
+                Some(FileTreeOutcome::Consumed)
+            }
+            (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::Char('G')) => {
+                self.selected = self.visible_rows().len().saturating_sub(1);
+                self.ensure_visible();
+                Some(FileTreeOutcome::Consumed)
+            }
+            (KeyModifiers::NONE, KeyCode::Char('l') | KeyCode::Right) => {
+                self.expand_or_descend();
+                self.ensure_visible();
+                Some(FileTreeOutcome::Consumed)
+            }
+            (KeyModifiers::NONE, KeyCode::Char('h') | KeyCode::Left) => {
+                self.collapse_or_ascend();
+                self.ensure_visible();
+                Some(FileTreeOutcome::Consumed)
+            }
+            (KeyModifiers::NONE, KeyCode::PageDown) => {
+                self.page_move(true, self.visible_height);
+                Some(FileTreeOutcome::Consumed)
+            }
+            (KeyModifiers::NONE, KeyCode::PageUp) => {
+                self.page_move(false, self.visible_height);
+                Some(FileTreeOutcome::Consumed)
+            }
+            (KeyModifiers::CONTROL, KeyCode::Char('d')) => {
+                self.page_move(true, (self.visible_height / 2).max(1));
+                Some(FileTreeOutcome::Consumed)
+            }
+            (KeyModifiers::CONTROL, KeyCode::Char('u')) => {
+                self.page_move(false, (self.visible_height / 2).max(1));
+                Some(FileTreeOutcome::Consumed)
+            }
+            (KeyModifiers::NONE, KeyCode::Enter) => {
+                let rows = self.visible_rows();
+                match rows.get(self.selected) {
+                    None => Some(FileTreeOutcome::Consumed),
+                    Some(row) if row.is_dir => {
+                        let path = row.path.clone();
+                        let expanded = row.expanded;
+                        self.set_expanded(&path, !expanded);
+                        Some(FileTreeOutcome::Toggled)
+                    }
+                    Some(row) => Some(FileTreeOutcome::Activated(row.path.clone())),
+                }
+            }
+            _ => None,
+        }
+    }
+}
+
+impl HandleEvents for FileTreeState {
+    fn handle_events(&mut self, modifiers: KeyModifiers, code: KeyCode) -> EventResult {
+        match self.handle_key(modifiers, code) {
+            Some(_) => EventResult::Consumed,
+            None => EventResult::Unhandled(modifiers, code),
+        }
     }
 }
 
@@ -359,22 +536,221 @@ mod tests {
         let mut s = tree(&[("a/b.rs", None), ("c.rs", None)]);
         assert_eq!(s.selected_path().as_deref(), Some("a"));
         assert_eq!(s.selected_is_dir(), Some(true));
-        s.selected = 1;
+        s.handle_key(KeyModifiers::NONE, KeyCode::Char('j'));
         assert_eq!(s.selected_path().as_deref(), Some("a/b.rs"));
         assert_eq!(s.selected_is_dir(), Some(false));
     }
 
     #[test]
+    /// UI-R-239 — j/k/gg/G move the selection and clamp at the ends.
+    fn ut_j_k_gg_and_g_move_the_selection_and_clamp() {
+        let mut s = tree(&[("a.rs", None), ("b.rs", None), ("c.rs", None)]);
+        s.handle_key(KeyModifiers::NONE, KeyCode::Char('j'));
+        assert_eq!(s.selected(), 1);
+        s.handle_key(KeyModifiers::NONE, KeyCode::Char('j'));
+        s.handle_key(KeyModifiers::NONE, KeyCode::Char('j'));
+        assert_eq!(s.selected(), 2);
+        s.handle_key(KeyModifiers::NONE, KeyCode::Char('k'));
+        assert_eq!(s.selected(), 1);
+        s.handle_key(KeyModifiers::SHIFT, KeyCode::Char('G'));
+        assert_eq!(s.selected(), 2);
+        s.handle_key(KeyModifiers::NONE, KeyCode::Char('g'));
+        s.handle_key(KeyModifiers::NONE, KeyCode::Char('g'));
+        assert_eq!(s.selected(), 0);
+        s.handle_key(KeyModifiers::NONE, KeyCode::Char('k'));
+        assert_eq!(s.selected(), 0);
+    }
+
+    #[test]
+    /// UI-R-240 — l expands a collapsed directory, then descends into it, and does
+    /// nothing on a file.
+    fn ut_l_expands_then_descends_and_does_nothing_on_a_file() {
+        let mut s = tree(&[("a/b.rs", None)]);
+        s.collapse_all();
+        assert_eq!(s.visible_rows().len(), 1);
+        s.handle_key(KeyModifiers::NONE, KeyCode::Char('l'));
+        assert_eq!(s.visible_rows().len(), 2);
+        assert_eq!(s.selected(), 0);
+        s.handle_key(KeyModifiers::NONE, KeyCode::Char('l'));
+        assert_eq!(s.selected(), 1);
+        s.handle_key(KeyModifiers::NONE, KeyCode::Char('l'));
+        assert_eq!(s.selected(), 1);
+    }
+
+    #[test]
+    /// UI-R-241, UI-E-105 — h collapses an expanded directory, otherwise ascends to the
+    /// parent, and does nothing at the top level.
+    fn ut_h_collapses_then_ascends_and_stops_at_a_top_level_node() {
+        let mut s = tree(&[("a/b.rs", None)]);
+        s.handle_key(KeyModifiers::NONE, KeyCode::Char('j'));
+        assert_eq!(s.selected(), 1);
+        s.handle_key(KeyModifiers::NONE, KeyCode::Char('h'));
+        assert_eq!(s.selected(), 0);
+        s.handle_key(KeyModifiers::NONE, KeyCode::Char('h'));
+        assert_eq!(s.visible_rows().len(), 1);
+        assert_eq!(s.selected(), 0);
+        s.handle_key(KeyModifiers::NONE, KeyCode::Char('h'));
+        assert_eq!(s.selected(), 0);
+    }
+
+    #[test]
+    /// UI-R-242 — Enter toggles a directory's expansion and activates a file with its
+    /// full path.
+    fn ut_enter_toggles_a_directory_and_activates_a_file_with_its_full_path() {
+        let mut s = tree(&[("a/b.rs", None)]);
+        let outcome = s.handle_key(KeyModifiers::NONE, KeyCode::Enter);
+        assert_eq!(outcome, Some(FileTreeOutcome::Toggled));
+        assert_eq!(s.visible_rows().len(), 1);
+        s.handle_key(KeyModifiers::NONE, KeyCode::Enter);
+        assert_eq!(s.visible_rows().len(), 2);
+        s.handle_key(KeyModifiers::NONE, KeyCode::Char('j'));
+        let outcome = s.handle_key(KeyModifiers::NONE, KeyCode::Enter);
+        assert_eq!(
+            outcome,
+            Some(FileTreeOutcome::Activated("a/b.rs".to_string()))
+        );
+    }
+
+    #[test]
+    /// UI-R-242 — an unhandled key reports `None`; every key this state handles reports
+    /// an outcome.
+    fn ut_unhandled_key_reports_none_and_consumed_keys_report_an_outcome() {
+        let mut s = tree(&[("a.rs", None)]);
+        assert_eq!(s.handle_key(KeyModifiers::NONE, KeyCode::Char('x')), None);
+        assert_eq!(
+            s.handle_key(KeyModifiers::NONE, KeyCode::Char('j')),
+            Some(FileTreeOutcome::Consumed)
+        );
+        assert!(matches!(
+            s.handle_events(KeyModifiers::NONE, KeyCode::Char('x')),
+            EventResult::Unhandled(KeyModifiers::NONE, KeyCode::Char('x'))
+        ));
+        assert!(matches!(
+            s.handle_events(KeyModifiers::NONE, KeyCode::Char('j')),
+            EventResult::Consumed
+        ));
+    }
+
+    #[test]
+    /// UI-R-245 — PageDown/PageUp move by the visible height, Ctrl+D/Ctrl+U by half of
+    /// it.
+    fn ut_paging_moves_the_selection_by_the_visible_height_and_half_of_it() {
+        let mut s = FileTreeStateBuilder::default()
+            .paths(paths(&[
+                ("a.rs", None),
+                ("b.rs", None),
+                ("c.rs", None),
+                ("d.rs", None),
+                ("e.rs", None),
+            ]))
+            .build()
+            .unwrap();
+        s.set_visible_height(2);
+        s.handle_key(KeyModifiers::NONE, KeyCode::PageDown);
+        assert_eq!(s.selected(), 2);
+        s.handle_key(KeyModifiers::CONTROL, KeyCode::Char('d'));
+        assert_eq!(s.selected(), 3);
+        s.handle_key(KeyModifiers::NONE, KeyCode::PageUp);
+        assert_eq!(s.selected(), 1);
+        s.handle_key(KeyModifiers::CONTROL, KeyCode::Char('u'));
+        assert_eq!(s.selected(), 0);
+    }
+
+    #[test]
+    /// UI-R-245 — the viewport scrolls to keep the selected row visible.
+    fn ut_scroll_offset_follows_the_selection_past_the_visible_height() {
+        let mut s = FileTreeStateBuilder::default()
+            .paths(paths(&[
+                ("a.rs", None),
+                ("b.rs", None),
+                ("c.rs", None),
+                ("d.rs", None),
+            ]))
+            .build()
+            .unwrap();
+        s.set_visible_height(2);
+        assert_eq!(s.scroll_offset(), 0);
+        s.handle_key(KeyModifiers::NONE, KeyCode::Char('j'));
+        s.handle_key(KeyModifiers::NONE, KeyCode::Char('j'));
+        assert_eq!(s.selected(), 2);
+        assert_eq!(s.scroll_offset(), 1);
+    }
+
+    #[test]
+    /// UI-R-245 — `k` above the current viewport scrolls the offset back up to follow the
+    /// selection, the mirror of the downward case above.
+    fn ut_k_above_the_viewport_scrolls_the_offset_up() {
+        let mut s = FileTreeStateBuilder::default()
+            .paths(paths(&[
+                ("a.rs", None),
+                ("b.rs", None),
+                ("c.rs", None),
+                ("d.rs", None),
+                ("e.rs", None),
+            ]))
+            .build()
+            .unwrap();
+        s.set_visible_height(2);
+        for _ in 0..3 {
+            s.handle_key(KeyModifiers::NONE, KeyCode::Char('j'));
+        }
+        assert_eq!(s.selected(), 3);
+        assert_eq!(s.scroll_offset(), 2);
+        for _ in 0..3 {
+            s.handle_key(KeyModifiers::NONE, KeyCode::Char('k'));
+        }
+        assert_eq!(s.selected(), 0);
+        assert_eq!(s.scroll_offset(), 0);
+    }
+
+    #[test]
+    /// UI-R-245 — PageDown stops at the last visible row instead of moving past it.
+    fn ut_page_down_stops_at_the_last_row() {
+        let mut s = FileTreeStateBuilder::default()
+            .paths(paths(&[
+                ("a.rs", None),
+                ("b.rs", None),
+                ("c.rs", None),
+                ("d.rs", None),
+                ("e.rs", None),
+            ]))
+            .build()
+            .unwrap();
+        s.set_visible_height(2);
+        s.handle_key(KeyModifiers::NONE, KeyCode::PageDown);
+        assert_eq!(s.selected(), 2);
+        s.handle_key(KeyModifiers::NONE, KeyCode::PageDown);
+        assert_eq!(s.selected(), 4);
+        s.handle_key(KeyModifiers::NONE, KeyCode::PageDown);
+        assert_eq!(s.selected(), 4);
+    }
+
+    #[test]
     /// UI-R-234 — `set_paths` rebuilds the tree from a fresh path list and clamps a
-    /// selection that no longer fits the new row count.
+    /// selection that no longer fits the new row count, resetting the viewport to keep it
+    /// visible (UI-R-245).
     fn ut_set_paths_rebuilds_the_tree_and_clamps_the_selection() {
         let mut s = tree(&[("a.rs", None), ("b.rs", None), ("c.rs", None)]);
-        s.selected = 2;
+        s.set_visible_height(2);
+        s.handle_key(KeyModifiers::NONE, KeyCode::Char('G'));
+        assert_eq!(s.selected(), 2);
+        assert_eq!(s.scroll_offset(), 1);
 
         s.set_paths(&paths(&[("only.rs", None)]));
         let rows = s.visible_rows();
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].name, "only.rs");
-        assert_eq!(s.selected, 0);
+        assert_eq!(s.selected(), 0);
+        assert_eq!(s.scroll_offset(), 0);
+    }
+
+    #[test]
+    /// UI-E-103 — `Enter` on an empty tree reports consumed rather than unhandled.
+    fn ut_enter_on_an_empty_tree_reports_consumed() {
+        let mut s = tree(&[]);
+        assert_eq!(
+            s.handle_key(KeyModifiers::NONE, KeyCode::Enter),
+            Some(FileTreeOutcome::Consumed)
+        );
     }
 }
