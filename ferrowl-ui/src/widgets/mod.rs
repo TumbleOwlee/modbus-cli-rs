@@ -10,7 +10,7 @@ mod editor_dialog;
 mod file_tree;
 mod input_field;
 mod markdown_input_field;
-mod markdown_render;
+pub(crate) mod markdown_render;
 mod selection;
 mod suggest_input;
 mod tab_bar;

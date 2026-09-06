@@ -3,10 +3,12 @@ use std::ops::RangeInclusive;
 use crossterm::event::{KeyCode, KeyModifiers};
 use derive_builder::Builder;
 use getset::{CopyGetters, Getters, Setters};
+use ratatui::style::Style;
 
 use super::vim::emit_osc52;
 use crate::EventResult;
 use crate::traits::HandleEvents;
+use crate::widgets::markdown_render::word_wrap;
 
 /// A parsed body line's classification (UI-R-208).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -146,11 +148,60 @@ pub struct DiffViewState {
     visible_height: usize,
     /// Content width in columns of the last render; one column before the first render.
     /// Written by the widget that renders this state and read by its own horizontal-scroll
-    /// logic.
+    /// logic. The maximum of `content_width_old` and `content_width_new`, kept for the
+    /// horizontal-scroll arithmetic (UI-R-232) which applies one offset to both panes.
     #[getset(skip)]
     #[builder(setter(skip), default = "1")]
     #[allow(dead_code)]
     content_width: usize,
+    /// The old side's own content width, one column before the first render. Read by
+    /// `display_rows()` so each side wraps at its own edge (UI-R-262) rather than the
+    /// wider pane's.
+    #[getset(skip)]
+    #[builder(setter(skip), default = "1")]
+    content_width_old: usize,
+    /// The new side's own content width, one column before the first render; same reason
+    /// as `content_width_old`.
+    #[getset(skip)]
+    #[builder(setter(skip), default = "1")]
+    content_width_new: usize,
+    /// A meta row's own available width, one column before the first render: a meta row
+    /// carries no gutter or marker, so its wrapping width is the full row rect rather than
+    /// either side's post-gutter `content_width_old`/`content_width_new`.
+    #[getset(skip)]
+    #[builder(setter(skip), default = "1")]
+    content_width_meta: usize,
+    /// Line-wrap option (UI-R-260), defaulting to off.
+    #[getset(get_copy = "pub")]
+    #[builder(default = "false")]
+    wrap: bool,
+}
+
+/// One screen line the diff widget draws: a logical row
+/// ([`DiffRow`]) may span several of these when wrapped (UI-R-260) or, in the unified
+/// layout, when it is a changed pair drawn as two entries (UI-R-213).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct DisplayRow {
+    pub(crate) logical: usize,
+    pub(crate) part: RowPart,
+}
+
+/// Which part of a logical row a [`DisplayRow`] draws.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RowPart {
+    /// A meta row's screen line: `sub_row` indexes its own wrapped chunk list, a meta row
+    /// wrapping like any other row (UI-R-260 exempts none).
+    Meta { sub_row: usize },
+    /// A pair row's screen line: `old_sub`/`new_sub` index into that side's own wrapped
+    /// chunk list (`None` when that side draws nothing on this display row — the unified
+    /// layout draws one side's lines, then the other's, sequentially, and the split
+    /// layout pads the shorter side's remaining rows blank, UI-R-262). A side's `Some(0)`
+    /// carries the gutter and marker; any later sub-row is a wrapped continuation
+    /// (UI-R-261).
+    Pair {
+        old_sub: Option<usize>,
+        new_sub: Option<usize>,
+    },
 }
 
 /// Parses `text` into aligned rows (UI-R-207, UI-R-209): a `@@` line is a hunk header
@@ -410,10 +461,29 @@ impl DiffViewState {
     }
 
     /// Written by the widget that renders this state, recording the content width so its
-    /// own horizontal scrolling can use it.
+    /// own horizontal scrolling can use it. Equivalent to `set_content_widths(width,
+    /// width)`, for a test that has only one width to give and does not care which side
+    /// it applies to; every render caller now calls `set_content_widths` directly.
     #[allow(dead_code)]
     pub(crate) fn set_content_width(&mut self, width: usize) {
-        self.content_width = width;
+        self.set_content_widths(width, width);
+    }
+
+    /// Written by the split layout's renderer, recording each pane's own text width
+    /// (UI-R-262) alongside their maximum, which the horizontal-scroll arithmetic
+    /// (UI-R-232) still reads as one shared `content_width`.
+    #[allow(dead_code)]
+    pub(crate) fn set_content_widths(&mut self, old: usize, new: usize) {
+        self.content_width_old = old.max(1);
+        self.content_width_new = new.max(1);
+        self.content_width = self.content_width_old.max(self.content_width_new);
+    }
+
+    /// Written by the widget that renders this state, recording a meta row's own
+    /// available width (UI-R-260) so `display_rows()` wraps it at the width it is
+    /// actually drawn into.
+    pub(crate) fn set_meta_width(&mut self, width: usize) {
+        self.content_width_meta = width.max(1);
     }
 
     /// Read by the widget that renders this state, to know which aligned row to draw
@@ -462,57 +532,166 @@ impl DiffViewState {
         };
     }
 
-    /// Whether aligned row `index` draws as two screen rows in the unified layout: a
-    /// `Pair` with both sides present and differing text (the same test
-    /// `widgets/diff_view.rs`'s unified renderer uses); everything else draws as one.
-    fn row_screen_height(&self, index: usize) -> usize {
-        match self.rows.get(index) {
-            Some(DiffRow::Pair {
-                old: Some(o),
-                new: Some(n),
-                ..
-            }) if self.layout == DiffLayout::Unified && o.text != n.text => 2,
-            _ => 1,
+    /// The number of display rows side `text` at `width` occupies: one,
+    /// unwrapped; with wrapping on, [`word_wrap`]'s row count, style irrelevant to where it
+    /// breaks so `Style::default()` stands in for the real per-character styles the widget
+    /// applies at draw time.
+    fn side_sub_rows(&self, text: &str, width: usize) -> usize {
+        if !self.wrap {
+            return 1;
         }
+        let width = width.max(1);
+        let chars: Vec<(char, Style)> = text.chars().map(|c| (c, Style::default())).collect();
+        word_wrap(&chars, width, 0).len().max(1)
     }
 
-    /// The last aligned row index still inside `visible_height` screen rows starting at
-    /// `from`: in split layout one aligned row is one screen row, but in unified layout a
-    /// changed pair draws as two, so counting aligned rows alone can place the window a
-    /// row short of where the renderer actually stops.
-    fn last_visible_row_from(&self, from: usize) -> usize {
-        let mut used = 0usize;
-        let mut last = from;
-        for i in from..self.rows.len() {
-            let height = self.row_screen_height(i);
-            if used + height > self.visible_height.max(1) {
-                break;
+    /// The display rows one logical row expands to: a `Meta` row is always
+    /// one; a `Pair` is `old_sub.max(new_sub)` sub-rows wide in the split layout, both
+    /// sides drawn side by side and the shorter padded blank (UI-R-262), but
+    /// `old_sub + new_sub` in the unified layout, whose two sides draw as separate,
+    /// sequential screen lines only when both are present and differ — the same rule
+    /// `widgets/diff_view.rs`'s unified renderer already applies, folded in here so
+    /// display rows and logical rows already differ before wrapping exists.
+    fn row_display_parts(&self, row: &DiffRow) -> Vec<RowPart> {
+        match row {
+            DiffRow::Meta { text } => {
+                let n = self.side_sub_rows(text, self.content_width_meta);
+                (0..n).map(|sub_row| RowPart::Meta { sub_row }).collect()
             }
-            used += height;
-            last = i;
+            DiffRow::Pair { old, new, .. } => {
+                let old_text = old.as_ref().map_or("", |e| e.text.as_str());
+                let new_text = new.as_ref().map_or("", |e| e.text.as_str());
+                match self.layout {
+                    DiffLayout::Split => {
+                        let o = self.side_sub_rows(old_text, self.content_width_old);
+                        let n = self.side_sub_rows(new_text, self.content_width_new);
+                        (0..o.max(n))
+                            .map(|i| RowPart::Pair {
+                                old_sub: (i < o).then_some(i),
+                                new_sub: (i < n).then_some(i),
+                            })
+                            .collect()
+                    }
+                    DiffLayout::Unified => {
+                        let differ = matches!((old, new), (Some(o), Some(n)) if o.text != n.text);
+                        if differ {
+                            let o = self.side_sub_rows(old_text, self.content_width);
+                            let n = self.side_sub_rows(new_text, self.content_width);
+                            (0..o)
+                                .map(|i| RowPart::Pair {
+                                    old_sub: Some(i),
+                                    new_sub: None,
+                                })
+                                .chain((0..n).map(|i| RowPart::Pair {
+                                    old_sub: None,
+                                    new_sub: Some(i),
+                                }))
+                                .collect()
+                        } else {
+                            let text = if old.is_some() { old_text } else { new_text };
+                            let n = self.side_sub_rows(text, self.content_width);
+                            (0..n)
+                                .map(|i| {
+                                    if old.is_some() {
+                                        RowPart::Pair {
+                                            old_sub: Some(i),
+                                            new_sub: None,
+                                        }
+                                    } else {
+                                        RowPart::Pair {
+                                            old_sub: None,
+                                            new_sub: Some(i),
+                                        }
+                                    }
+                                })
+                                .collect()
+                        }
+                    }
+                }
+            }
         }
-        last
     }
 
-    /// Keeps `active_row` inside the last-rendered visible window (UI-R-230), the same
-    /// remembered-height paging scheme the code editor's `page_move`/`handle_readonly_nav`
-    /// use, adjusted for the unified layout's two-screen-row entries.
+    /// The display-row layer: one entry per screen line, mapping back to the
+    /// logical row it belongs to. Built fresh from `self.rows`, the wrap flag and the
+    /// remembered per-side widths, never cached — the aligned rows this walks are
+    /// themselves already the full parsed list (UI-R-254), so there is no second, larger
+    /// structure being rebuilt here.
+    pub(crate) fn display_rows(&self) -> Vec<DisplayRow> {
+        let mut out = Vec::new();
+        for (logical, row) in self.rows.iter().enumerate() {
+            for part in self.row_display_parts(row) {
+                out.push(DisplayRow { logical, part });
+            }
+        }
+        out
+    }
+
+    /// The display-row index range `[start, end]` (inclusive) the active logical row
+    /// occupies, `(0, 0)` when there are no rows.
+    fn active_row_display_span(&self) -> (usize, usize) {
+        let display = self.display_rows();
+        let mut start = None;
+        let mut end = 0;
+        for (i, d) in display.iter().enumerate() {
+            if d.logical == self.active_row {
+                start.get_or_insert(i);
+                end = i;
+            }
+        }
+        (start.unwrap_or(0), end)
+    }
+
+    /// Keeps the active row's display-row span inside the last-rendered visible window
+    /// (UI-R-230, UI-R-265), settling `scroll_offset` — now counting display rows
+    /// (amended UI-R-231) — to the least distance that puts that whole span in view.
     fn ensure_visible(&mut self) {
-        if self.active_row < self.scroll_offset {
-            self.scroll_offset = self.active_row;
+        let (start, end) = self.active_row_display_span();
+        if start < self.scroll_offset {
+            self.scroll_offset = start;
             return;
         }
-        while self.active_row > self.last_visible_row_from(self.scroll_offset) {
+        let visible = self.visible_height.max(1);
+        // A span wider than the visible window can never fit whole: bottom-anchoring it
+        // (the loop below) would permanently hide its own leading display rows, with no
+        // key scrolling within a single logical row to reach them. Settling at the span's
+        // own start keeps at least its lead reachable instead.
+        if end - start + 1 > visible {
+            self.scroll_offset = start;
+            return;
+        }
+        while end >= self.scroll_offset + visible {
             self.scroll_offset += 1;
         }
     }
 
-    fn move_active_row_by(&mut self, delta: isize) {
+    /// `j`/`Down` (`down`) or `k`/`Up` (`!down`): if the active row's display-row span
+    /// extends past the visible window in the direction of travel, scrolls one display row
+    /// toward that edge and leaves the active row where it is (UI-E-120); only once that
+    /// edge is in view does it move to the next/previous logical row, the ordinary case
+    /// for a row that is not taller than the viewport.
+    fn step_display_or_logical(&mut self, down: bool) {
         if self.rows.is_empty() {
             return;
         }
-        let last = self.rows.len() as isize - 1;
-        self.active_row = (self.active_row as isize + delta).clamp(0, last) as usize;
+        let (start, end) = self.active_row_display_span();
+        let visible = self.visible_height.max(1);
+        if down {
+            if end >= self.scroll_offset + visible {
+                self.scroll_offset += 1;
+                return;
+            }
+        } else if start < self.scroll_offset {
+            self.scroll_offset -= 1;
+            return;
+        }
+        let last = self.rows.len() - 1;
+        self.active_row = if down {
+            (self.active_row + 1).min(last)
+        } else {
+            self.active_row.saturating_sub(1)
+        };
+        self.clamp_active_row();
         self.ensure_visible();
     }
 
@@ -522,11 +701,32 @@ impl DiffViewState {
         self.ensure_visible();
     }
 
-    /// Mirrors `code_input_field.rs`'s `page_move`: moves by at least one row, clamped at
-    /// the first and last row.
+    /// Moves by `rows` display rows (amended UI-R-231) from the active row's own display
+    /// span, then lands on the logical row holding the display row reached — mirrors
+    /// `code_input_field.rs`'s `page_move`, expressed over `display_rows()`
+    /// instead of logical rows.
     fn page_move(&mut self, down: bool, rows: usize) {
+        let display = self.display_rows();
+        if display.is_empty() {
+            return;
+        }
+        let (start, _) = self.active_row_display_span();
         let rows = rows.max(1) as isize;
-        self.move_active_row_by(if down { rows } else { -rows });
+        let target = (start as isize + if down { rows } else { -rows })
+            .clamp(0, display.len() as isize - 1) as usize;
+        let mut logical = display[target].logical;
+        // A row taller than the page (UI-R-260's wrapping, or an unwrapped unified changed
+        // pair) can leave the target display row inside the row paging started from: land
+        // on the next logical row instead, so a page never stalls in place.
+        if logical == self.active_row {
+            let last = self.rows.len().saturating_sub(1);
+            logical = if down {
+                (logical + 1).min(last)
+            } else {
+                logical.saturating_sub(1)
+            };
+        }
+        self.move_active_row_to(logical);
     }
 
     /// The last column of the widest rendered text across every row and both sides
@@ -680,14 +880,18 @@ impl HandleEvents for DiffViewState {
             return EventResult::Consumed;
         }
         match (modifiers, code) {
-            (KeyModifiers::NONE, KeyCode::Char('j')) => {
-                let count = self.pending_count.take().unwrap_or(1).max(1) as isize;
-                self.move_active_row_by(count);
+            (KeyModifiers::NONE, KeyCode::Char('j') | KeyCode::Down) => {
+                let count = self.pending_count.take().unwrap_or(1).max(1);
+                for _ in 0..count {
+                    self.step_display_or_logical(true);
+                }
                 EventResult::Consumed
             }
-            (KeyModifiers::NONE, KeyCode::Char('k')) => {
-                let count = self.pending_count.take().unwrap_or(1).max(1) as isize;
-                self.move_active_row_by(-count);
+            (KeyModifiers::NONE, KeyCode::Char('k') | KeyCode::Up) => {
+                let count = self.pending_count.take().unwrap_or(1).max(1);
+                for _ in 0..count {
+                    self.step_display_or_logical(false);
+                }
                 EventResult::Consumed
             }
             (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::Char('G')) => {
@@ -713,29 +917,41 @@ impl HandleEvents for DiffViewState {
                 EventResult::Consumed
             }
             (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::Char('h')) => {
-                self.h_scroll = self.h_scroll.saturating_sub(1);
+                if !self.wrap {
+                    self.h_scroll = self.h_scroll.saturating_sub(1);
+                }
                 EventResult::Consumed
             }
             (KeyModifiers::NONE, KeyCode::Left) => {
-                self.h_scroll = self.h_scroll.saturating_sub(1);
+                if !self.wrap {
+                    self.h_scroll = self.h_scroll.saturating_sub(1);
+                }
                 EventResult::Consumed
             }
             (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::Char('l')) => {
-                self.h_scroll = (self.h_scroll + 1).min(self.max_h_scroll());
+                if !self.wrap {
+                    self.h_scroll = (self.h_scroll + 1).min(self.max_h_scroll());
+                }
                 EventResult::Consumed
             }
             (KeyModifiers::NONE, KeyCode::Right) => {
-                self.h_scroll = (self.h_scroll + 1).min(self.max_h_scroll());
+                if !self.wrap {
+                    self.h_scroll = (self.h_scroll + 1).min(self.max_h_scroll());
+                }
                 EventResult::Consumed
             }
             (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::Char('0')) => {
-                self.h_scroll = 0;
+                if !self.wrap {
+                    self.h_scroll = 0;
+                }
                 EventResult::Consumed
             }
             (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::Char('$')) => {
-                let len = self.active_row_text_len(self.focused_side);
-                let last = len.saturating_sub(1);
-                self.h_scroll = (last + 1).saturating_sub(self.content_width);
+                if !self.wrap {
+                    let len = self.active_row_text_len(self.focused_side);
+                    let last = len.saturating_sub(1);
+                    self.h_scroll = (last + 1).saturating_sub(self.content_width);
+                }
                 EventResult::Consumed
             }
             (KeyModifiers::NONE, KeyCode::Char('v')) if self.mode == DiffMode::Normal => {
@@ -1320,6 +1536,355 @@ mod tests {
             1,
             "row 2 costs two screen rows, so row 0 must scroll off to fit rows 1 and 2 \
              within a 3-screen-row window"
+        );
+    }
+
+    #[test]
+    /// UI-R-260 — wrapping defaults off, so a row too wide for the pane draws as one
+    /// display row; with it on, the row breaks at a whitespace boundary instead.
+    fn ut_wrap_breaks_a_long_row_at_whitespace_and_defaults_off() {
+        let mut unwrapped = DiffViewStateBuilder::default()
+            .build_with_diff("@@ -1,1 +1,1 @@\n-hello world foo\n")
+            .unwrap();
+        assert!(!unwrapped.wrap(), "wrapping defaults off");
+        unwrapped.set_content_widths(5, 5);
+        assert_eq!(
+            unwrapped.display_rows().len(),
+            2,
+            "unwrapped: header row plus the one pair row"
+        );
+
+        let mut wrapped = DiffViewStateBuilder::default()
+            .wrap(true)
+            .build_with_diff("@@ -1,1 +1,1 @@\n-hello world foo\n")
+            .unwrap();
+        wrapped.set_content_widths(5, 5);
+        wrapped.set_meta_width(20);
+        // "hello world foo" at width 5 word-wraps to "hello", "world", "foo": 3 rows.
+        assert_eq!(wrapped.display_rows().len(), 1 + 3);
+    }
+
+    #[test]
+    /// UI-R-260 — a meta row wraps like any other row; UI-R-260 exempts none.
+    fn ut_meta_row_wraps_like_any_other_row() {
+        let mut s = DiffViewStateBuilder::default()
+            .wrap(true)
+            .build_with_diff("@@ header text that is long @@\n context\n")
+            .unwrap();
+        s.set_content_widths(20, 20);
+        s.set_meta_width(10);
+        // "@@ header text that is long @@" (31 chars) word-wraps at width 10 into more
+        // than one row.
+        let meta_subs = s.display_rows().iter().filter(|d| d.logical == 0).count();
+        assert!(
+            meta_subs > 1,
+            "the meta row itself wrapped into several rows"
+        );
+    }
+
+    #[test]
+    /// UI-R-262 — in the split layout each side wraps at its own width, so a narrow old
+    /// side and a wide new side do not force each other's break points.
+    fn ut_each_split_side_wraps_at_its_own_width() {
+        let mut s = DiffViewStateBuilder::default()
+            .wrap(true)
+            .build_with_diff("@@ -1,1 +1,1 @@\n-a bb ccc dddd\n+short\n")
+            .unwrap();
+        s.set_content_widths(5, 20);
+        s.set_meta_width(20);
+        let display = s.display_rows();
+        // Row 0 is the "@@" header (one display row); row 1 is the pair.
+        let pair_parts: Vec<_> = display.iter().filter(|d| d.logical == 1).collect();
+        let old_subs: Vec<usize> = pair_parts
+            .iter()
+            .filter_map(|d| match d.part {
+                RowPart::Pair {
+                    old_sub: Some(i), ..
+                } => Some(i),
+                _ => None,
+            })
+            .collect();
+        let new_subs: Vec<usize> = pair_parts
+            .iter()
+            .filter_map(|d| match d.part {
+                RowPart::Pair {
+                    new_sub: Some(i), ..
+                } => Some(i),
+                _ => None,
+            })
+            .collect();
+        assert!(
+            old_subs.len() > 1,
+            "the narrow old side wraps at its own width"
+        );
+        assert_eq!(new_subs.len(), 1, "the wide new side does not wrap");
+        assert_eq!(
+            pair_parts.len(),
+            old_subs.len(),
+            "the shorter side pads to the taller side's row count"
+        );
+    }
+
+    #[test]
+    /// UI-E-111 — a word longer than the available width breaks at a character boundary
+    /// instead of overflowing or being truncated.
+    fn ut_word_longer_than_the_width_breaks_at_a_character_boundary() {
+        let mut s = DiffViewStateBuilder::default()
+            .wrap(true)
+            .build_with_diff("@@ -1,1 +1,1 @@\n-abcdefghijklm\n")
+            .unwrap();
+        s.set_content_widths(3, 3);
+        s.set_meta_width(20);
+        let display = s.display_rows();
+        let old_subs = display
+            .iter()
+            .filter(|d| d.logical == 1)
+            .filter(|d| {
+                matches!(
+                    d.part,
+                    RowPart::Pair {
+                        old_sub: Some(_),
+                        ..
+                    }
+                )
+            })
+            .count();
+        assert_eq!(
+            old_subs, 5,
+            "13 characters at width 3 is ceil(13 / 3) = 5 rows"
+        );
+    }
+
+    #[test]
+    /// UI-E-112 — a pane too narrow for the gutter and marker column treats the available
+    /// text width as one column, wrapping one character per display row.
+    fn ut_pane_too_narrow_for_the_gutter_wraps_one_character_per_row() {
+        let mut s = DiffViewStateBuilder::default()
+            .wrap(true)
+            .build_with_diff("@@ -1,1 +1,1 @@\n-abcd\n")
+            .unwrap();
+        s.set_content_widths(1, 1);
+        s.set_meta_width(20);
+        let display = s.display_rows();
+        let old_subs = display
+            .iter()
+            .filter(|d| d.logical == 1)
+            .filter(|d| {
+                matches!(
+                    d.part,
+                    RowPart::Pair {
+                        old_sub: Some(_),
+                        ..
+                    }
+                )
+            })
+            .count();
+        assert_eq!(old_subs, 4, "one character per display row");
+    }
+
+    #[test]
+    /// UI-R-263, amended UI-R-232 — with wrapping on, the horizontal keys are consumed
+    /// but move nothing; with it off, they behave exactly as before.
+    fn ut_horizontal_keys_are_consumed_and_do_nothing_while_wrapping() {
+        let mut s = DiffViewStateBuilder::default()
+            .wrap(true)
+            .build_with_diff("@@ -1,1 +1,1 @@\n-a much longer line of text\n")
+            .unwrap();
+        s.set_content_widths(5, 5);
+        s.set_meta_width(20);
+        for code in [
+            KeyCode::Char('l'),
+            KeyCode::Right,
+            KeyCode::Char('$'),
+            KeyCode::Char('h'),
+            KeyCode::Left,
+            KeyCode::Char('0'),
+        ] {
+            let result = s.handle_events(KeyModifiers::NONE, code);
+            assert!(matches!(result, EventResult::Consumed));
+            assert_eq!(
+                s.h_scroll(),
+                0,
+                "wrapped content never scrolls horizontally"
+            );
+        }
+    }
+
+    #[test]
+    /// Amended UI-R-232 — with wrapping off the horizontal keys still scroll.
+    fn ut_horizontal_keys_still_scroll_with_wrapping_off() {
+        let mut s = nav_fixture();
+        s.handle_events(KeyModifiers::NONE, KeyCode::Char('l'));
+        assert_eq!(s.h_scroll(), 1);
+    }
+
+    #[test]
+    /// UI-R-264 — the active row and the selected-row query address logical rows even
+    /// when the active row spans several display rows once wrapped.
+    fn ut_active_row_and_selection_stay_logical_across_a_wrapped_row() {
+        let mut s = DiffViewStateBuilder::default()
+            .wrap(true)
+            .build_with_diff("@@ -1,2 +1,2 @@\n-hello world foo bar\n context\n")
+            .unwrap();
+        s.set_content_widths(5, 5);
+        s.set_meta_width(20);
+        s.set_visible_height(10);
+        // `j` from the header lands on row 1, wrapped into several display rows; the
+        // active row is still the one logical index, not a display sub-row.
+        s.handle_events(KeyModifiers::NONE, KeyCode::Char('j'));
+        assert_eq!(s.active_row(), 1);
+        s.handle_events(KeyModifiers::NONE, KeyCode::Char('v'));
+        assert_eq!(
+            s.selected_rows(),
+            Some(1..=1),
+            "one wrapped row selects whole, as a single logical index"
+        );
+        // Extending the selection onto the next logical row still reports logical indices.
+        s.handle_events(KeyModifiers::NONE, KeyCode::Char('j'));
+        assert_eq!(s.selected_rows(), Some(1..=2));
+    }
+
+    #[test]
+    /// UI-R-265, amended UI-R-231 — scrolling and paging count display rows and land on
+    /// the logical row holding the display row reached.
+    fn ut_scroll_and_paging_count_display_rows_and_land_on_a_logical_row() {
+        let mut s = DiffViewStateBuilder::default()
+            .wrap(true)
+            .build_with_diff(
+                "@@ -1,3 +1,3 @@\n-hello world foo bar\n context\n another context line\n",
+            )
+            .unwrap();
+        s.set_content_widths(5, 5);
+        s.set_meta_width(20);
+        s.set_visible_height(3);
+        // Row 0 is the header (1 display row, index 0); row 1 wraps to 4 display rows
+        // ("hello", "world", "foo", "bar", indices 1..=4); rows 2 and 3 are one display
+        // row each (indices 5, 6). From the header, paging 3 display rows down lands on
+        // display index 3, which is row 1's third wrapped line.
+        s.handle_events(KeyModifiers::NONE, KeyCode::PageDown);
+        assert_eq!(
+            s.active_row(),
+            1,
+            "page moved 3 display rows, landing on row 1"
+        );
+        assert_eq!(
+            s.scroll_offset(),
+            1,
+            "row 1's span top-anchors, wider than the window"
+        );
+
+        // `Ctrl+D`/`Ctrl+U` halve the page (1 display row here) and count display rows the
+        // same way.
+        s.handle_events(KeyModifiers::CONTROL, KeyCode::Char('d'));
+        assert_eq!(s.active_row(), 2, "half-page moved on to row 2");
+        s.handle_events(KeyModifiers::CONTROL, KeyCode::Char('u'));
+        assert_eq!(s.active_row(), 1, "half-page back lands on row 1 again");
+    }
+
+    #[test]
+    /// Amended UI-R-231 — paging never stalls on a row wider than the visible window: if
+    /// moving by the page's display-row count would still land inside the active row,
+    /// the page advances to the next logical row instead of doing nothing.
+    fn ut_paging_advances_past_a_row_taller_than_the_visible_window() {
+        let mut s = DiffViewStateBuilder::default()
+            .wrap(true)
+            .build_with_diff(
+                "@@ -1,3 +1,3 @@\n-hello world foo bar\n context\n another context line\n",
+            )
+            .unwrap();
+        s.set_content_widths(5, 5);
+        s.set_meta_width(20);
+        s.set_visible_height(3);
+        // Row 1 spans display rows 1..=4, four rows, wider than the 3-row visible window:
+        // paging 3 display rows from its own start (1) reaches display index 4, whose
+        // logical row is still 1 — a naive implementation would leave `active_row`
+        // unchanged here.
+        s.set_active_row(1);
+        s.handle_events(KeyModifiers::NONE, KeyCode::PageDown);
+        assert_eq!(
+            s.active_row(),
+            2,
+            "paging advances to the next logical row rather than stalling"
+        );
+    }
+
+    #[test]
+    /// UI-E-120 — `j`/`Down` on a row taller than the viewport scrolls one display row at
+    /// a time within that row until its last display row is visible, only then moving to
+    /// the next logical row; `k`/`Up` mirrors it toward the first display row.
+    fn ut_j_and_k_step_through_a_row_taller_than_the_viewport_before_changing_logical_row() {
+        let mut s = DiffViewStateBuilder::default()
+            .wrap(true)
+            .build_with_diff(
+                "@@ -1,3 +1,3 @@\n-hello world foo bar\n context\n another context line\n",
+            )
+            .unwrap();
+        s.set_content_widths(5, 5);
+        s.set_meta_width(20);
+        s.set_visible_height(3);
+        // `j` from the header (display row 0) lands on row 1 (display rows 1..=4), which
+        // top-anchors: scroll_offset == 1.
+        s.handle_events(KeyModifiers::NONE, KeyCode::Char('j'));
+        assert_eq!(s.active_row(), 1);
+        assert_eq!(s.scroll_offset(), 1);
+
+        // Row 1's span (1..=4) does not fit the 3-row window (rows 1..=3 visible, row 4
+        // hidden): `j`/`Down` scrolls within it first, leaving `active_row` unchanged,
+        // until its last display row (4) is visible (window becomes rows 2..=4).
+        s.handle_events(KeyModifiers::NONE, KeyCode::Down);
+        assert_eq!(s.active_row(), 1, "still row 1: only scrolled, not moved");
+        assert_eq!(
+            s.scroll_offset(),
+            2,
+            "row 1's last display row is now visible"
+        );
+
+        // Now that display row 4 (row 1's last) is in view, the next `j` moves on.
+        s.handle_events(KeyModifiers::NONE, KeyCode::Char('j'));
+        assert_eq!(s.active_row(), 2, "row 1's tail was visible, so j advances");
+
+        // `k`/`Up` mirrors it: scrolling back up within row 1 before re-entering it moves
+        // active_row.
+        s.handle_events(KeyModifiers::NONE, KeyCode::Char('k'));
+        assert_eq!(s.active_row(), 1);
+        assert_eq!(
+            s.scroll_offset(),
+            1,
+            "k re-enters row 1 already at its own start"
+        );
+        s.handle_events(KeyModifiers::NONE, KeyCode::Up);
+        assert_eq!(
+            s.active_row(),
+            0,
+            "row 1's start was already visible, so k moves on"
+        );
+    }
+
+    #[test]
+    /// UI-R-230 (re-tested), UI-R-265 — the keep-visible rule settles on the whole
+    /// display-row span of a wrapped active row, not just its first display row.
+    fn ut_keep_visible_settles_on_the_active_rows_display_span() {
+        let mut s = DiffViewStateBuilder::default()
+            .wrap(true)
+            .build_with_diff(
+                "@@ -1,3 +1,3 @@\n-hello world foo bar\n context\n another context line\n",
+            )
+            .unwrap();
+        s.set_content_widths(5, 5);
+        s.set_meta_width(20);
+        s.set_visible_height(3);
+        // `j` from row 0 moves to logical row 1 and runs `ensure_visible` (unlike the
+        // test-only `set_active_row`, which does not).
+        s.handle_events(KeyModifiers::NONE, KeyCode::Char('j'));
+        assert_eq!(s.active_row(), 1);
+        // Row 1 alone spans display rows 1..=4 (4 rows), wider than visible_height (3):
+        // its span does not fit at all, so `ensure_visible` must not bottom-anchor (which
+        // would permanently hide the span's own leading display rows) but settle at the
+        // span's own first display row instead.
+        assert_eq!(
+            s.scroll_offset(),
+            1,
+            "settles at the span's own start rather than hiding its leading rows"
         );
     }
 }

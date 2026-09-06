@@ -121,6 +121,7 @@ Boundary behavior, error semantics, intentional or known constraints. The known-
 | **UI-E-116** | Several annotations anchored to the same row (UI-R-270) | drawn one block after another beneath that row, in the order the consumer supplied them |
 | **UI-E-117** | Marked range covering a row where that side holds a filler (UI-R-267) | that row's gutter cell stays blank and unpainted, so the block is interrupted where the side has no line |
 | **UI-E-118** | Annotations hidden or shown with `Ctrl+A` while the active row is below them (UI-R-275) | the active row is unchanged and the scroll re-settles in display rows (UI-R-265) |
+| **UI-E-120** | Active logical row occupying more display rows than the viewport height (UI-R-260, UI-R-264, UI-R-265) | `j` and `Down` scroll the viewport one display row at a time within that row until its last display row is visible and only then move to the next logical row, `k` and `Up` do the mirror image toward its first display row; the paging keys of UI-R-231 keep counting display rows throughout |
 
 ## File tree widget
 
