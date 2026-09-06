@@ -290,8 +290,6 @@ impl DiffView {
         }
     }
 
-    /// Draws a meta row (UI-R-210): one screen row across the full width, meta style,
-    /// blank gutter on every side, no marker column.
     /// Draws one display row of a meta row (UI-R-210): the full width, in the meta style.
     /// A meta row wraps like any other row (UI-R-260 exempts none), so with `wrap` on
     /// `sub_row` selects which of its wrapped chunks this call draws.
