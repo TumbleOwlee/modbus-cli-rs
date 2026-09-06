@@ -8,13 +8,14 @@ use ratatui::widgets::{Block, StatefulWidget, Widget};
 
 use crate::Border;
 use crate::state::{FileStatus, FileTreeState};
-use crate::style::{InputFieldStyle, SyntaxTheme};
-use crate::traits::Margins;
+use crate::style::{InputFieldStyle, MarkdownTheme, SyntaxTheme};
+use crate::traits::{IsFocus, Margins};
 use crate::widgets::Title;
 
 /// A file tree rendered from a [`FileTreeState`]: each visible row indented by its depth
-/// with an expansion marker on directories (UI-R-238), and a change-status marker and
-/// style on a file that carries one (UI-R-244).
+/// with an expansion marker on directories (UI-R-238), a change-status marker and style on
+/// a file that carries one (UI-R-244), and the selected row painted in the theme's
+/// highlighted-row style across the widget's full width (UI-R-252).
 #[derive(Builder, Debug, Clone, Getters, Setters, CopyGetters, WithSetters)]
 #[getset(set = "pub")]
 pub struct FileTree {
@@ -33,6 +34,12 @@ pub struct FileTree {
     #[getset(get = "pub")]
     #[builder(default = "SyntaxTheme::default()")]
     syntax_theme: SyntaxTheme,
+    /// UI-R-252 — defaulted from the single place this value lives, `MarkdownTheme`'s
+    /// (UI-R-138), so the file tree's and the markdown field's read-only active-row
+    /// highlight agree; not a literal colour and not a copy of `DiffViewStyle`'s field.
+    #[getset(get = "pub")]
+    #[builder(default = "*MarkdownTheme::default().highlighted_row()")]
+    highlighted_row: Style,
 }
 
 impl Default for FileTree {
@@ -112,7 +119,12 @@ impl StatefulWidget for &FileTree {
         .split(area)[1];
 
         if let Border::Full(m) = &self.border {
-            let mut block = Block::bordered().style(*self.style.border());
+            let border_style = if state.is_focused() {
+                *self.style.focused()
+            } else {
+                *self.style.border()
+            };
+            let mut block = Block::bordered().style(border_style);
             if let Some(t) = &self.title {
                 block = block.title(t.name.as_str()).title_alignment(t.alignment);
             }
@@ -128,6 +140,7 @@ impl StatefulWidget for &FileTree {
 
         let rows = state.visible_rows();
         let scroll = state.scroll_offset();
+        let selected = state.selected();
 
         for (i, row) in rows
             .iter()
@@ -163,6 +176,10 @@ impl StatefulWidget for &FileTree {
             };
             buf.set_style(row_rect, self.style.general);
             buf.set_string(area.x, y, &clipped, style);
+
+            if !rows.is_empty() && i == selected {
+                buf.set_style(row_rect, self.highlighted_row);
+            }
         }
     }
 }
@@ -171,6 +188,7 @@ impl StatefulWidget for &FileTree {
 mod tests {
     use super::*;
     use crate::state::FileTreeStateBuilder;
+    use crate::traits::SetFocus;
     use ratatui::layout::Rect as RRect;
 
     fn buffer(w: u16, h: u16) -> Buffer {
@@ -258,5 +276,88 @@ mod tests {
         assert_eq!(line.chars().count(), 10);
         assert!(line.starts_with(" a-very-lo"));
         assert!(row_text(&b, 1, 10).trim().is_empty());
+    }
+
+    #[test]
+    /// UI-R-246 — the focused border style while focused, the normal border otherwise.
+    fn ut_border_style_follows_focus() {
+        let mut s = tree(&[("a.rs", None)]);
+        let w = FileTreeBuilder::default()
+            .border(Border::Full(Margin::new(0, 0)))
+            .build()
+            .unwrap();
+
+        SetFocus::set_focused(&mut s, false);
+        let mut b = buffer(20, 5);
+        StatefulWidget::render(&w, Rect::new(0, 0, 20, 5), &mut b, &mut s);
+        assert_eq!(
+            b[(0, 0)].fg,
+            w.style.border().fg.expect("style sets a color")
+        );
+
+        SetFocus::set_focused(&mut s, true);
+        let mut b = buffer(20, 5);
+        StatefulWidget::render(&w, Rect::new(0, 0, 20, 5), &mut b, &mut s);
+        assert_eq!(
+            b[(0, 0)].fg,
+            w.style.focused().fg.expect("style sets a color")
+        );
+    }
+
+    #[test]
+    /// UI-R-252 — the selected row takes the highlighted-row style across the full
+    /// width, keeping a status-carrying file's foreground under the highlight.
+    fn ut_selected_row_takes_the_highlighted_row_style_across_the_full_width() {
+        let mut s = tree(&[("added.rs", Some(FileStatus::Added)), ("b.rs", None)]);
+        let w = FileTree::default();
+        let mut b = buffer(20, 2);
+        StatefulWidget::render(&w, Rect::new(0, 0, 20, 2), &mut b, &mut s);
+        for x in 0..20 {
+            assert_eq!(
+                b[(x, 0)].bg,
+                w.highlighted_row.bg.expect("style sets a color"),
+                "column {x} not in the highlighted-row style"
+            );
+        }
+        assert_eq!(
+            b[(1, 0)].fg,
+            w.syntax_theme.added.fg.expect("style sets a color")
+        );
+        assert_ne!(
+            b[(0, 1)].bg,
+            w.highlighted_row.bg.expect("style sets a color")
+        );
+    }
+
+    #[test]
+    /// UI-E-110, UI-E-103 — an empty tree draws its border around an empty interior:
+    /// no row carries the highlighted-row style, since there is no selected node.
+    fn ut_empty_tree_draws_its_border_around_an_empty_interior_and_highlights_no_row() {
+        let mut s = tree(&[]);
+        let w = FileTreeBuilder::default()
+            .border(Border::Full(Margin::new(0, 0)))
+            .build()
+            .unwrap();
+        let mut b = buffer(20, 5);
+        StatefulWidget::render(&w, Rect::new(0, 0, 20, 5), &mut b, &mut s);
+
+        assert_ne!(b[(0, 0)].symbol(), " ");
+        for y in 1..4 {
+            for x in 1..19 {
+                assert_eq!(b[(x, y)].symbol(), " ");
+                assert_ne!(
+                    b[(x, y)].bg,
+                    w.highlighted_row.bg.expect("style sets a color")
+                );
+            }
+        }
+    }
+
+    #[test]
+    /// UI-R-252 — the highlighted-row default agrees with `MarkdownTheme`'s (UI-R-138).
+    fn ut_highlighted_row_default_matches_markdown_theme() {
+        let w = FileTree::default();
+        let markdown = MarkdownTheme::default();
+        assert_eq!(w.highlighted_row, *markdown.highlighted_row());
     }
 }

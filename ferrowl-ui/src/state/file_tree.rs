@@ -2,7 +2,7 @@ use crossterm::event::{KeyCode, KeyModifiers};
 use derive_builder::Builder;
 
 use crate::EventResult;
-use crate::traits::HandleEvents;
+use crate::traits::{HandleEvents, IsFocus, SetFocus};
 
 /// A file node's change status (UI-R-244): drawn as a leading marker and styled with the
 /// syntax theme's added/removed/meta styles. Public because the caller sets it per path.
@@ -180,6 +180,10 @@ pub struct FileTreeState {
     visible_height: usize,
     #[builder(setter(skip), default = "None")]
     pending: Option<char>,
+    // UI-R-246's only observable effect (border style) lives in the widget; mutated
+    // through `SetFocus::set_focused` below, not a generated field setter.
+    #[builder(default = "true")]
+    focused: bool,
 }
 
 impl FileTreeStateBuilder {
@@ -439,6 +443,18 @@ impl HandleEvents for FileTreeState {
             Some(_) => EventResult::Consumed,
             None => EventResult::Unhandled(modifiers, code),
         }
+    }
+}
+
+impl SetFocus for FileTreeState {
+    fn set_focused(&mut self, focus: bool) {
+        self.focused = focus;
+    }
+}
+
+impl IsFocus for FileTreeState {
+    fn is_focused(&self) -> bool {
+        self.focused
     }
 }
 
