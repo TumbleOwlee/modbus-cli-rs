@@ -185,19 +185,19 @@ fn group_runs(chars: Vec<(char, Style)>) -> Vec<(String, Style)> {
 }
 
 impl DiffView {
-    /// The per-side diff style of UI-R-219: the syntax theme's removed/added style for a
-    /// changed row's old/new side respectively, the general text style for context. A
-    /// `DiffRow::Pair` carries one shared `kind` even for a genuine two-sided change (both
-    /// sides present, text differing), so the style is derived from which side is being
-    /// drawn, not from `kind` alone — otherwise a combined change row's new (added) side
-    /// would wrongly inherit the row's `Removed` tag.
+    /// The per-side diff style of UI-R-219: the widget's own removed/added style
+    /// for a changed row's old/new side respectively, the general text style for context.
+    /// A `DiffRow::Pair` carries one shared `kind` even for a genuine two-sided change
+    /// (both sides present, text differing), so the style is derived from which side is
+    /// being drawn, not from `kind` alone — otherwise a combined change row's new (added)
+    /// side would wrongly inherit the row's `Removed` tag.
     fn side_style(&self, kind: &DiffKind, side: Side) -> Style {
         match kind {
             DiffKind::Context => self.style.general,
-            DiffKind::Meta => self.syntax_theme.meta,
+            DiffKind::Meta => self.style.meta,
             DiffKind::Added | DiffKind::Removed => match side {
-                Side::Old => self.syntax_theme.removed,
-                Side::New => self.syntax_theme.added,
+                Side::Old => self.style.removed,
+                Side::New => self.style.added,
             },
         }
     }
@@ -297,10 +297,9 @@ impl DiffView {
         // The meta style covers the whole rect first: a `Paragraph` only paints the cells
         // its text occupies, so a row wider than `text` would otherwise show a trailing
         // run of unstyled (`general`) cells past the end of the line (UI-R-210).
-        buf.set_style(rect, self.syntax_theme.meta);
+        buf.set_style(rect, self.style.meta);
         if wrap {
-            let chars: Vec<(char, Style)> =
-                text.chars().map(|c| (c, self.syntax_theme.meta)).collect();
+            let chars: Vec<(char, Style)> = text.chars().map(|c| (c, self.style.meta)).collect();
             let wrapped =
                 crate::widgets::markdown_render::word_wrap(&chars, rect.width.max(1) as usize, 0);
             let Some(chunk) = wrapped.get(sub_row) else {
@@ -314,8 +313,7 @@ impl DiffView {
             );
             Paragraph::new(Text::from(line)).render(rect, buf);
         } else if sub_row == 0 {
-            Paragraph::new(Text::from(text.to_string()).style(self.syntax_theme.meta))
-                .render(rect, buf);
+            Paragraph::new(Text::from(text.to_string()).style(self.style.meta)).render(rect, buf);
         }
     }
 
@@ -672,7 +670,7 @@ mod tests {
         for x in 0..21 {
             assert_eq!(
                 b[(x, 0)].fg,
-                w.syntax_theme.meta.fg.expect("style sets a color"),
+                w.style.meta.fg.expect("style sets a color"),
                 "column {x} not in the meta style"
             );
         }
@@ -790,12 +788,45 @@ mod tests {
         );
         assert_eq!(
             b[(2, 2)].fg,
-            w.syntax_theme.removed.fg.expect("style sets a color")
+            w.style.removed.fg.expect("style sets a color")
         );
-        assert_eq!(
-            b[(12, 2)].fg,
-            w.syntax_theme.added.fg.expect("style sets a color")
+        assert_eq!(b[(12, 2)].fg, w.style.added.fg.expect("style sets a color"));
+    }
+
+    #[test]
+    /// UI-R-219 — the added/removed/meta row styles are the widget's own
+    /// (`DiffViewStyle`), not the syntax theme's; setting a distinctive style through the
+    /// builder must be what the rendered cells take.
+    fn ut_row_text_takes_the_widgets_own_styles_not_the_syntax_themes() {
+        let mut st = state_with("@@ -1,3 +1,3 @@\n context\n-removed\n+added\n");
+        // Row 0 (the meta header) must not be the active row: UI-R-224's highlighted-row
+        // overlay paints its own background over whatever kind style drew there, which
+        // would otherwise mask the meta assertion below.
+        st.set_active_row(1);
+        let mut w = DiffView::default();
+        w.style.set_removed(
+            Style::default()
+                .fg(ratatui::style::Color::Magenta)
+                .bg(ratatui::style::Color::Cyan),
         );
+        w.style.set_added(
+            Style::default()
+                .fg(ratatui::style::Color::Yellow)
+                .bg(ratatui::style::Color::Gray),
+        );
+        w.style.set_meta(
+            Style::default()
+                .fg(ratatui::style::Color::Green)
+                .bg(ratatui::style::Color::Black),
+        );
+        let mut b = buffer(20, 3);
+        StatefulWidget::render(&w, Rect::new(0, 0, 20, 3), &mut b, &mut st);
+        assert_eq!(b[(2, 2)].fg, ratatui::style::Color::Magenta);
+        assert_eq!(b[(2, 2)].bg, ratatui::style::Color::Cyan);
+        assert_eq!(b[(12, 2)].fg, ratatui::style::Color::Yellow);
+        assert_eq!(b[(12, 2)].bg, ratatui::style::Color::Gray);
+        assert_eq!(b[(0, 0)].fg, ratatui::style::Color::Green);
+        assert_eq!(b[(0, 0)].bg, ratatui::style::Color::Black);
     }
 
     #[test]
@@ -809,7 +840,7 @@ mod tests {
         // `general`'s: an implementation that used the syntax theme's span style wholesale
         // (dropping the diff style's background/modifiers) would still pass an assertion
         // against `general`'s background alone, since `keyword` sets no background either.
-        w.syntax_theme.set_removed(
+        w.style.set_removed(
             Style::default()
                 .fg(ratatui::style::Color::Red)
                 .bg(ratatui::style::Color::Blue)
@@ -855,11 +886,11 @@ mod tests {
         StatefulWidget::render(&w, Rect::new(0, 0, 30, 2), &mut b, &mut st);
         assert_eq!(
             b[(2, 1)].fg,
-            w.syntax_theme.removed.fg.expect("style sets a color")
+            w.style.removed.fg.expect("style sets a color")
         );
         assert_eq!(
             b[(6, 1)].fg,
-            w.syntax_theme.removed.fg.expect("style sets a color")
+            w.style.removed.fg.expect("style sets a color")
         );
     }
 
