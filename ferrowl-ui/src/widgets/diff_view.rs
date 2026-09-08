@@ -806,7 +806,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-210 (amended), UI-R-276 — a meta row (the hunk header itself, here) spans the
+    /// UI-R-210, UI-R-276 — a meta row (the hunk header itself, here) spans the
     /// full width in the meta style the *builder* set on `DiffViewStyle`, with blank
     /// gutters on both sides.
     fn ut_meta_row_spans_the_full_width_in_the_meta_style_with_blank_gutters() {
@@ -920,7 +920,11 @@ mod tests {
             } else {
                 (1u16, 2u16)
             };
-            let old_range = 0..10;
+            let old_range: std::ops::Range<u16> = if layout == DiffLayout::Split {
+                0..10
+            } else {
+                0..20
+            };
             let new_range: std::ops::Range<u16> = if layout == DiffLayout::Split {
                 10..20
             } else {
@@ -984,6 +988,11 @@ mod tests {
         let mut b = buffer(20, 2);
         StatefulWidget::render(&w, Rect::new(0, 0, 20, 2), &mut b, &mut st);
         assert_eq!(b[(0, 1)].bg, ratatui::style::Color::Yellow);
+        assert_eq!(
+            b[(1, 1)].bg,
+            w.style.removed.bg.unwrap(),
+            "separator column keeps the row style, not the range colour"
+        );
         assert_eq!(b[(5, 1)].bg, w.style.removed.bg.unwrap());
     }
 
@@ -1006,25 +1015,30 @@ mod tests {
     }
 
     #[test]
-    /// UI-E-123 — split padding rows stay in the general style: with wrapping on, the
-    /// old side's padded display rows past its own text never carry the added/removed
-    /// band.
+    /// UI-R-262 — the split layout's shorter-side padding stays in the general style:
+    /// UI-R-278/UI-R-279 paint only the display rows an entry actually occupies, so with
+    /// wrapping on, the old side's padded display rows past its own text never carry the
+    /// added/removed band.
     fn ut_split_padding_rows_stay_in_the_general_style() {
         let mut st = DiffViewStateBuilder::default()
             .wrap(true)
             .build_with_diff("@@ -1,1 +1,1 @@\n-x\n+aaaa bbbb cccc\n")
             .unwrap();
         let w = DiffView::default();
-        let mut b = buffer(20, 3);
-        StatefulWidget::render(&w, Rect::new(0, 0, 20, 3), &mut b, &mut st);
+        let mut b = buffer(20, 4);
+        StatefulWidget::render(&w, Rect::new(0, 0, 20, 4), &mut b, &mut st);
         // Row 0 is the meta header, row 1 the real pair row (old side's own real text,
-        // in the removed style), row 2 the padding row past the old side's own text.
-        for x in 0..10 {
-            assert_eq!(
-                b[(x, 2)].bg,
-                w.style.general.bg.unwrap(),
-                "old pane padded row column {x}"
-            );
+        // in the removed style), rows 2 and 3 the padding rows past the old side's own
+        // text (the new side's "aaaa bbbb cccc" wraps to three display rows at this
+        // width, the old side's "x" to one).
+        for y in [2u16, 3u16] {
+            for x in 0..10 {
+                assert_eq!(
+                    b[(x, y)].bg,
+                    w.style.general.bg.unwrap(),
+                    "old pane padded row {y} column {x}"
+                );
+            }
         }
     }
 
@@ -1572,7 +1586,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-261 (amended) — a continuation display row of a wrapped entry carries a blank
+    /// UI-R-261 — a continuation display row of a wrapped entry carries a blank
     /// gutter, its text starting at the same column as the row's first display row.
     fn ut_continuation_row_has_a_blank_gutter_and_aligned_text() {
         let mut st = DiffViewStateBuilder::default()
@@ -1599,7 +1613,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-E-112 (amended) — a pane too narrow for the gutter treats the available text
+    /// UI-E-112 — a pane too narrow for the gutter treats the available text
     /// width as one column, wrapping one character per display row, rendered.
     fn ut_pane_too_narrow_for_the_gutter_wraps_one_character_per_row_when_rendered() {
         let mut st = DiffViewStateBuilder::default()

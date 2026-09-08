@@ -2276,7 +2276,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-E-112 (amended) — a pane too narrow for the gutter treats the available text
+    /// UI-E-112 — a pane too narrow for the gutter treats the available text
     /// width as one column, wrapping one character per display row.
     fn ut_pane_too_narrow_for_the_gutter_wraps_one_character_per_row() {
         let mut s = DiffViewStateBuilder::default()

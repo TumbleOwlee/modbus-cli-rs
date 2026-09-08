@@ -89,7 +89,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-276 (amended) — added/removed default to white on the scheme's success/error
+    /// UI-R-276 — added/removed default to white on the scheme's success/error
     /// colors darkened toward black, and meta defaults to the syntax theme's own meta
     /// style, frozen at that value.
     fn ut_row_styles_default_to_darkened_success_error_and_theme_meta() {
