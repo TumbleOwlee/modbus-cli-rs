@@ -920,6 +920,25 @@ impl DiffViewState {
         })
     }
 
+    /// Every shown annotation's own anchor row, resolved once rather than rescanned per
+    /// row: `annotation_anchor_row` itself walks the row list, so calling it from inside
+    /// `display_rows()`'s own per-row loop turned one `display_rows()` call — run every
+    /// keystroke and render — into a scan of the row list for every row for every
+    /// annotation. Grouped by anchor row and kept in `annotations()`'s order within each
+    /// group (UI-E-116), a hidden or out-of-range annotation contributing no entry.
+    fn annotation_anchors_by_row(&self) -> std::collections::HashMap<usize, Vec<usize>> {
+        let mut by_row = std::collections::HashMap::new();
+        if !self.annotations_shown {
+            return by_row;
+        }
+        for (index, ann) in self.annotations.iter().enumerate() {
+            if let Some(row) = self.annotation_anchor_row(ann) {
+                by_row.entry(row).or_insert_with(Vec::new).push(index);
+            }
+        }
+        by_row
+    }
+
     /// The display-row layer: one entry per screen line, mapping back to the
     /// logical row it belongs to. Built fresh from `self.rows`, the wrap flag and the
     /// remembered per-side widths, never cached — the aligned rows this walks are
@@ -929,6 +948,7 @@ impl DiffViewState {
     /// `annotations_shown` (UI-R-275); a hidden or out-of-range annotation contributes
     /// none.
     pub(crate) fn display_rows(&self) -> Vec<DisplayRow> {
+        let anchors = self.annotation_anchors_by_row();
         let mut out = Vec::new();
         for (logical, row) in self.rows.iter().enumerate() {
             if self.is_folded(logical) {
@@ -937,22 +957,17 @@ impl DiffViewState {
             for part in self.row_display_parts(row) {
                 out.push(DisplayRow { logical, part });
             }
-            if self.annotations_shown {
-                for (index, ann) in self.annotations.iter().enumerate() {
-                    if self.annotation_anchor_row(ann) != Some(logical) {
-                        continue;
-                    }
-                    // UI-R-272: the block's own height is its measured text rows plus its
-                    // border rows (top and bottom); zero (no block at all) before the
-                    // first render has measured it (UI-E-084's rule).
-                    let measured = self.annotation_heights.get(index).copied().unwrap_or(0);
-                    let total = if measured == 0 { 0 } else { measured + 2 };
-                    for sub_row in 0..total {
-                        out.push(DisplayRow {
-                            logical,
-                            part: RowPart::Annotation { index, sub_row },
-                        });
-                    }
+            for &index in anchors.get(&logical).into_iter().flatten() {
+                // UI-R-272: the block's own height is its measured text rows plus its
+                // border rows (top and bottom); zero (no block at all) before the
+                // first render has measured it (UI-E-084's rule).
+                let measured = self.annotation_heights.get(index).copied().unwrap_or(0);
+                let total = if measured == 0 { 0 } else { measured + 2 };
+                for sub_row in 0..total {
+                    out.push(DisplayRow {
+                        logical,
+                        part: RowPart::Annotation { index, sub_row },
+                    });
                 }
             }
         }
@@ -1599,7 +1614,9 @@ mod tests {
 
     #[test]
     /// UI-R-275, UI-E-118 — `Ctrl+A` toggles every annotation's display rows at once,
-    /// leaving the active row unchanged.
+    /// leaving the active row unchanged and re-settling the scroll offset in display
+    /// rows, with the active row sitting below the block so the toggle actually shifts
+    /// how many display rows precede it.
     fn ut_ctrl_a_hides_and_shows_every_annotation_keeping_the_active_row() {
         let mut s = DiffViewStateBuilder::default()
             .annotations(vec![Annotation {
@@ -1607,10 +1624,16 @@ mod tests {
                 lines: 1..=1,
                 text: "note".into(),
             }])
-            .build_with_diff("@@ -1,2 +1,2 @@\n a\n b\n")
+            .build_with_diff("@@ -1,3 +1,3 @@\n a\n b\n c\n")
             .unwrap();
+        // Rows: 0 = meta, 1 = "a" (the annotation's anchor), 2 = "b", 3 = "c" (active,
+        // below the block). Shown, the block's 5 rows (3 measured + 2 border) sit
+        // between rows 1 and 2, so the active row's own display index is 8 of 9; hidden,
+        // it drops to 3 of 4.
         s.set_annotation_heights(vec![3]);
-        s.set_active_row(1);
+        s.set_visible_height(3);
+        s.set_active_row(3);
+        s.set_scroll_offset(6);
         assert!(
             s.display_rows()
                 .iter()
@@ -1624,7 +1647,12 @@ mod tests {
                 .iter()
                 .any(|d| matches!(d.part, RowPart::Annotation { .. }))
         );
-        assert_eq!(s.active_row(), 1);
+        assert_eq!(s.active_row(), 3);
+        assert_eq!(
+            s.scroll_offset(),
+            3,
+            "hiding the block frees the 5 display rows that used to precede row 3"
+        );
 
         s.handle_events(KeyModifiers::CONTROL, KeyCode::Char('a'));
         assert!(s.annotations_shown());
@@ -1633,7 +1661,12 @@ mod tests {
                 .iter()
                 .any(|d| matches!(d.part, RowPart::Annotation { .. }))
         );
-        assert_eq!(s.active_row(), 1);
+        assert_eq!(s.active_row(), 3);
+        assert_eq!(
+            s.scroll_offset(),
+            6,
+            "showing it again re-settles the scroll to keep row 3 in view"
+        );
     }
 
     #[test]

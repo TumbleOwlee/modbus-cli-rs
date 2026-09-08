@@ -392,13 +392,18 @@ impl DiffView {
             .build()
             .expect("MarkdownInputFieldBuilder fields all default");
         StatefulWidget::render(&field, inner, &mut scratch, &mut state);
-        for row in 0..rect.height {
-            let src_y = skip_rows + row;
+        // `rect` is already clipped to the pane's own remaining height/width, but not
+        // necessarily to `buf`'s own area: a direct `buf[(x, y)]` index, unlike
+        // `Paragraph`/`buf.set_style`, does not clip on its own and panics past it.
+        let dest = rect.intersection(buf.area);
+        for row in 0..dest.height {
+            let src_y = skip_rows + (dest.y - rect.y) + row;
             if src_y >= total_height {
                 break;
             }
-            for col in 0..rect.width {
-                buf[(rect.x + col, rect.y + row)] = scratch[(col, src_y)].clone();
+            for col in 0..dest.width {
+                let src_x = (dest.x - rect.x) + col;
+                buf[(dest.x + col, dest.y + row)] = scratch[(src_x, src_y)].clone();
             }
         }
     }
@@ -969,6 +974,28 @@ mod tests {
         StatefulWidget::render(&w, Rect::new(0, 0, 20, 3), &mut b, &mut st);
         assert_eq!(b[(0, 1)].bg, ratatui::style::Color::Yellow);
         assert_ne!(b[(0, 2)].bg, ratatui::style::Color::Yellow);
+    }
+
+    #[test]
+    /// UI-R-270 — an annotation block's scratch-buffer copy stays inside the real
+    /// buffer's own bounds even when the rendered `area` extends past them, the same
+    /// clipping every other draw path in this widget already gets from `Paragraph`/
+    /// `buf.set_style`, rather than panicking on an out-of-bounds index.
+    fn ut_annotation_block_copy_does_not_panic_past_the_buffers_own_bounds() {
+        let mut st = DiffViewStateBuilder::default()
+            .annotations(vec![Annotation {
+                side: Side::Old,
+                lines: 1..=1,
+                text: "hi".into(),
+            }])
+            .build_with_diff("@@ -1,1 +1,1 @@\n a\n")
+            .unwrap();
+        let w = DiffView::default();
+        // The buffer is narrower and shorter than the area handed to `render`: every
+        // other draw call clips against the buffer's own bounds internally, but a direct
+        // `buf[(x, y)]` index does not, so this must not panic.
+        let mut b = buffer(10, 3);
+        StatefulWidget::render(&w, Rect::new(0, 0, 40, 6), &mut b, &mut st);
     }
 
     #[test]
