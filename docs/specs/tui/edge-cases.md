@@ -114,7 +114,7 @@ Boundary behavior, error semantics, intentional or known constraints. The known-
 | **UI-E-101** | Layout toggled (UI-R-215) while a Visual selection is active | active row and selection are unchanged: both layouts address the same aligned rows (UI-R-213) |
 | **UI-E-102** | Gutter-label list longer than the widget's row count (UI-R-218) | the surplus labels are never rendered but still count toward the gutter width, as UI-E-080 |
 | **UI-E-111** | Word longer than the available width with wrapping on (UI-R-260) | broken at a character boundary; never truncated, never overflowed, as UI-E-070 |
-| **UI-E-112** | Wrapping on in a pane too narrow for the gutter and marker column (UI-R-260) | the available text width is treated as one column, one character per display row, as UI-E-090 |
+| **UI-E-112** | Wrapping on in a pane too narrow for the gutter (UI-R-260) | the available text width is treated as one column, one character per display row, as UI-E-090 |
 | **UI-E-113** | `Ctrl+F` on a widget built without the full new-side text (UI-R-258, UI-R-259) | consumed and ignored; the display stays hunk-only |
 | **UI-E-114** | Full new-side text disagreeing with the patch's context lines (UI-R-253) | the supplied text supplies the new-side content and the patch supplies the row's classification; no error is raised and nothing is dropped |
 | **UI-E-115** | Annotation or marked range naming a side and file line range no row covers (UI-R-266, UI-R-269) | silently not rendered; the widget raises no error and drops no row |
@@ -122,6 +122,9 @@ Boundary behavior, error semantics, intentional or known constraints. The known-
 | **UI-E-117** | Marked range covering a row where that side holds a filler (UI-R-267) | that row's gutter cell stays blank and unpainted, so the block is interrupted where the side has no line |
 | **UI-E-118** | Annotations hidden or shown with `Ctrl+A` while the active row is below them (UI-R-275) | the active row is unchanged and the scroll re-settles in display rows (UI-R-265) |
 | **UI-E-120** | Active logical row occupying more display rows than the viewport height (UI-R-260, UI-R-264, UI-R-265) | `j` and `Down` scroll the viewport one display row at a time within that row until its last display row is visible and only then move to the next logical row, `k` and `Up` do the mirror image toward its first display row; the paging keys of UI-R-231 keep counting display rows throughout |
+| **UI-E-121** | Marked range (UI-R-267) covering an added or removed row painted by UI-R-278 | the range's colour wins on that side's gutter cell, so the marked span still reads as one continuous block, and the row style paints the rest of the row |
+| **UI-E-122** | The filler side (UI-R-212) of a row whose other side is added or removed | that side stays unpainted: UI-R-278 paints only the pane holding the entry, so a filler never carries a green or red band |
+| **UI-E-127** | Added and removed rows on a terminal rendering no background color (UI-R-216) | they read as context rows: with the `+`/`-` marker column removed, the row style is the only kind cue and no textual fallback is drawn |
 
 ## File tree widget
 

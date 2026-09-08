@@ -320,7 +320,7 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **UI-R-209** — The diff widget aligns the diff into rows holding an optional old-side entry and an optional new-side entry: a context line occupies both entries of one row, a run of removed lines pairs positionwise with the run of added lines that follows it, a surplus line on either side occupies a row whose other entry is a filler, and, with the full new-side text supplied (UI-R-207), every file line between and around the hunks occupies a further row holding that line on both sides.
 
-**UI-R-210** — A meta line (UI-R-208), file header and hunk header included, occupies a row of its own drawn in the theme's meta style across the full width of the widget, with a blank gutter on every side.
+**UI-R-210** — A meta line (UI-R-208), file header and hunk header included, occupies a row of its own drawn in the diff widget's own meta row style (UI-R-276) across the full width of the widget, with a blank gutter on every side.
 
 **UI-R-211** — In the split layout the diff widget draws two panes of equal width side by side, the old side left and the new side right, rendering one screen row per aligned row (UI-R-209) so corresponding old and new lines always sit on the same screen row.
 
@@ -332,7 +332,7 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **UI-R-215** — `Ctrl+T` toggles the diff widget between the split and unified layouts at runtime.
 
-**UI-R-216** — Each rendered entry carries a marker column between its gutter and its text holding `-` for a removed line, `+` for an added line and a space for a context line or a filler.
+**UI-R-216** — A rendered entry carries no marker column: its text starts in the cell immediately after its gutter, and the row's kind is signalled by its row style alone (UI-R-219, UI-R-276, UI-R-278).
 
 **UI-R-217** — An entry's gutter cell holds that side's file line number, counted from the hunk header's starting line for that side (UI-R-207).
 
@@ -384,7 +384,7 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **UI-R-260** — The diff widget takes a line-wrap option, builder-set and defaulting to off; with it on, a row's text too wide for its pane continues on further display rows, breaking at a whitespace boundary and never inside a word.
 
-**UI-R-261** — A continuation display row of a wrapped row (UI-R-260) carries a blank gutter cell and a blank marker column and starts at the same column as the first row's text.
+**UI-R-261** — A continuation display row of a wrapped row (UI-R-260) carries a blank gutter cell and starts at the same column as the first display row's text.
 
 **UI-R-262** — In the split layout a logical row occupies as many display rows as the taller of its two sides needs when wrapped (UI-R-260), the shorter side padded with blank display rows, so corresponding old and new lines keep starting on the same display row.
 
@@ -414,7 +414,11 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **UI-R-275** — `Ctrl+A` toggles every annotation between shown and hidden at once, hidden annotations contributing no display rows.
 
-**UI-R-276** — The diff widget's added, removed and meta row styles are builder-settable and default to white on a green background, white on a red background and the theme's meta style respectively (UI-R-219).
+**UI-R-276** — The diff widget's added, removed and meta row styles are builder-settable and default to white on the color scheme's success color darkened toward black, white on its error color darkened toward black, and the theme's meta style respectively (UI-R-219).
+
+**UI-R-278** — The added and removed row styles (UI-R-219, UI-R-276) paint every cell of that entry's row across the full width of its pane — gutter cell, text cells and the blank cells past the end of the text alike — in either layout (UI-R-211, UI-R-213), so the row reads as one uninterrupted band.
+
+**UI-R-279** — Every continuation display row of a wrapped added or removed row (UI-R-260, UI-R-261) is painted across its pane's full width in that row's style, as UI-R-278 paints the first display row.
 
 ## File tree widget
 
