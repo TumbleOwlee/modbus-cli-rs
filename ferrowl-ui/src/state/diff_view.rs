@@ -75,6 +75,15 @@ pub struct MarkedRange {
     pub color: Color,
 }
 
+/// A block of markdown text anchored to one side's file line range (UI-R-269): named by
+/// file line, not row index, for the same reason as [`MarkedRange`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Annotation {
+    pub side: Side,
+    pub lines: RangeInclusive<usize>,
+    pub text: String,
+}
+
 /// A row's diff kind and its old/new file line numbers, each absent where that side holds
 /// a filler (UI-R-227).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -205,6 +214,23 @@ pub struct DiffViewState {
     #[getset(get = "pub", set = "pub")]
     #[builder(default)]
     marked_ranges: Vec<MarkedRange>,
+    /// Markdown blocks anchored to a file line range (UI-R-269), settable when built and
+    /// afterwards.
+    #[getset(get = "pub", set = "pub")]
+    #[builder(default)]
+    annotations: Vec<Annotation>,
+    /// Whether annotations contribute display rows (UI-R-274, UI-R-275); shown by default,
+    /// toggled only by `Ctrl+A`, never through the builder.
+    #[getset(skip)]
+    #[builder(setter(skip), default = "true")]
+    annotations_shown: bool,
+    /// Each annotation's own measured display-row count at its last render, indexed like
+    /// `annotations`; empty before the first render, the same pre-render convention
+    /// `visible_height` uses (UI-E-084's rule), so `display_rows()` adds no annotation rows
+    /// until the widget has measured them.
+    #[getset(skip)]
+    #[builder(setter(skip), default)]
+    annotation_heights: Vec<usize>,
 }
 
 /// The diff widget's hunk-only or full-file display mode (UI-R-257).
@@ -239,6 +265,13 @@ pub(crate) enum RowPart {
         old_sub: Option<usize>,
         new_sub: Option<usize>,
     },
+    /// One screen line of an annotation block anchored beneath the last row of its range
+    /// (UI-R-270): `index` names the annotation in `annotations()`, `sub_row` its own
+    /// border/text row. Carries no logical row of its own — the `DisplayRow` it rides on
+    /// reuses the anchor row's logical index, which is what keeps an annotation out of
+    /// `active_row_display_span` (UI-R-273) while still shifting the scroll bookkeeping
+    /// that counts display rows (UI-R-265).
+    Annotation { index: usize, sub_row: usize },
 }
 
 /// Parses `text` into aligned rows (UI-R-207, UI-R-209): a `@@` line is a hunk header
@@ -749,6 +782,21 @@ impl DiffViewState {
         self.h_scroll
     }
 
+    /// Whether annotations currently contribute display rows (UI-R-274, UI-R-275), read
+    /// through `display_rows()` and `Ctrl+A`'s own toggle rather than by the widget
+    /// directly; kept for tests to assert without adding public surface no
+    /// `api-contract.md` row names.
+    #[allow(dead_code)]
+    pub(crate) fn annotations_shown(&self) -> bool {
+        self.annotations_shown
+    }
+
+    /// Written by the widget that renders this state, recording each visible annotation's
+    /// own measured height (UI-R-272) so `display_rows()` can add its border rows.
+    pub(crate) fn set_annotation_heights(&mut self, heights: Vec<usize>) {
+        self.annotation_heights = heights;
+    }
+
     /// Written by the key-handling code that moves the horizontal scroll offset. No
     /// non-test caller exists until that key handling lands, so a render test can place a
     /// nonzero offset before it does.
@@ -855,11 +903,31 @@ impl DiffViewState {
         }
     }
 
+    /// The last row (highest index) whose named side holds an entry with a file line
+    /// inside `ann.lines` (UI-R-270): the last row of the range, scanning back from the
+    /// end since file lines only increase with row index. `None` when no row covers the
+    /// range at all (UI-E-115), silently dropping the annotation rather than erroring.
+    fn annotation_anchor_row(&self, ann: &Annotation) -> Option<usize> {
+        self.rows.iter().enumerate().rev().find_map(|(i, row)| {
+            let entry = match row {
+                DiffRow::Meta { .. } => None,
+                DiffRow::Pair { old, new, .. } => match ann.side {
+                    Side::Old => old.as_ref(),
+                    Side::New => new.as_ref(),
+                },
+            };
+            entry.filter(|e| ann.lines.contains(&e.line_no)).map(|_| i)
+        })
+    }
+
     /// The display-row layer: one entry per screen line, mapping back to the
     /// logical row it belongs to. Built fresh from `self.rows`, the wrap flag and the
     /// remembered per-side widths, never cached — the aligned rows this walks are
     /// themselves already the full parsed list (UI-R-254), so there is no second, larger
-    /// structure being rebuilt here.
+    /// structure being rebuilt here. Annotation rows (UI-R-269) are appended right after
+    /// the anchor row's own parts, in `annotations()`'s order (UI-E-116), and only while
+    /// `annotations_shown` (UI-R-275); a hidden or out-of-range annotation contributes
+    /// none.
     pub(crate) fn display_rows(&self) -> Vec<DisplayRow> {
         let mut out = Vec::new();
         for (logical, row) in self.rows.iter().enumerate() {
@@ -869,18 +937,38 @@ impl DiffViewState {
             for part in self.row_display_parts(row) {
                 out.push(DisplayRow { logical, part });
             }
+            if self.annotations_shown {
+                for (index, ann) in self.annotations.iter().enumerate() {
+                    if self.annotation_anchor_row(ann) != Some(logical) {
+                        continue;
+                    }
+                    // UI-R-272: the block's own height is its measured text rows plus its
+                    // border rows (top and bottom); zero (no block at all) before the
+                    // first render has measured it (UI-E-084's rule).
+                    let measured = self.annotation_heights.get(index).copied().unwrap_or(0);
+                    let total = if measured == 0 { 0 } else { measured + 2 };
+                    for sub_row in 0..total {
+                        out.push(DisplayRow {
+                            logical,
+                            part: RowPart::Annotation { index, sub_row },
+                        });
+                    }
+                }
+            }
         }
         out
     }
 
     /// The display-row index range `[start, end]` (inclusive) the active logical row
-    /// occupies, `(0, 0)` when there are no rows.
+    /// occupies, `(0, 0)` when there are no rows. Excludes any `RowPart::Annotation`
+    /// riding on the active row's own logical index (UI-R-273): an annotation is never
+    /// part of the active row, only drawn beneath it.
     fn active_row_display_span(&self) -> (usize, usize) {
         let display = self.display_rows();
         let mut start = None;
         let mut end = 0;
         for (i, d) in display.iter().enumerate() {
-            if d.logical == self.active_row {
+            if d.logical == self.active_row && !matches!(d.part, RowPart::Annotation { .. }) {
                 start.get_or_insert(i);
                 end = i;
             }
@@ -1248,6 +1336,14 @@ impl HandleEvents for DiffViewState {
                 };
                 EventResult::Consumed
             }
+            (KeyModifiers::CONTROL, KeyCode::Char('a')) => {
+                // UI-R-275: toggling annotation visibility changes how many display rows
+                // precede the active row without moving it (UI-E-118), so the scroll must
+                // re-settle in display rows the same way Ctrl+F's fold toggle does.
+                self.annotations_shown = !self.annotations_shown;
+                self.ensure_visible();
+                EventResult::Consumed
+            }
             (KeyModifiers::CONTROL, KeyCode::Char('f')) => {
                 // Built from a diff alone, there is no full-file mode to switch to
                 // (UI-R-259): consumed and ignored (UI-E-113).
@@ -1431,6 +1527,147 @@ mod tests {
         }];
         s.set_marked_ranges(after.clone());
         assert_eq!(s.marked_ranges(), &after);
+    }
+
+    #[test]
+    /// UI-R-269, UI-R-274 — `annotations` is settable through the builder and, separately,
+    /// through the post-build setter, and annotations start shown.
+    fn ut_annotations_are_settable_at_build_time_and_after_and_start_shown() {
+        let built = vec![Annotation {
+            side: Side::Old,
+            lines: 1..=1,
+            text: "one".into(),
+        }];
+        let mut s = DiffViewStateBuilder::default()
+            .annotations(built.clone())
+            .build_with_diff("@@ -1,1 +1,1 @@\n a\n")
+            .unwrap();
+        assert_eq!(s.annotations(), &built);
+        assert!(s.annotations_shown());
+
+        let after = vec![Annotation {
+            side: Side::New,
+            lines: 1..=1,
+            text: "two".into(),
+        }];
+        s.set_annotations(after.clone());
+        assert_eq!(s.annotations(), &after);
+    }
+
+    #[test]
+    /// UI-R-273 — annotations add no logical row, so the active row can never land on
+    /// one, and the selected-row query never reports one either.
+    fn ut_annotations_are_never_active_never_navigable_and_never_selected() {
+        let mut s = DiffViewStateBuilder::default()
+            .annotations(vec![Annotation {
+                side: Side::Old,
+                lines: 1..=1,
+                text: "note".into(),
+            }])
+            .build_with_diff("@@ -1,2 +1,2 @@\n a\n b\n")
+            .unwrap();
+        s.set_annotation_heights(vec![3]);
+        s.set_active_row(1);
+        let display = s.display_rows();
+        let anchor_display_count = display
+            .iter()
+            .filter(|d| d.logical == 1 && !matches!(d.part, RowPart::Annotation { .. }))
+            .count();
+        assert_eq!(
+            anchor_display_count, 1,
+            "the annotation's rows never widen row 1's own span"
+        );
+        assert_eq!(s.selected_rows(), Some(1..=1));
+    }
+
+    #[test]
+    /// UI-R-275, UI-E-118 — `Ctrl+A` toggles every annotation's display rows at once,
+    /// leaving the active row unchanged.
+    fn ut_ctrl_a_hides_and_shows_every_annotation_keeping_the_active_row() {
+        let mut s = DiffViewStateBuilder::default()
+            .annotations(vec![Annotation {
+                side: Side::Old,
+                lines: 1..=1,
+                text: "note".into(),
+            }])
+            .build_with_diff("@@ -1,2 +1,2 @@\n a\n b\n")
+            .unwrap();
+        s.set_annotation_heights(vec![3]);
+        s.set_active_row(1);
+        assert!(
+            s.display_rows()
+                .iter()
+                .any(|d| matches!(d.part, RowPart::Annotation { .. }))
+        );
+
+        s.handle_events(KeyModifiers::CONTROL, KeyCode::Char('a'));
+        assert!(!s.annotations_shown());
+        assert!(
+            !s.display_rows()
+                .iter()
+                .any(|d| matches!(d.part, RowPart::Annotation { .. }))
+        );
+        assert_eq!(s.active_row(), 1);
+
+        s.handle_events(KeyModifiers::CONTROL, KeyCode::Char('a'));
+        assert!(s.annotations_shown());
+        assert!(
+            s.display_rows()
+                .iter()
+                .any(|d| matches!(d.part, RowPart::Annotation { .. }))
+        );
+        assert_eq!(s.active_row(), 1);
+    }
+
+    #[test]
+    /// UI-E-115 — an annotation naming a side and file line range no row covers is
+    /// silently dropped: no error, no display row.
+    fn ut_out_of_range_annotation_is_silently_not_rendered() {
+        let mut s = DiffViewStateBuilder::default()
+            .annotations(vec![Annotation {
+                side: Side::New,
+                lines: 999..=999,
+                text: "note".into(),
+            }])
+            .build_with_diff("@@ -1,1 +1,1 @@\n a\n")
+            .unwrap();
+        s.set_annotation_heights(vec![3]);
+        assert!(
+            !s.display_rows()
+                .iter()
+                .any(|d| matches!(d.part, RowPart::Annotation { .. }))
+        );
+    }
+
+    #[test]
+    /// UI-E-116 — several annotations anchored to the same row draw in the order they
+    /// were supplied.
+    fn ut_several_annotations_on_one_row_stack_in_supplied_order() {
+        let mut s = DiffViewStateBuilder::default()
+            .annotations(vec![
+                Annotation {
+                    side: Side::Old,
+                    lines: 1..=1,
+                    text: "first".into(),
+                },
+                Annotation {
+                    side: Side::Old,
+                    lines: 1..=1,
+                    text: "second".into(),
+                },
+            ])
+            .build_with_diff("@@ -1,1 +1,1 @@\n a\n")
+            .unwrap();
+        s.set_annotation_heights(vec![2, 2]);
+        let indices: Vec<usize> = s
+            .display_rows()
+            .iter()
+            .filter_map(|d| match d.part {
+                RowPart::Annotation { index, sub_row: 0 } => Some(index),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(indices, vec![0, 1]);
     }
 
     #[test]
