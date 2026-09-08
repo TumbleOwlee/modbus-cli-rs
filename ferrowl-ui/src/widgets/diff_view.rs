@@ -208,6 +208,14 @@ fn word_diff_spans(text: &str, other: &str) -> Vec<Range<usize>> {
     let other_chars: Vec<char> = other.chars().collect();
     let a = word_tokens(text);
     let b = word_tokens(other);
+    /// Above this many word tokens on either side the pair gets no emphasis at all and
+    /// both rows stay plain full-width bands (UI-E-129): the longest-common-subsequence
+    /// table below costs the product of the two token counts, which one minified or
+    /// base64 line makes quadratic on every frame that draws the row.
+    const MAX_WORD_TOKENS: usize = 512;
+    if a.len() > MAX_WORD_TOKENS || b.len() > MAX_WORD_TOKENS {
+        return Vec::new();
+    }
     let text_of = |chars: &[char], r: &Range<usize>| chars[r.clone()].iter().collect::<String>();
     let a_tok: Vec<String> = a.iter().map(|r| text_of(&chars, r)).collect();
     let b_tok: Vec<String> = b.iter().map(|r| text_of(&other_chars, r)).collect();
@@ -1846,6 +1854,54 @@ mod tests {
             style.added.bg.unwrap(),
             "past the end of the text keeps the band"
         );
+    }
+
+    #[test]
+    /// UI-E-129 — above 512 word tokens on either side, `word_diff_spans` returns no
+    /// spans at all; at exactly 512 it still diffs, so the boundary itself is pinned,
+    /// not just the far side of it.
+    fn ut_word_diff_spans_are_empty_above_the_token_cap() {
+        // `word_tokens` alternates word and non-word runs, so "x!" repeated N times
+        // yields 2N tokens: 300 repeats crosses the 512-token cap (600 tokens), 256
+        // repeats sits exactly at it (512 tokens). The `!` tokens always match across
+        // sides, the `x`/`y` ones never do, so a within-cap diff is never empty.
+        let over_a: String = "x!".repeat(300);
+        let over_b: String = "y!".repeat(300);
+        assert!(
+            word_diff_spans(&over_a, &over_b).is_empty(),
+            "600 tokens exceeds the 512 cap"
+        );
+        let at_a: String = "x!".repeat(256);
+        let at_b: String = "y!".repeat(256);
+        assert!(
+            !word_diff_spans(&at_a, &at_b).is_empty(),
+            "512 tokens is still within the cap"
+        );
+    }
+
+    #[test]
+    /// UI-E-129 — rendered: a paired removed/added row whose texts exceed the token
+    /// cap gets no word-diff emphasis, every text cell carrying the plain row band.
+    fn ut_capped_pair_rows_are_plain_bands() {
+        let old_line: String = "x ".repeat(600);
+        let new_line: String = "y ".repeat(600);
+        let mut st = DiffViewStateBuilder::default()
+            .build_with_diff(&format!("@@ -1,1 +1,1 @@\n-{old_line}\n+{new_line}\n"))
+            .unwrap();
+        let w = DiffView::default();
+        let mut b = buffer(2200, 2);
+        StatefulWidget::render(&w, Rect::new(0, 0, 2200, 2), &mut b, &mut st);
+        let style = DiffViewStyle::default();
+        // Row 0 is the meta header, row 1 the pair row. Old pane: gutter+separator
+        // at columns 0..2, text from column 2. No cell should carry removed_word.
+        for x in 0..1090 {
+            assert_ne!(b[(x, 1)].bg, style.removed_word.bg.unwrap());
+        }
+        assert_eq!(b[(2, 1)].bg, style.removed.bg.unwrap());
+        for x in 1100..2200 {
+            assert_ne!(b[(x, 1)].bg, style.added_word.bg.unwrap());
+        }
+        assert_eq!(b[(1102, 1)].bg, style.added.bg.unwrap());
     }
 
     #[test]
