@@ -195,7 +195,10 @@ impl DiffView {
     /// text this call draws (UI-R-260); `sub_row > 0` draws a continuation, with a blank
     /// gutter of its own (UI-R-261) rather than `draw_entry`'s own text-absent blank, so a
     /// continuation is visually distinct from a filler even though both leave the gutter
-    /// empty.
+    /// empty. Called once per display row of the same logical row with a rising
+    /// `sub_row`, so an added/removed row's band (UI-R-278) paints every continuation
+    /// display row of a wrapped entry too (UI-R-279), its blank gutter drawn on top of
+    /// the band rather than leaving a hole in the colour.
     // One argument per independently-varying render input (row position, kind, side,
     // entry, labels, gutter width, language); grouping them into a context struct would
     // just move the same count into field access without reducing it.
@@ -220,7 +223,18 @@ impl DiffView {
             return;
         }
         let style = self.side_style(kind, side);
-        buf.set_style(rect, self.style.general);
+        // UI-R-278: an added/removed row's style paints this side's whole pane width —
+        // gutter digits, separator, text and any trailing blank cells past a short
+        // line — but only on the side that actually holds the entry (UI-E-122): a filler
+        // side of an added/removed row keeps the general style. A wrapped row's
+        // continuation display rows reuse this same call (UI-R-279), so the band covers
+        // them too without a separate branch.
+        let row_style = if entry.is_some() && matches!(kind, DiffKind::Added | DiffKind::Removed) {
+            style
+        } else {
+            self.style.general
+        };
+        buf.set_style(rect, row_style);
         let continuation = sub_row > 0;
         let gutter_text_width = gutter_width.saturating_sub(1);
         if gutter_text_width > 0 {
@@ -233,7 +247,9 @@ impl DiffView {
             // UI-R-267: a marked range's colour fills the whole gutter cell as a
             // background, under the label or line-number text (UI-R-268) — the label's
             // own style keeps its foreground but drops its background so the fill shows
-            // through.
+            // through. Painted after `row_style` above, so a marked range's colour wins
+            // on the digit cells while the rest of the row keeps the added/removed band
+            // (UI-E-121).
             let marked = entry.and_then(|e| {
                 marked_ranges
                     .iter()
@@ -243,10 +259,10 @@ impl DiffView {
                 buf.set_style(gutter_rect, Style::default().bg(m.color));
                 Style {
                     bg: None,
-                    ..self.style.general
+                    ..row_style
                 }
             } else {
-                self.style.general
+                row_style
             };
             let gutter_str = format!("{text:>width$}", width = gutter_text_width as usize);
             Paragraph::new(Text::from(gutter_str).style(gutter_style)).render(gutter_rect, buf);
@@ -771,6 +787,7 @@ impl StatefulWidget for DiffView {
 mod tests {
     use super::*;
     use crate::state::DiffViewStateBuilder;
+    use crate::style::DiffViewStyleBuilder;
 
     fn buffer(w: u16, h: u16) -> Buffer {
         Buffer::empty(Rect::new(0, 0, w, h))
@@ -789,23 +806,28 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-210 — a meta row (the hunk header itself, here) spans the full width in the
-    /// meta style, with blank gutters on both sides.
+    /// UI-R-210 (amended), UI-R-276 — a meta row (the hunk header itself, here) spans the
+    /// full width in the meta style the *builder* set on `DiffViewStyle`, with blank
+    /// gutters on both sides.
     fn ut_meta_row_spans_the_full_width_in_the_meta_style_with_blank_gutters() {
         let mut st = state_with("@@ -1,1 +1,1 @@\n context\n");
-        let w = DiffView::default();
+        let meta = Style::default().fg(ratatui::style::Color::Magenta);
+        let w = DiffViewBuilder::default()
+            .style(DiffViewStyleBuilder::default().meta(meta).build().unwrap())
+            .build()
+            .unwrap();
         let mut b = buffer(21, 2);
         StatefulWidget::render(&w, Rect::new(0, 0, 21, 2), &mut b, &mut st);
         let line = row_text(&b, 0, 21);
         assert!(line.starts_with("@@ -1,1 +1,1 @@"));
         // Full width (UI-R-210), including the odd trailing column an even split leaves
-        // unused by either pane, and the meta style across the whole row, not just its
-        // first cell.
+        // unused by either pane, and the builder's own meta style across the whole row,
+        // not just its first cell, and not `SyntaxTheme::default().meta`.
         for x in 0..21 {
             assert_eq!(
                 b[(x, 0)].fg,
-                w.style.meta.fg.expect("style sets a color"),
-                "column {x} not in the meta style"
+                meta.fg.unwrap(),
+                "column {x} not in the builder's meta style"
             );
         }
         // Blank gutter on every side: the content row below carries a gutter digit at
@@ -877,6 +899,133 @@ mod tests {
             context[2..10].starts_with("context"),
             "text starts at the same column as a changed row's"
         );
+    }
+
+    #[test]
+    /// UI-R-278 — an added/removed row paints every cell of the row: gutter digits,
+    /// separator column, text and the blank cells past the end of a short line.
+    fn ut_added_and_removed_rows_paint_every_cell_of_the_row() {
+        for layout in [DiffLayout::Split, DiffLayout::Unified] {
+            let mut st = DiffViewStateBuilder::default()
+                .layout(layout)
+                .build_with_diff("@@ -1,1 +1,1 @@\n-a\n+b\n")
+                .unwrap();
+            let w = DiffView::default();
+            let mut b = buffer(20, 3);
+            StatefulWidget::render(&w, Rect::new(0, 0, 20, 3), &mut b, &mut st);
+            // Row 0 is the meta header. Split draws old and new on the same row 1;
+            // unified draws old on row 1 and new on row 2.
+            let (removed_y, added_y) = if layout == DiffLayout::Split {
+                (1u16, 1u16)
+            } else {
+                (1u16, 2u16)
+            };
+            let old_range = 0..10;
+            let new_range: std::ops::Range<u16> = if layout == DiffLayout::Split {
+                10..20
+            } else {
+                0..20
+            };
+            for x in old_range {
+                assert_eq!(
+                    b[(x, removed_y)].bg,
+                    w.style.removed.bg.unwrap(),
+                    "layout {layout:?} old pane column {x}"
+                );
+            }
+            for x in new_range {
+                assert_eq!(
+                    b[(x, added_y)].bg,
+                    w.style.added.bg.unwrap(),
+                    "layout {layout:?} new pane column {x}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    /// UI-R-279 — a wrapped added row paints every continuation display row, including
+    /// its blank gutter, in the added band.
+    fn ut_wrapped_added_row_paints_every_continuation_display_row() {
+        let mut st = DiffViewStateBuilder::default()
+            .wrap(true)
+            .build_with_diff("@@ -1,1 +1,1 @@\n+aaaa bbbb\n")
+            .unwrap();
+        let w = DiffView::default();
+        let mut b = buffer(20, 3);
+        StatefulWidget::render(&w, Rect::new(0, 0, 20, 3), &mut b, &mut st);
+        // Row 0 is the meta header, row 1 the pair row's first display row, row 2 its
+        // wrapped continuation.
+        for x in 10..20 {
+            assert_eq!(
+                b[(x, 1)].bg,
+                w.style.added.bg.unwrap(),
+                "first display row column {x}"
+            );
+            assert_eq!(
+                b[(x, 2)].bg,
+                w.style.added.bg.unwrap(),
+                "continuation display row column {x}"
+            );
+        }
+    }
+
+    #[test]
+    /// UI-E-121 — a marked range's colour wins on the gutter of a painted row, the rest
+    /// of the row keeping the added/removed style.
+    fn ut_marked_range_colour_wins_on_the_gutter_of_a_painted_row() {
+        let mut st = state_with("@@ -1,1 +1,1 @@\n-a\n+b\n");
+        st.set_marked_ranges(vec![MarkedRange {
+            side: Side::Old,
+            lines: 1..=1,
+            color: ratatui::style::Color::Yellow,
+        }]);
+        let w = DiffView::default();
+        let mut b = buffer(20, 2);
+        StatefulWidget::render(&w, Rect::new(0, 0, 20, 2), &mut b, &mut st);
+        assert_eq!(b[(0, 1)].bg, ratatui::style::Color::Yellow);
+        assert_eq!(b[(5, 1)].bg, w.style.removed.bg.unwrap());
+    }
+
+    #[test]
+    /// UI-E-122 — a filler side of a painted row stays unpainted: the old pane keeps the
+    /// general style end to end, including its blank gutter cells, when the new side
+    /// carries an added row and the old side has no entry.
+    fn ut_filler_side_of_a_painted_row_stays_unpainted() {
+        let mut st = state_with("@@ -1,1 +1,2 @@\n-a\n+x\n+y\n");
+        let w = DiffView::default();
+        let mut b = buffer(20, 3);
+        StatefulWidget::render(&w, Rect::new(0, 0, 20, 3), &mut b, &mut st);
+        for x in 0..10 {
+            assert_eq!(
+                b[(x, 2)].bg,
+                w.style.general.bg.unwrap(),
+                "old pane column {x}"
+            );
+        }
+    }
+
+    #[test]
+    /// UI-E-123 — split padding rows stay in the general style: with wrapping on, the
+    /// old side's padded display rows past its own text never carry the added/removed
+    /// band.
+    fn ut_split_padding_rows_stay_in_the_general_style() {
+        let mut st = DiffViewStateBuilder::default()
+            .wrap(true)
+            .build_with_diff("@@ -1,1 +1,1 @@\n-x\n+aaaa bbbb cccc\n")
+            .unwrap();
+        let w = DiffView::default();
+        let mut b = buffer(20, 3);
+        StatefulWidget::render(&w, Rect::new(0, 0, 20, 3), &mut b, &mut st);
+        // Row 0 is the meta header, row 1 the real pair row (old side's own real text,
+        // in the removed style), row 2 the padding row past the old side's own text.
+        for x in 0..10 {
+            assert_eq!(
+                b[(x, 2)].bg,
+                w.style.general.bg.unwrap(),
+                "old pane padded row column {x}"
+            );
+        }
     }
 
     #[test]
