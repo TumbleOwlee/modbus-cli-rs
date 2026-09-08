@@ -276,10 +276,12 @@ pub(crate) enum RowPart {
 /// Parses `text` into aligned rows (UI-R-207, UI-R-209): a `@@` line is a hunk header
 /// supplying both sides' starting line numbers (UI-R-217) and is kept as a meta row
 /// itself; inside a hunk, ` `/`+`/`-` classify context/added/removed body lines
-/// (UI-R-208); a run of removed lines pairs positionwise with the added run that follows
-/// it, a surplus line on either side getting a filler on the other (UI-R-209); anything
-/// else — before any hunk header, or unrecognized inside one — is kept as a meta row
-/// verbatim (UI-E-097, UI-E-098). Empty input yields no rows (UI-E-099). A single
+/// (UI-R-208), and a completely empty line inside a hunk is a context line with empty
+/// text on both sides (UI-R-285); a run of removed lines pairs positionwise with the
+/// added run that follows it, a surplus line on either side getting a filler on the
+/// other (UI-R-209); anything else — before any hunk header, or unrecognized non-empty
+/// inside one — is kept as a meta row verbatim (UI-E-097, UI-E-098). Empty input yields
+/// no rows (UI-E-099). A single
 /// trailing newline is stripped before splitting, so ordinary diff text (which almost
 /// always ends in one) does not produce a phantom empty meta row after the last line.
 fn parse(text: &str) -> Vec<DiffRow> {
@@ -378,7 +380,7 @@ fn parse(text: &str) -> Vec<DiffRow> {
 
         let mut chars = line.chars();
         match (in_hunk, chars.next()) {
-            (true, Some(' ')) => {
+            (true, Some(' ') | None) => {
                 flush(&mut rows, &mut removed, &mut added, &mut pending_metas);
                 let text = chars.as_str().to_string();
                 rows.push(DiffRow::Pair {
@@ -1830,6 +1832,56 @@ mod tests {
     }
 
     #[test]
+    /// UI-R-285 — a completely empty line inside a hunk is a context row with empty text
+    /// on both sides, numbered on both sides, and numbering after it does not drift.
+    fn ut_empty_hunk_line_is_a_context_row_numbered_on_both_sides() {
+        let rows = rows_of("@@ -1,3 +1,3 @@\n a\n\n b\n");
+        let DiffRow::Pair { kind, old, new } = &rows[2] else {
+            panic!("expected a pair row")
+        };
+        assert_eq!(*kind, DiffKind::Context);
+        let old = old.as_ref().unwrap();
+        let new = new.as_ref().unwrap();
+        assert_eq!(old.text, "");
+        assert_eq!(new.text, "");
+        assert_eq!(old.line_no, 2);
+        assert_eq!(new.line_no, 2);
+        let DiffRow::Pair { old, new, .. } = &rows[3] else {
+            panic!("expected a pair row")
+        };
+        assert_eq!(old.as_ref().unwrap().line_no, 3);
+        assert_eq!(new.as_ref().unwrap().line_no, 3);
+    }
+
+    #[test]
+    /// UI-R-208 — a completely empty line inside a hunk is never a meta row.
+    fn ut_empty_hunk_line_is_never_a_meta_row() {
+        let rows = rows_of("@@ -1,3 +1,3 @@\n a\n\n b\n");
+        assert!(
+            !rows
+                .iter()
+                .any(|r| matches!(r, DiffRow::Meta { text } if text.is_empty()))
+        );
+    }
+
+    #[test]
+    /// UI-R-208, UI-E-097 — a completely empty line before any hunk header stays a meta
+    /// row: the amended fallback is scoped to lines inside a hunk. Regression guard: this
+    /// already passes against the unfixed parser and must keep passing after the fix.
+    fn ut_empty_line_outside_any_hunk_stays_a_meta_row() {
+        let rows = rows_of("diff --git a/f b/f\n\n@@ -1 +1 @@\n a\n");
+        assert!(matches!(&rows[1], DiffRow::Meta { text } if text.is_empty()));
+    }
+
+    #[test]
+    /// UI-E-128 — an empty hunk line and a lone-space context line parse identically.
+    fn ut_empty_and_lone_space_hunk_lines_parse_identically() {
+        let empty = rows_of("@@ -1,2 +1,2 @@\n a\n\n");
+        let space = rows_of("@@ -1,2 +1,2 @@\n a\n \n");
+        assert_eq!(empty[2], space[2]);
+    }
+
+    #[test]
     /// UI-E-099 — an empty diff has no rows, and selection reports none.
     fn ut_empty_diff_has_no_rows_and_reports_no_selection() {
         let s = DiffViewStateBuilder::default().build().unwrap();
@@ -2533,6 +2585,26 @@ mod tests {
         let row3 = s.row(3).unwrap();
         assert_eq!(row3.old_line, Some(3));
         assert_eq!(row3.new_line, Some(3));
+    }
+
+    #[test]
+    /// UI-R-285 — in full-file mode, an empty line inside a hunk is still a numbered
+    /// context row on both sides (the `parse_full_file`/UI-E-114 path reuses the same
+    /// hunk rows `parse` produces, so this is a regression guard, not a new code path).
+    fn ut_full_file_mode_numbers_an_empty_hunk_line_as_context_too() {
+        let s = DiffViewStateBuilder::default()
+            .build_with_diff_and_file("@@ -1,3 +1,3 @@\n a\n\n b\n", "a\n\nb\n")
+            .unwrap();
+        let DiffRow::Pair { kind, old, new } = &s.rows()[2] else {
+            panic!("expected a pair row")
+        };
+        assert_eq!(*kind, DiffKind::Context);
+        let old = old.as_ref().unwrap();
+        let new = new.as_ref().unwrap();
+        assert_eq!(old.text, "");
+        assert_eq!(new.text, "");
+        assert_eq!(old.line_no, 2);
+        assert_eq!(new.line_no, 2);
     }
 
     #[test]
