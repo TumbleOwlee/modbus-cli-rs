@@ -1480,7 +1480,8 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-209 — a removed run pairs positionwise with the added run that follows it.
+    /// UI-R-209, UI-R-280 — a removed run pairs positionwise with the added run that
+    /// follows it.
     fn ut_removed_run_pairs_positionwise_with_the_following_added_run() {
         let rows = rows_of("@@ -1,2 +1,2 @@\n-a\n-b\n+x\n+y\n");
         let DiffRow::Pair { old, new, .. } = &rows[1] else {

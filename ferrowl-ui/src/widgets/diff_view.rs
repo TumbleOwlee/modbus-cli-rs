@@ -1,3 +1,5 @@
+use std::ops::Range;
+
 use derive_builder::Builder;
 use getset::{CopyGetters, Getters, Setters, WithSetters};
 use ratatui::{
@@ -171,6 +173,83 @@ fn group_runs(chars: Vec<(char, Style)>) -> Vec<(String, Style)> {
     out
 }
 
+/// Splits `text` into the word tokens of UI-R-281 — one token per maximal run of word
+/// characters (letter, digit or `_`), one per maximal run of anything else — as
+/// half-open char-index ranges into `text`.
+fn word_tokens(text: &str) -> Vec<Range<usize>> {
+    let mut out = Vec::new();
+    let mut start = 0usize;
+    let mut current: Option<bool> = None;
+    for (i, c) in text.chars().enumerate() {
+        let is_word = c.is_alphanumeric() || c == '_';
+        match current {
+            Some(w) if w == is_word => {}
+            Some(_) => {
+                out.push(start..i);
+                start = i;
+            }
+            None => {}
+        }
+        current = Some(is_word);
+    }
+    let len = text.chars().count();
+    if len > 0 {
+        out.push(start..len);
+    }
+    out
+}
+
+/// The char-index ranges of `text` holding tokens (UI-R-281) that `other` does not,
+/// after a longest-common-subsequence match over the two token texts: the tokens present
+/// on only this side (UI-R-280, UI-R-283). Adjacent surviving ranges are merged so one
+/// emphasised stretch is one span.
+fn word_diff_spans(text: &str, other: &str) -> Vec<Range<usize>> {
+    let chars: Vec<char> = text.chars().collect();
+    let other_chars: Vec<char> = other.chars().collect();
+    let a = word_tokens(text);
+    let b = word_tokens(other);
+    let text_of = |chars: &[char], r: &Range<usize>| chars[r.clone()].iter().collect::<String>();
+    let a_tok: Vec<String> = a.iter().map(|r| text_of(&chars, r)).collect();
+    let b_tok: Vec<String> = b.iter().map(|r| text_of(&other_chars, r)).collect();
+
+    let (la, lb) = (a_tok.len(), b_tok.len());
+    let mut dp = vec![vec![0usize; lb + 1]; la + 1];
+    for i in (0..la).rev() {
+        for j in (0..lb).rev() {
+            dp[i][j] = if a_tok[i] == b_tok[j] {
+                dp[i + 1][j + 1] + 1
+            } else {
+                dp[i + 1][j].max(dp[i][j + 1])
+            };
+        }
+    }
+    let mut matched = vec![false; la];
+    let (mut i, mut j) = (0usize, 0usize);
+    while i < la && j < lb {
+        if a_tok[i] == b_tok[j] && dp[i][j] == dp[i + 1][j + 1] + 1 {
+            matched[i] = true;
+            i += 1;
+            j += 1;
+        } else if dp[i + 1][j] >= dp[i][j + 1] {
+            i += 1;
+        } else {
+            j += 1;
+        }
+    }
+
+    let mut spans: Vec<Range<usize>> = Vec::new();
+    for (idx, range) in a.into_iter().enumerate() {
+        if matched[idx] {
+            continue;
+        }
+        match spans.last_mut() {
+            Some(last) if last.end == range.start => last.end = range.end,
+            _ => spans.push(range),
+        }
+    }
+    spans
+}
+
 impl DiffView {
     /// The per-side diff style of UI-R-219: the widget's own removed/added style
     /// for a changed row's old/new side respectively, the general text style for context.
@@ -200,8 +279,9 @@ impl DiffView {
     /// display row of a wrapped entry too (UI-R-279), its blank gutter drawn on top of
     /// the band rather than leaving a hole in the colour.
     // One argument per independently-varying render input (row position, kind, side,
-    // entry, labels, gutter width, language); grouping them into a context struct would
-    // just move the same count into field access without reducing it.
+    // entry, labels, gutter width, language, the counterpart text for word emphasis);
+    // grouping them into a context struct would just move the same count into field
+    // access without reducing it.
     #[allow(clippy::too_many_arguments)]
     fn draw_entry(
         &self,
@@ -218,6 +298,7 @@ impl DiffView {
         wrap: bool,
         sub_row: usize,
         marked_ranges: &[MarkedRange],
+        counterpart: Option<&str>,
     ) {
         if rect.width == 0 {
             return;
@@ -276,7 +357,28 @@ impl DiffView {
             // Highlighting is computed against the entry's full text, then `h_scroll`
             // drops leading characters (UI-R-232): highlighting a pre-truncated string
             // would shift every span's start against the language's real column.
-            let chars = styled_chars(&e.text, style, language, &self.syntax_theme);
+            let mut chars = styled_chars(&e.text, style, language, &self.syntax_theme);
+            // UI-R-281, UI-R-283: the emphasis is applied before wrapping (UI-E-125) and
+            // before the `h_scroll` skip below, so both paths inherit it style-preserving.
+            let emphasis = match (kind, counterpart) {
+                (DiffKind::Added | DiffKind::Removed, Some(other)) => {
+                    word_diff_spans(&e.text, other)
+                }
+                _ => Vec::new(),
+            };
+            if !emphasis.is_empty() {
+                let emph_style = match side {
+                    Side::Old => self.style.removed_word,
+                    Side::New => self.style.added_word,
+                };
+                if let Some(bg) = emph_style.bg {
+                    for span in &emphasis {
+                        for s in chars.iter_mut().take(span.end).skip(span.start) {
+                            s.1 = s.1.bg(bg);
+                        }
+                    }
+                }
+            }
             if wrap {
                 let wrapped =
                     crate::widgets::markdown_render::word_wrap(&chars, text_width as usize, 0);
@@ -567,6 +669,7 @@ impl StatefulWidget for &DiffView {
                                     wrap,
                                     sub,
                                     &marked_ranges,
+                                    new.as_ref().map(|e| e.text.as_str()),
                                 );
                             } else {
                                 // UI-R-262: the shorter side pads its remaining rows
@@ -589,6 +692,7 @@ impl StatefulWidget for &DiffView {
                                     wrap,
                                     sub,
                                     &marked_ranges,
+                                    old.as_ref().map(|e| e.text.as_str()),
                                 );
                             } else {
                                 buf.set_style(new_rect, self.style.general);
@@ -698,6 +802,7 @@ impl StatefulWidget for &DiffView {
                                     wrap,
                                     sub,
                                     &marked_ranges,
+                                    new.as_ref().map(|e| e.text.as_str()),
                                 );
                             }
                             if let Some(sub) = new_sub {
@@ -715,6 +820,7 @@ impl StatefulWidget for &DiffView {
                                     wrap,
                                     sub,
                                     &marked_ranges,
+                                    old.as_ref().map(|e| e.text.as_str()),
                                 );
                             }
                         }
@@ -910,7 +1016,15 @@ mod tests {
                 .layout(layout)
                 .build_with_diff("@@ -1,1 +1,1 @@\n-a\n+b\n")
                 .unwrap();
-            let w = DiffView::default();
+            // "a" and "b" share no token (UI-E-126), so word emphasis would otherwise
+            // paint the whole cell; pin it to the same colors as the row bands so this
+            // test still pins the plain band, unaffected by the (separately tested)
+            // emphasis.
+            let mut w = DiffView::default();
+            let removed = w.style.removed;
+            let added = w.style.added;
+            w.style.set_removed_word(removed);
+            w.style.set_added_word(added);
             let mut b = buffer(20, 3);
             StatefulWidget::render(&w, Rect::new(0, 0, 20, 3), &mut b, &mut st);
             // Row 0 is the meta header. Split draws old and new on the same row 1;
@@ -1367,6 +1481,13 @@ mod tests {
                 .fg(ratatui::style::Color::Yellow)
                 .bg(ratatui::style::Color::Gray),
         );
+        // "removed" and "added" share no token, so UI-E-126 emphasises the whole word;
+        // pin the emphasis backgrounds to the same colors so the assertions below still
+        // pin the widget's own row styles rather than the (separately tested) emphasis.
+        w.style
+            .set_removed_word(Style::default().bg(ratatui::style::Color::Cyan));
+        w.style
+            .set_added_word(Style::default().bg(ratatui::style::Color::Gray));
         w.style.set_meta(
             Style::default()
                 .fg(ratatui::style::Color::Green)
@@ -1655,5 +1776,173 @@ mod tests {
             "          ",
             "new side has nothing more to draw, so its padded row is blank"
         );
+    }
+
+    #[test]
+    /// UI-R-281 — `word_tokens` splits a line into maximal word-character runs and
+    /// maximal runs of anything else, as char-index ranges.
+    fn ut_word_tokens_split_word_runs_from_everything_else() {
+        assert_eq!(
+            word_tokens("let a = 1;"),
+            vec![0..3, 3..4, 4..5, 5..8, 8..9, 9..10]
+        );
+        assert_eq!(word_tokens(""), Vec::<std::ops::Range<usize>>::new());
+        assert_eq!(word_tokens("ab_1 cd"), vec![0..4, 4..5, 5..7]);
+    }
+
+    #[test]
+    /// UI-R-280, UI-R-281, UI-R-283 — `word_diff_spans` returns the char-index ranges of
+    /// `text` holding tokens `other` does not, after an LCS match over the two token lists.
+    fn ut_word_diff_spans_are_the_tokens_only_this_side_holds() {
+        let old = "let a = 1;";
+        let new = "let b = 1;";
+        assert_eq!(word_diff_spans(old, new), vec![4..5]);
+        assert_eq!(word_diff_spans(new, old), vec![4..5]);
+    }
+
+    #[test]
+    /// UI-E-126 — two rows sharing no token are emphasised end to end, one span
+    /// covering the whole text.
+    fn ut_word_diff_spans_with_no_shared_tokens_covers_the_whole_text() {
+        assert_eq!(word_diff_spans("aaa", "bbb"), vec![0..3]);
+    }
+
+    #[test]
+    /// UI-R-283 — in the split layout, a paired removed/added row differing in one word
+    /// has that word's cells carrying the emphasis style and every other text cell (plus
+    /// the gutter and any cells past the text) carrying the row band.
+    fn ut_changed_words_carry_the_emphasis_style_and_the_rest_the_band() {
+        let mut st = state_with("@@ -1,1 +1,1 @@\n-let a = 1;\n+let b = 1;\n");
+        let w = DiffView::default();
+        let mut b = buffer(40, 2);
+        StatefulWidget::render(&w, Rect::new(0, 0, 40, 2), &mut b, &mut st);
+        let style = DiffViewStyle::default();
+        // Row 0 is the meta header, row 1 the pair row. Old pane: gutter "1" +
+        // separator at columns 0..2, text from column 2. The changed word "a" is the
+        // fourth text character ("let a = 1;"), at column 6.
+        assert_eq!(b[(6, 1)].bg, style.removed_word.bg.unwrap());
+        assert_eq!(
+            b[(2, 1)].bg,
+            style.removed.bg.unwrap(),
+            "unchanged text keeps the band"
+        );
+        assert_eq!(
+            b[(0, 1)].bg,
+            style.removed.bg.unwrap(),
+            "gutter keeps the band"
+        );
+        // New pane starts at column 20 (half of 40).
+        assert_eq!(b[(26, 1)].bg, style.added_word.bg.unwrap());
+        assert_eq!(
+            b[(22, 1)].bg,
+            style.added.bg.unwrap(),
+            "unchanged text keeps the band"
+        );
+    }
+
+    #[test]
+    /// UI-R-284 — an emphasised span keeps the syntax foreground the language computed;
+    /// only the background changes.
+    fn ut_word_emphasis_keeps_the_syntax_foreground() {
+        let mut st = DiffViewStateBuilder::default()
+            .language(Some(ferrowl_syntax::Language::Lua))
+            .build_with_diff("@@ -1,1 +1,1 @@\n-local a = 1\n+local b = 1\n")
+            .unwrap();
+        let w = DiffView::default();
+        let mut b = buffer(40, 2);
+        StatefulWidget::render(&w, Rect::new(0, 0, 40, 2), &mut b, &mut st);
+        let plain = state_with("@@ -1,1 +1,1 @@\n-local a = 1\n+local b = 1\n");
+        let mut plain_st = plain;
+        let plain_w = DiffView::default();
+        let mut plain_b = buffer(40, 2);
+        StatefulWidget::render(
+            &plain_w,
+            Rect::new(0, 0, 40, 2),
+            &mut plain_b,
+            &mut plain_st,
+        );
+        // Row 0 is the meta header, row 1 the pair row. The "local" keyword at
+        // columns 2..7 gets a syntax foreground under highlighting, different from the
+        // plain no-language render, while the emphasised cell (column 8, the changed
+        // word "a"/"b") keeps that same syntax-computed foreground.
+        assert_ne!(
+            b[(2, 1)].fg,
+            plain_b[(2, 1)].fg,
+            "language changes the foreground"
+        );
+        let style = DiffViewStyle::default();
+        assert_eq!(b[(8, 1)].bg, style.removed_word.bg.unwrap());
+        assert_ne!(
+            b[(8, 1)].fg,
+            style.removed_word.fg.unwrap(),
+            "foreground stays the syntax theme's, not the emphasis style's own"
+        );
+    }
+
+    #[test]
+    /// UI-E-124 — an unpaired row (the surplus side has no counterpart) carries no word
+    /// emphasis: it is one plain band end to end.
+    fn ut_unpaired_added_row_carries_no_word_emphasis() {
+        let mut st = state_with("@@ -1,2 +1,1 @@\n-a\n-b\n+x\n");
+        let w = DiffView::default();
+        let mut b = buffer(40, 3);
+        StatefulWidget::render(&w, Rect::new(0, 0, 40, 3), &mut b, &mut st);
+        let style = DiffViewStyle::default();
+        // Row 0 is the meta header, row 1 the first pair ("a" against "x", which is
+        // fully emphasised since it shares no token), row 2 the surplus removed line
+        // "b" with no added counterpart.
+        for x in 0..20 {
+            assert_eq!(
+                b[(x, 2)].bg,
+                style.removed.bg.unwrap(),
+                "column {x} should be the plain band, no emphasis"
+            );
+        }
+    }
+
+    #[test]
+    /// UI-E-125 — wrapping on, a differing word straddling the wrap point stays
+    /// emphasised on both display rows it lands on.
+    fn ut_word_emphasis_continues_across_a_wrap_point() {
+        let mut st = DiffViewStateBuilder::default()
+            .wrap(true)
+            .build_with_diff("@@ -1,1 +1,1 @@\n-aaaa bbbbbbbb\n+aaaa cccccccc\n")
+            .unwrap();
+        let w = DiffView::default();
+        let mut b = buffer(24, 6);
+        StatefulWidget::render(&w, Rect::new(0, 0, 24, 6), &mut b, &mut st);
+        let style = DiffViewStyle::default();
+        let mut found = false;
+        for y in 0..6 {
+            for x in 0..12 {
+                if b[(x, y)].bg == style.removed_word.bg.unwrap() {
+                    found = true;
+                }
+            }
+        }
+        assert!(found, "the differing word's emphasis survives wrapping");
+    }
+
+    #[test]
+    /// UI-R-282 — the word-emphasis styles are builder-settable on the widget, and a
+    /// caller-set style is what actually paints (regression against a hardcoded default).
+    fn ut_word_emphasis_styles_are_builder_settable() {
+        let mut st = state_with("@@ -1,1 +1,1 @@\n-a\n+b\n");
+        let custom = Style::default().bg(ratatui::style::Color::Rgb(9, 9, 9));
+        let w = DiffViewBuilder::default()
+            .style(
+                DiffViewStyleBuilder::default()
+                    .added_word(custom)
+                    .removed_word(custom)
+                    .build()
+                    .unwrap(),
+            )
+            .build()
+            .unwrap();
+        let mut b = buffer(40, 2);
+        StatefulWidget::render(&w, Rect::new(0, 0, 40, 2), &mut b, &mut st);
+        // Row 0 is the meta header, row 1 the pair row.
+        assert_eq!(b[(2, 1)].bg, custom.bg.unwrap());
+        assert_eq!(b[(22, 1)].bg, custom.bg.unwrap());
     }
 }
