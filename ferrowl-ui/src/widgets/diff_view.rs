@@ -10,7 +10,7 @@ use ratatui::{
 
 use crate::Border;
 use crate::state::{
-    DiffEntry, DiffKind, DiffLayout, DiffMode, DiffRow, DiffViewState, RowPart, Side,
+    DiffEntry, DiffKind, DiffLayout, DiffMode, DiffRow, DiffViewState, MarkedRange, RowPart, Side,
 };
 use crate::style::{DiffViewStyle, SyntaxTheme};
 use crate::traits::Margins;
@@ -227,6 +227,7 @@ impl DiffView {
         h_scroll: usize,
         wrap: bool,
         sub_row: usize,
+        marked_ranges: &[MarkedRange],
     ) {
         if rect.width == 0 {
             return;
@@ -240,9 +241,27 @@ impl DiffView {
             } else {
                 gutter_text_for(row_idx, entry, labels)
             };
+            let gutter_rect = Rect::new(rect.x, rect.y, gutter_width, 1);
+            // UI-R-267: a marked range's colour fills the whole gutter cell as a
+            // background, under the label or line-number text (UI-R-268) — the label's
+            // own style keeps its foreground but drops its background so the fill shows
+            // through.
+            let marked = entry.and_then(|e| {
+                marked_ranges
+                    .iter()
+                    .find(|m| m.side == side && m.lines.contains(&e.line_no))
+            });
+            let gutter_style = if let Some(m) = marked {
+                buf.set_style(gutter_rect, Style::default().bg(m.color));
+                Style {
+                    bg: None,
+                    ..self.style.general
+                }
+            } else {
+                self.style.general
+            };
             let gutter_str = format!("{text:>width$}", width = gutter_width as usize);
-            Paragraph::new(Text::from(gutter_str).style(self.style.general))
-                .render(Rect::new(rect.x, rect.y, gutter_width, 1), buf);
+            Paragraph::new(Text::from(gutter_str).style(gutter_style)).render(gutter_rect, buf);
         }
         let marker_x = rect.x + gutter_width;
         let marker = if continuation {
@@ -374,6 +393,7 @@ impl StatefulWidget for &DiffView {
         let focused_side = state.focused_side();
         let old_labels = state.old_labels().clone();
         let new_labels = state.new_labels().clone();
+        let marked_ranges = state.marked_ranges().clone();
         let language = state.language;
         let scroll_offset = state.scroll_offset();
         let h_scroll = state.h_scroll();
@@ -469,6 +489,7 @@ impl StatefulWidget for &DiffView {
                                     h_scroll,
                                     wrap,
                                     sub,
+                                    &marked_ranges,
                                 );
                             } else {
                                 // UI-R-262: the shorter side pads its remaining rows
@@ -490,6 +511,7 @@ impl StatefulWidget for &DiffView {
                                     h_scroll,
                                     wrap,
                                     sub,
+                                    &marked_ranges,
                                 );
                             } else {
                                 buf.set_style(new_rect, self.style.general);
@@ -569,6 +591,7 @@ impl StatefulWidget for &DiffView {
                                     h_scroll,
                                     wrap,
                                     sub,
+                                    &marked_ranges,
                                 );
                             }
                             if let Some(sub) = new_sub {
@@ -585,6 +608,7 @@ impl StatefulWidget for &DiffView {
                                     h_scroll,
                                     wrap,
                                     sub,
+                                    &marked_ranges,
                                 );
                             }
                         }
@@ -761,6 +785,64 @@ mod tests {
         let line = row_text(&b, 1, 40);
         assert!(line.contains("OLD"));
         assert!(line.contains("NEW"));
+    }
+
+    #[test]
+    /// UI-R-267 — a marked range fills the gutter background of every row whose file line
+    /// falls inside it, on the side it names, and leaves the rest of that side's gutter
+    /// unpainted.
+    fn ut_marked_range_fills_the_gutter_cells_of_every_row_it_covers() {
+        let mut st = state_with("@@ -1,3 +1,3 @@\n a\n b\n c\n");
+        st.set_marked_ranges(vec![MarkedRange {
+            side: Side::Old,
+            lines: 1..=2,
+            color: ratatui::style::Color::Yellow,
+        }]);
+        let w = DiffView::default();
+        // Row 0 is the `@@` header (a meta row); rows 1-3 hold file lines 1-3.
+        let mut b = buffer(20, 4);
+        StatefulWidget::render(&w, Rect::new(0, 0, 20, 4), &mut b, &mut st);
+        assert_eq!(b[(0, 1)].bg, ratatui::style::Color::Yellow);
+        assert_eq!(b[(0, 2)].bg, ratatui::style::Color::Yellow);
+        assert_ne!(b[(0, 3)].bg, ratatui::style::Color::Yellow);
+    }
+
+    #[test]
+    /// UI-R-268 — a gutter label's text still shows over a marked range's colour; neither
+    /// swallows the other.
+    fn ut_a_gutter_label_keeps_its_text_under_a_marked_range_colour() {
+        let mut st = state_with("@@ -1,1 +1,1 @@\n a\n");
+        st.set_old_labels(Some(vec![String::new(), "L".into()]));
+        st.set_marked_ranges(vec![MarkedRange {
+            side: Side::Old,
+            lines: 1..=1,
+            color: ratatui::style::Color::Blue,
+        }]);
+        let w = DiffView::default();
+        // Row 0 is the `@@` header (a meta row); row 1 holds the labeled line.
+        let mut b = buffer(20, 2);
+        StatefulWidget::render(&w, Rect::new(0, 0, 20, 2), &mut b, &mut st);
+        assert_eq!(b[(0, 1)].symbol(), "L");
+        assert_eq!(b[(0, 1)].bg, ratatui::style::Color::Blue);
+    }
+
+    #[test]
+    /// UI-E-117 — a marked range covers only rows with a real line number on that side; a
+    /// filler row's gutter stays blank and unpainted, visibly interrupting the block.
+    fn ut_marked_range_leaves_a_filler_rows_gutter_blank() {
+        let mut st = state_with("@@ -1,1 +1,2 @@\n-a\n+x\n+y\n");
+        st.set_marked_ranges(vec![MarkedRange {
+            side: Side::Old,
+            lines: 1..=5,
+            color: ratatui::style::Color::Yellow,
+        }]);
+        let w = DiffView::default();
+        // Row 0 is the `@@` header (a meta row); row 1 is the paired line ("a"/"x"); row 2
+        // is the filler on the old side ("y" has no old-side entry).
+        let mut b = buffer(20, 3);
+        StatefulWidget::render(&w, Rect::new(0, 0, 20, 3), &mut b, &mut st);
+        assert_eq!(b[(0, 1)].bg, ratatui::style::Color::Yellow);
+        assert_ne!(b[(0, 2)].bg, ratatui::style::Color::Yellow);
     }
 
     #[test]

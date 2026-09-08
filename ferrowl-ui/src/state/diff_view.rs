@@ -3,7 +3,7 @@ use std::ops::RangeInclusive;
 use crossterm::event::{KeyCode, KeyModifiers};
 use derive_builder::Builder;
 use getset::{CopyGetters, Getters, Setters};
-use ratatui::style::Style;
+use ratatui::style::{Color, Style};
 
 use super::vim::emit_osc52;
 use crate::EventResult;
@@ -63,6 +63,16 @@ pub enum Side {
 pub enum DiffMode {
     Normal,
     Visual,
+}
+
+/// A colour-filled span of one side's file line numbers (UI-R-266): named by file line, not
+/// row index, so a consumer that knows only the file — not this widget's row layout — can
+/// mark it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MarkedRange {
+    pub side: Side,
+    pub lines: RangeInclusive<usize>,
+    pub color: Color,
 }
 
 /// A row's diff kind and its old/new file line numbers, each absent where that side holds
@@ -190,6 +200,11 @@ pub struct DiffViewState {
     #[getset(skip)]
     #[builder(setter(skip), default)]
     has_full_file: bool,
+    /// Colour-filled file line ranges painted over the gutter (UI-R-266), settable when
+    /// built and afterwards.
+    #[getset(get = "pub", set = "pub")]
+    #[builder(default)]
+    marked_ranges: Vec<MarkedRange>,
 }
 
 /// The diff widget's hunk-only or full-file display mode (UI-R-257).
@@ -470,7 +485,15 @@ fn parse_full_file(diff: &str, new_text: &str) -> (Vec<DiffRow>, Vec<RangeInclus
         // A hunk header naming a line past the supplied text (mismatched patch/file) must
         // not panic: the walk stops at `new_lines.len()`, leaving the rest to whatever the
         // patch itself supplies.
-        let fold_end = new_start.min(new_lines.len() + 1);
+        // A `+n,0` header (a zero-context deletion) names the new-side line the removal
+        // follows, not one it owns (UI-R-253): that line belongs to the pre-hunk fold, at
+        // the pre-hunk delta, so it is included here rather than left for the post-hunk walk.
+        let hunk_boundary = if new_count == 0 {
+            new_start + 1
+        } else {
+            new_start
+        };
+        let fold_end = hunk_boundary.min(new_lines.len() + 1);
         if next_line < fold_end {
             let fold_start = out.len();
             while next_line < fold_end {
@@ -507,8 +530,15 @@ fn parse_full_file(diff: &str, new_text: &str) -> (Vec<DiffRow>, Vec<RangeInclus
         // A `+0,0` header (a deleted file's only hunk) would otherwise leave `next_line`
         // at 0, and the trailing walk below treats line 0 as one past the end rather than
         // "nothing follows" and indexes `new_lines[usize::MAX]`: clamped to 1, since there
-        // is no line 0 to resume from either way.
-        next_line = (new_start + new_count).max(1);
+        // is no line 0 to resume from either way. A `+n,0` header's boundary line was
+        // already folded in above through `hunk_boundary`, so resuming there (not
+        // `new_start`) avoids reprocessing it.
+        next_line = if new_count == 0 {
+            hunk_boundary
+        } else {
+            new_start + new_count
+        }
+        .max(1);
         delta += new_count as isize - old_count as isize;
     }
     if next_line <= new_lines.len() {
@@ -1377,6 +1407,30 @@ mod tests {
         };
         assert!(old.is_none());
         assert_eq!(new.as_ref().unwrap().text, "y");
+    }
+
+    #[test]
+    /// UI-R-266 — `marked_ranges` is settable through the builder and, separately, through
+    /// the post-build setter.
+    fn ut_marked_ranges_are_settable_at_build_time_and_after() {
+        let built = vec![MarkedRange {
+            side: Side::Old,
+            lines: 1..=2,
+            color: Color::Yellow,
+        }];
+        let mut s = DiffViewStateBuilder::default()
+            .marked_ranges(built.clone())
+            .build()
+            .unwrap();
+        assert_eq!(s.marked_ranges(), &built);
+
+        let after = vec![MarkedRange {
+            side: Side::New,
+            lines: 3..=4,
+            color: Color::Red,
+        }];
+        s.set_marked_ranges(after.clone());
+        assert_eq!(s.marked_ranges(), &after);
     }
 
     #[test]
@@ -2395,6 +2449,31 @@ mod tests {
             .build_with_diff_and_file("@@ -1,1 +0,0 @@\n-a\n", "")
             .unwrap();
         assert!(!s.rows().is_empty());
+    }
+
+    #[test]
+    /// UI-R-253 — a zero-context deletion's `+n,0` header names the new-side line the
+    /// removal follows, not one it owns: the new line at that number precedes the hunk
+    /// and must keep the pre-hunk delta, not the hunk's own.
+    fn ut_zero_context_deletion_leaves_the_preceding_new_line_unaffected() {
+        let s = DiffViewStateBuilder::default()
+            .build_with_diff_and_file("@@ -3,1 +2,0 @@\n-x\n", "one\ntwo\nfour\n")
+            .unwrap();
+        let row = s
+            .rows()
+            .iter()
+            .find_map(|r| match r {
+                DiffRow::Pair { new: Some(new), .. } if new.line_no == 2 => Some(r.clone()),
+                _ => None,
+            })
+            .expect("new line 2 present");
+        let DiffRow::Pair { old: Some(old), .. } = row else {
+            panic!("expected a pair row")
+        };
+        assert_eq!(
+            old.line_no, 2,
+            "new line 2 precedes the hunk, unaffected by it"
+        );
     }
 
     #[test]
