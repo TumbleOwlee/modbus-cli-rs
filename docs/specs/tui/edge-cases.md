@@ -129,6 +129,7 @@ Boundary behavior, error semantics, intentional or known constraints. The known-
 | **UI-E-125** | Word-diff span on a wrapped row (UI-R-260, UI-R-279) | the span is split at the wrap point and continues on the next display row, which keeps the row band elsewhere |
 | **UI-E-126** | Paired rows sharing no word token, so every token differs (UI-R-281) | the whole text of both rows is emphasised (UI-R-283), leaving the gutter and the cells past the text in the plain band |
 | **UI-E-127** | Added and removed rows on a terminal rendering no background color (UI-R-216) | they read as context rows: with the `+`/`-` marker column removed, the row style is the only kind cue and no textual fallback is drawn |
+| **UI-E-129** | A UI-R-280 pair whose text holds more than 512 word tokens (UI-R-281) on either side | the pair gets no word-diff emphasis at all: both rows stay plain full-width bands, the same result an unpaired row already gives (UI-E-124), rather than pay the LCS table's quadratic cost on a minified or base64 line |
 
 ## File tree widget
 
