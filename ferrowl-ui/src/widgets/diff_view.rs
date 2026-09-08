@@ -1808,6 +1808,47 @@ mod tests {
     }
 
     #[test]
+    /// UI-E-126 — rendered: two rows sharing no token ("aaa" against "bbb") are
+    /// emphasised end to end, every text cell carrying the emphasis style, while the
+    /// gutter and the cells past the end of the text still carry the plain band.
+    fn ut_rows_sharing_no_token_are_emphasised_end_to_end() {
+        let mut st = state_with("@@ -1,1 +1,1 @@\n-aaa\n+bbb\n");
+        let w = DiffView::default();
+        let mut b = buffer(40, 2);
+        StatefulWidget::render(&w, Rect::new(0, 0, 40, 2), &mut b, &mut st);
+        let style = DiffViewStyle::default();
+        // Row 0 is the meta header, row 1 the pair row. Old pane: gutter+separator at
+        // columns 0..2, text "aaa" at columns 2..5, trailing blank cells past it.
+        assert_eq!(
+            b[(0, 1)].bg,
+            style.removed.bg.unwrap(),
+            "gutter keeps the band"
+        );
+        for x in 2..5 {
+            assert_eq!(b[(x, 1)].bg, style.removed_word.bg.unwrap());
+        }
+        assert_eq!(
+            b[(10, 1)].bg,
+            style.removed.bg.unwrap(),
+            "past the end of the text keeps the band"
+        );
+        // New pane starts at column 20.
+        assert_eq!(
+            b[(20, 1)].bg,
+            style.added.bg.unwrap(),
+            "gutter keeps the band"
+        );
+        for x in 22..25 {
+            assert_eq!(b[(x, 1)].bg, style.added_word.bg.unwrap());
+        }
+        assert_eq!(
+            b[(30, 1)].bg,
+            style.added.bg.unwrap(),
+            "past the end of the text keeps the band"
+        );
+    }
+
+    #[test]
     /// UI-R-283 — in the split layout, a paired removed/added row differing in one word
     /// has that word's cells carrying the emphasis style and every other text cell (plus
     /// the gutter and any cells past the text) carrying the row band.
@@ -1830,6 +1871,11 @@ mod tests {
             b[(0, 1)].bg,
             style.removed.bg.unwrap(),
             "gutter keeps the band"
+        );
+        assert_eq!(
+            b[(15, 1)].bg,
+            style.removed.bg.unwrap(),
+            "past the end of the text keeps the band"
         );
         // New pane starts at column 20 (half of 40).
         assert_eq!(b[(26, 1)].bg, style.added_word.bg.unwrap());
@@ -1882,7 +1928,7 @@ mod tests {
     #[test]
     /// UI-E-124 — an unpaired row (the surplus side has no counterpart) carries no word
     /// emphasis: it is one plain band end to end.
-    fn ut_unpaired_added_row_carries_no_word_emphasis() {
+    fn ut_unpaired_removed_row_carries_no_word_emphasis() {
         let mut st = state_with("@@ -1,2 +1,1 @@\n-a\n-b\n+x\n");
         let w = DiffView::default();
         let mut b = buffer(40, 3);
@@ -1904,23 +1950,54 @@ mod tests {
     /// UI-E-125 — wrapping on, a differing word straddling the wrap point stays
     /// emphasised on both display rows it lands on.
     fn ut_word_emphasis_continues_across_a_wrap_point() {
+        // A 14-char token wholly unmatched on either side (UI-E-126: "xxxxxxxxxxxxxx"
+        // and "yyyyyyyyyyyyyy" share no token) against a 10-char text width forces
+        // `word_wrap` to hard-split the token mid-word (it exceeds the cap, so the
+        // token-preserving path never applies): 10 chars land on the entry's first
+        // display row, the remaining 4 on its continuation. The single emphasis span
+        // covers the whole token, so both display rows must carry it.
         let mut st = DiffViewStateBuilder::default()
             .wrap(true)
-            .build_with_diff("@@ -1,1 +1,1 @@\n-aaaa bbbbbbbb\n+aaaa cccccccc\n")
+            .build_with_diff("@@ -1,1 +1,1 @@\n-xxxxxxxxxxxxxx\n+yyyyyyyyyyyyyy\n")
             .unwrap();
         let w = DiffView::default();
-        let mut b = buffer(24, 6);
-        StatefulWidget::render(&w, Rect::new(0, 0, 24, 6), &mut b, &mut st);
+        let mut b = buffer(24, 3);
+        StatefulWidget::render(&w, Rect::new(0, 0, 24, 3), &mut b, &mut st);
         let style = DiffViewStyle::default();
-        let mut found = false;
-        for y in 0..6 {
-            for x in 0..12 {
-                if b[(x, y)].bg == style.removed_word.bg.unwrap() {
-                    found = true;
-                }
-            }
+        // Row 0 is the meta header. Row 1 is the entry's first display row, row 2 its
+        // wrapped continuation. Old pane text starts at column 2 ("1 " gutter).
+        for x in 2..12 {
+            assert_eq!(
+                b[(x, 1)].bg,
+                style.removed_word.bg.unwrap(),
+                "old pane row 1 column {x} should carry the emphasis"
+            );
         }
-        assert!(found, "the differing word's emphasis survives wrapping");
+        for x in 2..6 {
+            assert_eq!(
+                b[(x, 2)].bg,
+                style.removed_word.bg.unwrap(),
+                "old pane row 2 (continuation) column {x} should carry the emphasis"
+            );
+        }
+        // New pane starts at column 14 ("1 " gutter at 12..14).
+        for x in 14..24 {
+            assert_eq!(
+                b[(x, 1)].bg,
+                style.added_word.bg.unwrap(),
+                "new pane row 1 column {x} should carry the emphasis"
+            );
+        }
+        for x in 14..18 {
+            assert_eq!(
+                b[(x, 2)].bg,
+                style.added_word.bg.unwrap(),
+                "new pane row 2 (continuation) column {x} should carry the emphasis"
+            );
+        }
+        // Continuation gutters stay blank (UI-R-261), which the row band still covers.
+        assert_eq!(b[(0, 2)].bg, style.removed.bg.unwrap());
+        assert_eq!(b[(12, 2)].bg, style.added.bg.unwrap());
     }
 
     #[test]
