@@ -351,14 +351,37 @@ impl DiffView {
             .collect()
     }
 
-    /// Draws one annotation's bordered block (UI-R-270) into `rect`, whose height is
-    /// exactly its measured text rows plus its two border rows (UI-R-272). The body is a
-    /// read-only [`MarkdownInputField`] over the annotation's text, so it renders markdown
-    /// rather than showing the source (UI-R-271).
-    fn draw_annotation(&self, buf: &mut Buffer, rect: Rect, text: &str) {
+    /// Draws one annotation's bordered block (UI-R-270) into `rect`, whose own top row is
+    /// the block's `skip_rows`'th row rather than always its own row zero (UI-R-265): a
+    /// window scrolled to display rows past the block's own top border must still show
+    /// the portion of the block that falls inside it, not skip the whole block because
+    /// its own first row is off the top. `skip_rows == 0` draws the ordinary top-bordered
+    /// block; `skip_rows >= 1` omits the top border (already scrolled past) and starts
+    /// the body `skip_rows - 1` of its own display rows in. The body is a read-only
+    /// [`MarkdownInputField`] over the annotation's text, so it renders markdown rather
+    /// than showing the source (UI-R-271).
+    fn draw_annotation(
+        &self,
+        buf: &mut Buffer,
+        rect: Rect,
+        text: &str,
+        total_height: u16,
+        skip_rows: u16,
+    ) {
+        if rect.width == 0 || rect.height == 0 {
+            return;
+        }
+        // Rendered once into a scratch buffer sized to the block's own full height,
+        // starting at its own row zero, then only the window's visible slice is copied
+        // into `buf` at `rect` (UI-R-265): a window scrolled to somewhere past the
+        // block's own top border must still show the portion that falls inside it, which
+        // a render confined to `rect` alone (whose height is already the clipped
+        // remainder) cannot reconstruct on its own.
+        let scratch_rect = Rect::new(0, 0, rect.width, total_height);
+        let mut scratch = Buffer::empty(scratch_rect);
         let block = Block::bordered().style(self.style.border);
-        let inner = block.inner(rect);
-        block.render(rect, buf);
+        let inner = block.inner(scratch_rect);
+        block.render(scratch_rect, &mut scratch);
         let mut state = MarkdownInputFieldStateBuilder::default()
             .build()
             .expect("MarkdownInputFieldStateBuilder fields all default");
@@ -368,7 +391,16 @@ impl DiffView {
             .line_numbers(false)
             .build()
             .expect("MarkdownInputFieldBuilder fields all default");
-        StatefulWidget::render(&field, inner, buf, &mut state);
+        StatefulWidget::render(&field, inner, &mut scratch, &mut state);
+        for row in 0..rect.height {
+            let src_y = skip_rows + row;
+            if src_y >= total_height {
+                break;
+            }
+            for col in 0..rect.width {
+                buf[(rect.x + col, rect.y + row)] = scratch[(col, src_y)].clone();
+            }
+        }
     }
 
     fn pane_border_style(&self, side: Side, focused_side: Side) -> Style {
@@ -481,6 +513,11 @@ impl StatefulWidget for &DiffView {
 
                 let visible_height = old_area.height as usize;
                 let display = state.display_rows();
+                // Tracks which annotations this render has already drawn: a block spans
+                // several display rows, and the window can start mid-block (UI-R-265),
+                // so "first `RowPart::Annotation` seen for this index" — not "`sub_row ==
+                // 0`" — is what triggers the one draw.
+                let mut drawn_annotations = std::collections::HashSet::new();
                 // The rendered row window starts at `scroll_offset` display rows, not
                 // display row zero (amended UI-R-231); `display_idx` is a display row's
                 // position within that window.
@@ -558,17 +595,24 @@ impl StatefulWidget for &DiffView {
                             }
                         }
                         RowPart::Annotation { index, sub_row } => {
-                            // UI-R-270, UI-E-116: drawn once, on the block's own first
-                            // display row, spanning both panes; later `sub_row`s are the
-                            // same block already drawn, so they draw nothing further.
-                            if sub_row == 0 {
+                            // UI-R-270, UI-E-116: drawn once, spanning both panes; later
+                            // `sub_row`s of the same block draw nothing further.
+                            if drawn_annotations.insert(index) {
                                 let total = annotation_heights[index] as u16 + 2;
-                                let remaining =
+                                let own_remaining = total.saturating_sub(sub_row as u16);
+                                let pane_remaining =
                                     (old_area.y + old_area.height).saturating_sub(y_old);
                                 self.draw_annotation(
                                     buf,
-                                    Rect::new(old_area.x, y_old, meta_width, total.min(remaining)),
+                                    Rect::new(
+                                        old_area.x,
+                                        y_old,
+                                        meta_width,
+                                        own_remaining.min(pane_remaining),
+                                    ),
                                     &annotations[index].text,
+                                    total,
+                                    sub_row as u16,
                                 );
                             }
                             continue;
@@ -614,6 +658,7 @@ impl StatefulWidget for &DiffView {
 
                 let display = state.display_rows();
                 let visible_height = pane.height as usize;
+                let mut drawn_annotations = std::collections::HashSet::new();
                 for (display_idx, d) in display
                     .iter()
                     .enumerate()
@@ -674,13 +719,21 @@ impl StatefulWidget for &DiffView {
                             }
                         }
                         RowPart::Annotation { index, sub_row } => {
-                            if sub_row == 0 {
+                            if drawn_annotations.insert(index) {
                                 let total = annotation_heights[index] as u16 + 2;
-                                let remaining = (pane.y + pane.height).saturating_sub(y);
+                                let own_remaining = total.saturating_sub(sub_row as u16);
+                                let pane_remaining = (pane.y + pane.height).saturating_sub(y);
                                 self.draw_annotation(
                                     buf,
-                                    Rect::new(pane.x, y, pane.width, total.min(remaining)),
+                                    Rect::new(
+                                        pane.x,
+                                        y,
+                                        pane.width,
+                                        own_remaining.min(pane_remaining),
+                                    ),
                                     &annotations[index].text,
+                                    total,
+                                    sub_row as u16,
                                 );
                             }
                             continue;
@@ -916,6 +969,37 @@ mod tests {
         StatefulWidget::render(&w, Rect::new(0, 0, 20, 3), &mut b, &mut st);
         assert_eq!(b[(0, 1)].bg, ratatui::style::Color::Yellow);
         assert_ne!(b[(0, 2)].bg, ratatui::style::Color::Yellow);
+    }
+
+    #[test]
+    /// UI-R-270, UI-R-265 — an annotation block scrolled to somewhere past its own first
+    /// row still draws its visible portion, clipped to the pane, rather than vanishing
+    /// because its own top row is off the top of the window.
+    fn ut_annotation_block_stays_visible_when_scrolled_to_its_middle() {
+        let mut st = DiffViewStateBuilder::default()
+            .annotations(vec![Annotation {
+                side: Side::Old,
+                lines: 1..=1,
+                text: "a\nb\nc\nd".into(),
+            }])
+            .build_with_diff("@@ -1,1 +1,1 @@\n a\n")
+            .unwrap();
+        // Display rows: 0 = meta, 1 = the pair row, 2..=7 = the annotation's own 6 rows
+        // (top border, then "a","b","c","d", then bottom border). Scrolling to 4 puts
+        // the window's first visible row on "b", well past the block's own top border.
+        st.set_scroll_offset(4);
+        let w = DiffView::default();
+        let mut b = buffer(40, 4);
+        StatefulWidget::render(&w, Rect::new(0, 0, 40, 4), &mut b, &mut st);
+        assert!(
+            row_text(&b, 0, 40).contains('b'),
+            "the block's own second text line should be the window's first visible row"
+        );
+        assert_eq!(
+            b[(0, 3)].symbol(),
+            "└",
+            "the block's own last visible row is its bottom border"
+        );
     }
 
     #[test]

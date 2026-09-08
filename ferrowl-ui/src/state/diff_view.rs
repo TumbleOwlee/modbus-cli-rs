@@ -1567,8 +1567,17 @@ mod tests {
             .build_with_diff("@@ -1,2 +1,2 @@\n a\n b\n")
             .unwrap();
         s.set_annotation_heights(vec![3]);
+        s.set_visible_height(3);
         s.set_active_row(1);
         let display = s.display_rows();
+        let annotation_rows = display
+            .iter()
+            .filter(|d| matches!(d.part, RowPart::Annotation { index: 0, .. }))
+            .count();
+        assert_eq!(
+            annotation_rows, 5,
+            "the annotation contributes its measured 3 rows plus its 2 border rows"
+        );
         let anchor_display_count = display
             .iter()
             .filter(|d| d.logical == 1 && !matches!(d.part, RowPart::Annotation { .. }))
@@ -1578,6 +1587,14 @@ mod tests {
             "the annotation's rows never widen row 1's own span"
         );
         assert_eq!(s.selected_rows(), Some(1..=1));
+
+        s.handle_events(KeyModifiers::NONE, KeyCode::Char('j'));
+        assert_eq!(
+            s.active_row(),
+            2,
+            "j steps straight to the next logical row, never landing inside the block"
+        );
+        assert_eq!(s.selected_rows(), Some(2..=2));
     }
 
     #[test]
