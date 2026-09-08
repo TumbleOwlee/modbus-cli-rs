@@ -10,11 +10,12 @@ use ratatui::{
 
 use crate::Border;
 use crate::state::{
-    DiffEntry, DiffKind, DiffLayout, DiffMode, DiffRow, DiffViewState, MarkedRange, RowPart, Side,
+    Annotation, DiffEntry, DiffKind, DiffLayout, DiffMode, DiffRow, DiffViewState,
+    MarkdownInputFieldStateBuilder, MarkedRange, RowPart, Side,
 };
 use crate::style::{DiffViewStyle, SyntaxTheme};
 use crate::traits::Margins;
-use crate::widgets::Title;
+use crate::widgets::{MarkdownInputFieldBuilder, Title};
 
 /// A read-only side-by-side or unified diff viewer rendered from a
 /// [`DiffViewState`](crate::state::DiffViewState). Configure border, title, margins, and
@@ -336,6 +337,40 @@ impl DiffView {
         }
     }
 
+    /// Measures every annotation's own text height at `inner_width` (UI-R-272), using a
+    /// read-only, line-numberless [`MarkdownInputField`] — the same field `draw_annotation`
+    /// draws with, so the measured and drawn layouts cannot differ.
+    fn measure_annotations(&self, annotations: &[Annotation], inner_width: u16) -> Vec<usize> {
+        let field = MarkdownInputFieldBuilder::default()
+            .line_numbers(false)
+            .build()
+            .expect("MarkdownInputFieldBuilder fields all default");
+        annotations
+            .iter()
+            .map(|a| field.measure(&a.text, inner_width))
+            .collect()
+    }
+
+    /// Draws one annotation's bordered block (UI-R-270) into `rect`, whose height is
+    /// exactly its measured text rows plus its two border rows (UI-R-272). The body is a
+    /// read-only [`MarkdownInputField`] over the annotation's text, so it renders markdown
+    /// rather than showing the source (UI-R-271).
+    fn draw_annotation(&self, buf: &mut Buffer, rect: Rect, text: &str) {
+        let block = Block::bordered().style(self.style.border);
+        let inner = block.inner(rect);
+        block.render(rect, buf);
+        let mut state = MarkdownInputFieldStateBuilder::default()
+            .build()
+            .expect("MarkdownInputFieldStateBuilder fields all default");
+        state.set_content(text);
+        state.set_read_only(true);
+        let field = MarkdownInputFieldBuilder::default()
+            .line_numbers(false)
+            .build()
+            .expect("MarkdownInputFieldBuilder fields all default");
+        StatefulWidget::render(&field, inner, buf, &mut state);
+    }
+
     fn pane_border_style(&self, side: Side, focused_side: Side) -> Style {
         if side == focused_side {
             self.style.focused
@@ -439,6 +474,11 @@ impl StatefulWidget for &DiffView {
                 let meta_width = meta_right.saturating_sub(old_area.x);
                 state.set_meta_width(meta_width as usize);
 
+                let annotations = state.annotations().clone();
+                let annotation_heights =
+                    self.measure_annotations(&annotations, meta_width.saturating_sub(2).max(1));
+                state.set_annotation_heights(annotation_heights.clone());
+
                 let visible_height = old_area.height as usize;
                 let display = state.display_rows();
                 // The rendered row window starts at `scroll_offset` display rows, not
@@ -517,6 +557,22 @@ impl StatefulWidget for &DiffView {
                                 buf.set_style(new_rect, self.style.general);
                             }
                         }
+                        RowPart::Annotation { index, sub_row } => {
+                            // UI-R-270, UI-E-116: drawn once, on the block's own first
+                            // display row, spanning both panes; later `sub_row`s are the
+                            // same block already drawn, so they draw nothing further.
+                            if sub_row == 0 {
+                                let total = annotation_heights[index] as u16 + 2;
+                                let remaining =
+                                    (old_area.y + old_area.height).saturating_sub(y_old);
+                                self.draw_annotation(
+                                    buf,
+                                    Rect::new(old_area.x, y_old, meta_width, total.min(remaining)),
+                                    &annotations[index].text,
+                                );
+                            }
+                            continue;
+                        }
                     }
                     self.paint_row_highlight(
                         buf,
@@ -550,6 +606,11 @@ impl StatefulWidget for &DiffView {
                     pane.width.saturating_sub(gutter + 1).max(1) as usize,
                 );
                 state.set_meta_width(pane.width as usize);
+
+                let annotations = state.annotations().clone();
+                let annotation_heights =
+                    self.measure_annotations(&annotations, pane.width.saturating_sub(2).max(1));
+                state.set_annotation_heights(annotation_heights.clone());
 
                 let display = state.display_rows();
                 let visible_height = pane.height as usize;
@@ -611,6 +672,18 @@ impl StatefulWidget for &DiffView {
                                     &marked_ranges,
                                 );
                             }
+                        }
+                        RowPart::Annotation { index, sub_row } => {
+                            if sub_row == 0 {
+                                let total = annotation_heights[index] as u16 + 2;
+                                let remaining = (pane.y + pane.height).saturating_sub(y);
+                                self.draw_annotation(
+                                    buf,
+                                    Rect::new(pane.x, y, pane.width, total.min(remaining)),
+                                    &annotations[index].text,
+                                );
+                            }
+                            continue;
                         }
                     }
                     self.paint_row_highlight(buf, state, row_idx, &[rect]);
@@ -843,6 +916,138 @@ mod tests {
         StatefulWidget::render(&w, Rect::new(0, 0, 20, 3), &mut b, &mut st);
         assert_eq!(b[(0, 1)].bg, ratatui::style::Color::Yellow);
         assert_ne!(b[(0, 2)].bg, ratatui::style::Color::Yellow);
+    }
+
+    #[test]
+    /// UI-R-270 — an annotation renders as one bordered block directly beneath the last
+    /// row of its range, spanning the full width in both layouts (both panes in split).
+    fn ut_annotation_block_spans_the_width_beneath_the_last_row_of_its_range() {
+        for layout in [DiffLayout::Split, DiffLayout::Unified] {
+            let mut st = DiffViewStateBuilder::default()
+                .layout(layout)
+                .annotations(vec![Annotation {
+                    side: Side::Old,
+                    lines: 1..=2,
+                    text: "hi".into(),
+                }])
+                .build_with_diff("@@ -1,2 +1,2 @@\n a\n b\n")
+                .unwrap();
+            let w = DiffView::default();
+            let mut b = buffer(40, 6);
+            StatefulWidget::render(&w, Rect::new(0, 0, 40, 6), &mut b, &mut st);
+            // Rows 0-2 are the header and the two aligned lines; the block starts right
+            // beneath row 2, spanning the full width as one block, not two separate
+            // per-pane blocks.
+            assert_eq!(b[(0, 3)].symbol(), "┌", "layout {layout:?}");
+            assert_eq!(b[(39, 3)].symbol(), "┐", "layout {layout:?}");
+        }
+    }
+
+    #[test]
+    /// UI-R-271 — an annotation's body is rendered markdown, not its raw source: emphasis
+    /// markers do not appear in the drawn text.
+    fn ut_annotation_body_renders_markdown_not_its_source() {
+        let mut st = DiffViewStateBuilder::default()
+            .annotations(vec![Annotation {
+                side: Side::Old,
+                lines: 1..=1,
+                text: "**bold**".into(),
+            }])
+            .build_with_diff("@@ -1,1 +1,1 @@\n a\n")
+            .unwrap();
+        let w = DiffView::default();
+        let mut b = buffer(40, 5);
+        StatefulWidget::render(&w, Rect::new(0, 0, 40, 5), &mut b, &mut st);
+        let body = row_text(&b, 3, 40);
+        assert!(body.contains("bold"));
+        assert!(!body.contains('*'));
+    }
+
+    #[test]
+    /// UI-R-272 — an annotation block's height is its measured text rows, at the block's
+    /// own inner width, plus its two border rows.
+    fn ut_annotation_height_is_the_measured_rows_plus_its_border() {
+        let text = "one two three four five six seven eight nine ten";
+        let mut st = DiffViewStateBuilder::default()
+            .annotations(vec![Annotation {
+                side: Side::Old,
+                lines: 1..=1,
+                text: text.into(),
+            }])
+            .build_with_diff("@@ -1,1 +1,1 @@\n a\n")
+            .unwrap();
+        let w = DiffView::default();
+        let mut b = buffer(20, 12);
+        StatefulWidget::render(&w, Rect::new(0, 0, 20, 12), &mut b, &mut st);
+        let inner_width = 20u16.saturating_sub(2);
+        let field = MarkdownInputFieldBuilder::default()
+            .line_numbers(false)
+            .build()
+            .unwrap();
+        let measured = field.measure(text, inner_width);
+        // Row 2 is the block's top border, row 1 the header/line above it: the bottom
+        // border sits `measured + 1` rows below the top border.
+        assert_eq!(b[(0, 2)].symbol(), "┌");
+        assert_eq!(b[(0, 2 + measured as u16 + 1)].symbol(), "└");
+    }
+
+    #[test]
+    /// UI-E-115 — an annotation naming a side and line range no row covers renders
+    /// nothing and does not panic.
+    fn ut_out_of_range_annotation_and_marked_range_are_silently_not_rendered() {
+        let mut st = DiffViewStateBuilder::default()
+            .annotations(vec![Annotation {
+                side: Side::New,
+                lines: 999..=999,
+                text: "note".into(),
+            }])
+            .marked_ranges(vec![MarkedRange {
+                side: Side::New,
+                lines: 999..=999,
+                color: ratatui::style::Color::Yellow,
+            }])
+            .build_with_diff("@@ -1,1 +1,1 @@\n a\n")
+            .unwrap();
+        let w = DiffView::default();
+        let mut b = buffer(20, 2);
+        StatefulWidget::render(&w, Rect::new(0, 0, 20, 2), &mut b, &mut st);
+        assert_ne!(b[(0, 1)].bg, ratatui::style::Color::Yellow);
+    }
+
+    #[test]
+    /// UI-E-116 — several annotations anchored to the same row draw one block after
+    /// another, in the order they were supplied.
+    fn ut_several_annotations_on_one_row_stack_in_supplied_order() {
+        let mut st = DiffViewStateBuilder::default()
+            .annotations(vec![
+                Annotation {
+                    side: Side::Old,
+                    lines: 1..=1,
+                    text: "first".into(),
+                },
+                Annotation {
+                    side: Side::Old,
+                    lines: 1..=1,
+                    text: "second".into(),
+                },
+            ])
+            .build_with_diff("@@ -1,1 +1,1 @@\n a\n")
+            .unwrap();
+        let w = DiffView::default();
+        let mut b = buffer(40, 9);
+        StatefulWidget::render(&w, Rect::new(0, 0, 40, 9), &mut b, &mut st);
+        let mut first_row = None;
+        let mut second_row = None;
+        for y in 0..9 {
+            let line = row_text(&b, y, 40);
+            if line.contains("first") {
+                first_row = Some(y);
+            }
+            if line.contains("second") {
+                second_row = Some(y);
+            }
+        }
+        assert!(first_row.unwrap() < second_row.unwrap());
     }
 
     #[test]
