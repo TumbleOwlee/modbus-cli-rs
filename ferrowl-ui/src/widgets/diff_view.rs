@@ -100,11 +100,12 @@ fn side_gutter_text_width(rows: &[DiffRow], labels: Option<&Vec<String>>, side: 
     label_width.max(fallback_width)
 }
 
-/// Clamps a gutter's digit/label width so the digits plus their one separator space never
-/// exceed `pane_width` (UI-R-172), the same rule the code editor applies to its own
-/// gutter: clamp the combined `text_width + 1`, then drop the separator back off.
+/// Clamps a gutter's combined width — its digits/label plus their one separator space —
+/// so it never exceeds `pane_width` (UI-R-172, amended UI-R-216/UI-R-218's inheritance of
+/// the code editor's UI-R-167): the separator column that once sat between the gutter and
+/// the removed marker column is now the gutter's own trailing blank column.
 fn clamp_gutter(text_width: usize, pane_width: u16) -> u16 {
-    ((text_width + 1).min(pane_width as usize) as u16).saturating_sub(1)
+    (text_width + 1).min(pane_width as usize) as u16
 }
 
 /// The gutter text for one row's side entry: the label at `row_idx` if the label list
@@ -121,21 +122,6 @@ fn gutter_text_for(
             .and_then(|l| l.get(row_idx))
             .cloned()
             .unwrap_or_else(|| e.line_no.to_string()),
-    }
-}
-
-/// One side's marker character (UI-R-216): `-` on the old side and `+` on the new side of
-/// a changed row's present entry, space for a context row or a filler. `DiffRow::Pair`
-/// carries one shared `kind` even when both sides are present and their text differs (a
-/// genuine two-sided change, not two independent rows), so the marker is derived from
-/// which side holds the entry, not from `kind` alone.
-fn marker_for(kind: &DiffKind, side: Side, has_entry: bool) -> char {
-    if !has_entry || *kind == DiffKind::Context {
-        return ' ';
-    }
-    match side {
-        Side::Old => '-',
-        Side::New => '+',
     }
 }
 
@@ -203,13 +189,13 @@ impl DiffView {
         }
     }
 
-    /// Draws one side's gutter, marker and text into `rect` (whose width is exactly
-    /// `gutter_width + 1 + text_width`). A filler entry (UI-R-212) draws a blank gutter of
-    /// the full width, a space marker and no text. `sub_row` selects which wrapped display
-    /// row of the entry's text this call draws (UI-R-260); `sub_row > 0` draws a
-    /// continuation, with a blank gutter and marker of its own (UI-R-261) rather than
-    /// `draw_entry`'s own text-absent blank, so a continuation is visually distinct from a
-    /// filler even though both leave the gutter and marker empty.
+    /// Draws one side's gutter and text into `rect` (whose width is exactly
+    /// `gutter_width + text_width`). A filler entry (UI-R-212) draws a blank gutter of the
+    /// full width and no text. `sub_row` selects which wrapped display row of the entry's
+    /// text this call draws (UI-R-260); `sub_row > 0` draws a continuation, with a blank
+    /// gutter of its own (UI-R-261) rather than `draw_entry`'s own text-absent blank, so a
+    /// continuation is visually distinct from a filler even though both leave the gutter
+    /// empty.
     // One argument per independently-varying render input (row position, kind, side,
     // entry, labels, gutter width, language); grouping them into a context struct would
     // just move the same count into field access without reducing it.
@@ -236,13 +222,14 @@ impl DiffView {
         let style = self.side_style(kind, side);
         buf.set_style(rect, self.style.general);
         let continuation = sub_row > 0;
-        if gutter_width > 0 {
+        let gutter_text_width = gutter_width.saturating_sub(1);
+        if gutter_text_width > 0 {
             let text = if continuation {
                 String::new()
             } else {
                 gutter_text_for(row_idx, entry, labels)
             };
-            let gutter_rect = Rect::new(rect.x, rect.y, gutter_width, 1);
+            let gutter_rect = Rect::new(rect.x, rect.y, gutter_text_width, 1);
             // UI-R-267: a marked range's colour fills the whole gutter cell as a
             // background, under the label or line-number text (UI-R-268) — the label's
             // own style keeps its foreground but drops its background so the fill shows
@@ -261,19 +248,11 @@ impl DiffView {
             } else {
                 self.style.general
             };
-            let gutter_str = format!("{text:>width$}", width = gutter_width as usize);
+            let gutter_str = format!("{text:>width$}", width = gutter_text_width as usize);
             Paragraph::new(Text::from(gutter_str).style(gutter_style)).render(gutter_rect, buf);
         }
-        let marker_x = rect.x + gutter_width;
-        let marker = if continuation {
-            ' '
-        } else {
-            marker_for(kind, side, entry.is_some())
-        };
-        Paragraph::new(Text::from(marker.to_string()).style(style))
-            .render(Rect::new(marker_x, rect.y, 1, 1), buf);
-        let text_x = marker_x + 1;
-        let text_width = rect.width.saturating_sub(gutter_width + 1);
+        let text_x = rect.x + gutter_width;
+        let text_width = rect.width.saturating_sub(gutter_width);
         if text_width == 0 {
             return;
         }
@@ -496,8 +475,8 @@ impl StatefulWidget for &DiffView {
                     new_area.width,
                 );
                 state.set_content_widths(
-                    old_area.width.saturating_sub(old_gutter + 1).max(1) as usize,
-                    new_area.width.saturating_sub(new_gutter + 1).max(1) as usize,
+                    old_area.width.saturating_sub(old_gutter).max(1) as usize,
+                    new_area.width.saturating_sub(new_gutter).max(1) as usize,
                 );
                 // Without a border, extend to the outer area's own right edge: an odd
                 // inner width leaves one column unused by either pane (`Length(half)`
@@ -651,8 +630,8 @@ impl StatefulWidget for &DiffView {
                     pane.width,
                 );
                 state.set_content_widths(
-                    pane.width.saturating_sub(gutter + 1).max(1) as usize,
-                    pane.width.saturating_sub(gutter + 1).max(1) as usize,
+                    pane.width.saturating_sub(gutter).max(1) as usize,
+                    pane.width.saturating_sub(gutter).max(1) as usize,
                 );
                 state.set_meta_width(pane.width as usize);
 
@@ -877,14 +856,27 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-216 — the marker column holds `-`, `+` or space.
-    fn ut_marker_column_holds_minus_plus_or_space() {
-        let mut st = state_with("@@ -1,1 +1,1 @@\n-old\n+new\n");
+    /// UI-R-216, UI-E-127 — no marker column is drawn between gutter and text: the cell
+    /// immediately after the gutter digits is blank, no `-` or `+` appears anywhere in
+    /// either rendered row, and the first text character sits at the same column it does
+    /// on a context row.
+    fn ut_no_marker_column_is_drawn_between_gutter_and_text() {
+        let mut st = state_with("@@ -1,1 +1,1 @@\n-old\n+new\n context\n");
         let w = DiffView::default();
-        let mut b = buffer(20, 2);
-        StatefulWidget::render(&w, Rect::new(0, 0, 20, 2), &mut b, &mut st);
-        assert_eq!(b[(1, 1)].symbol(), "-");
-        assert_eq!(b[(11, 1)].symbol(), "+");
+        let mut b = buffer(20, 3);
+        StatefulWidget::render(&w, Rect::new(0, 0, 20, 3), &mut b, &mut st);
+        let changed = row_text(&b, 1, 20);
+        let context = row_text(&b, 2, 20);
+        assert_eq!(&changed[1..2], " ", "old pane separator is blank");
+        assert_eq!(&changed[11..12], " ", "new pane separator is blank");
+        assert!(!changed.contains('-'));
+        assert!(!changed.contains('+'));
+        assert!(changed[2..10].starts_with("old"));
+        assert!(changed[12..].starts_with("new"));
+        assert!(
+            context[2..10].starts_with("context"),
+            "text starts at the same column as a changed row's"
+        );
     }
 
     #[test]
@@ -1411,8 +1403,7 @@ mod tests {
 
     #[test]
     /// UI-R-232 (rendering half) — a nonzero horizontal offset shifts the text of every
-    /// pane, dropping that many leading characters, while the gutter and marker columns
-    /// stay put.
+    /// pane, dropping that many leading characters, while the gutter columns stay put.
     fn ut_horizontal_offset_shifts_the_text_of_every_pane_leaving_gutters_in_place() {
         let mut st = state_with("@@ -1,1 +1,1 @@\n-abcdefgh\n+xyzuvwtq\n");
         st.set_h_scroll(2);
@@ -1420,38 +1411,38 @@ mod tests {
         let mut b = buffer(40, 2);
         StatefulWidget::render(&w, Rect::new(0, 0, 40, 2), &mut b, &mut st);
         let line = row_text(&b, 1, 40);
-        // Old pane: gutter "1", marker '-' still at their columns; text starts with 'c'
+        // Old pane: gutter "1", separator still blank at its column; text starts with 'c'
         // (the third character), the first two dropped.
         assert_eq!(&line[0..1], "1");
-        assert_eq!(&line[1..2], "-");
+        assert_eq!(&line[1..2], " ");
         assert!(line[2..20].starts_with('c'));
-        // New pane: same shift applied independently, at its own gutter/marker columns.
+        // New pane: same shift applied independently, at its own gutter columns.
         assert_eq!(&line[20..21], "1");
-        assert_eq!(&line[21..22], "+");
+        assert_eq!(&line[21..22], " ");
         assert!(line[22..].starts_with('z'));
     }
 
     #[test]
-    /// UI-R-261 — a continuation display row of a wrapped entry carries a blank gutter
-    /// and a blank marker column, its text starting at the same column as the row's first
-    /// display row.
-    fn ut_continuation_row_has_a_blank_gutter_and_marker_and_aligned_text() {
+    /// UI-R-261 (amended) — a continuation display row of a wrapped entry carries a blank
+    /// gutter, its text starting at the same column as the row's first display row.
+    fn ut_continuation_row_has_a_blank_gutter_and_aligned_text() {
         let mut st = DiffViewStateBuilder::default()
             .wrap(true)
             .build_with_diff("@@ -1,1 +1,1 @@\n-aaaa bbbb\n+short\n")
             .unwrap();
         let w = DiffView::default();
-        // Each 10-wide pane: gutter "1" (1 col) + marker (1 col) + 8 text columns, so
-        // "aaaa bbbb" (9 chars) wraps to "aaaa" then "bbbb" and "short" (5 chars) does not.
+        // Each 10-wide pane: gutter "1" (1 col, digit) + separator (1 col) + 8 text
+        // columns, so "aaaa bbbb" (9 chars) wraps to "aaaa" then "bbbb" and "short" (5
+        // chars) does not.
         let mut b = buffer(20, 3);
         StatefulWidget::render(&w, Rect::new(0, 0, 20, 3), &mut b, &mut st);
         let first = row_text(&b, 1, 20);
         assert_eq!(&first[0..1], "1", "first display row carries the gutter");
-        assert_eq!(&first[1..2], "-", "and the marker");
+        assert_eq!(&first[1..2], " ", "separator is blank");
         assert!(first[2..10].starts_with("aaaa"));
         let continuation = row_text(&b, 2, 20);
         assert_eq!(&continuation[0..1], " ", "continuation gutter is blank");
-        assert_eq!(&continuation[1..2], " ", "continuation marker is blank");
+        assert_eq!(&continuation[1..2], " ", "continuation separator is blank");
         assert!(
             continuation[2..10].starts_with("bbbb"),
             "continuation text starts at the same column as the first row's text"
@@ -1459,16 +1450,16 @@ mod tests {
     }
 
     #[test]
-    /// UI-E-112 — a pane too narrow for the gutter and marker column treats the available
-    /// text width as one column, wrapping one character per display row, rendered.
+    /// UI-E-112 (amended) — a pane too narrow for the gutter treats the available text
+    /// width as one column, wrapping one character per display row, rendered.
     fn ut_pane_too_narrow_for_the_gutter_wraps_one_character_per_row_when_rendered() {
         let mut st = DiffViewStateBuilder::default()
             .wrap(true)
             .build_with_diff("@@1@@\n-abcd\n+x\n")
             .unwrap();
         let w = DiffView::default();
-        // Each 3-wide pane: gutter "1" (1 col) + marker (1 col) + 1 text column, so "abcd"
-        // wraps one character per display row. The header ("@@1@@", 5 chars) also wraps at
+        // Each 3-wide pane: gutter "1" (1 col, digit) + separator (1 col) + 1 text column,
+        // so "abcd" wraps one character per display row. The header ("@@1@@", 5 chars) also wraps at
         // this width, so scan for the old side's column (2) rather than fixing row indices.
         let mut b = buffer(6, 10);
         StatefulWidget::render(&w, Rect::new(0, 0, 6, 10), &mut b, &mut st);

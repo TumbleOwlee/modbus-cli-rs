@@ -259,8 +259,7 @@ pub(crate) enum RowPart {
     /// chunk list (`None` when that side draws nothing on this display row — the unified
     /// layout draws one side's lines, then the other's, sequentially, and the split
     /// layout pads the shorter side's remaining rows blank, UI-R-262). A side's `Some(0)`
-    /// carries the gutter and marker; any later sub-row is a wrapped continuation
-    /// (UI-R-261).
+    /// carries the gutter; any later sub-row is a wrapped continuation (UI-R-261).
     Pair {
         old_sub: Option<usize>,
         new_sub: Option<usize>,
@@ -2277,8 +2276,8 @@ mod tests {
     }
 
     #[test]
-    /// UI-E-112 — a pane too narrow for the gutter and marker column treats the available
-    /// text width as one column, wrapping one character per display row.
+    /// UI-E-112 (amended) — a pane too narrow for the gutter treats the available text
+    /// width as one column, wrapping one character per display row.
     fn ut_pane_too_narrow_for_the_gutter_wraps_one_character_per_row() {
         let mut s = DiffViewStateBuilder::default()
             .wrap(true)
