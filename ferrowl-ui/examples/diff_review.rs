@@ -230,13 +230,23 @@ impl Model {
         }
     }
 
-    /// Shows one file's diff between the current base and branch (UI-R-251).
+    /// Shows one file's diff between the current base and branch, with the whole file's
+    /// changes marked in place when its full new-side text is available (UI-R-251,
+    /// UI-R-277). A file deleted on the branch has no new-side text to fetch; `git show`
+    /// fails and the view falls back to hunk-only (UI-E-119, UI-R-259).
     fn show_file(&mut self, path: &str) {
         let base = self.base.input().clone();
         let branch = self.branch.input().clone();
         let range = format!("{base}...{branch}");
         match (self.git)(&["diff", &range, "--", path]) {
-            Ok(out) => self.set_diff(&out),
+            Ok(diff) => match (self.git)(&["show", &format!("{branch}:{path}")]) {
+                Ok(new_text) => {
+                    self.diff = DiffViewStateBuilder::default()
+                        .build_with_diff_and_file(&diff, &new_text)
+                        .unwrap();
+                }
+                Err(_) => self.set_diff(&diff),
+            },
             Err(e) => {
                 self.set_diff("");
                 self.error = Some(e);
@@ -372,10 +382,27 @@ mod tests {
     use super::*;
 
     fn fixture(base: &str, branch: &str, name_status: &str, whole_diff: &str) -> GitFn {
+        fixture_with_show(base, branch, name_status, whole_diff, &[])
+    }
+
+    /// Like `fixture`, plus a table of `(path, full new-side text)` pairs that `git show
+    /// <branch>:<path>` resolves to; any path not listed fails, standing in for a file
+    /// deleted on the branch (UI-E-119).
+    fn fixture_with_show(
+        base: &str,
+        branch: &str,
+        name_status: &str,
+        whole_diff: &str,
+        shows: &[(&str, &str)],
+    ) -> GitFn {
         let base = base.to_string();
         let branch = branch.to_string();
         let name_status = name_status.to_string();
         let whole_diff = whole_diff.to_string();
+        let shows: Vec<(String, String)> = shows
+            .iter()
+            .map(|(p, t)| (p.to_string(), t.to_string()))
+            .collect();
         Box::new(move |args: &[&str]| -> Result<String, String> {
             let range = format!("{base}...{branch}");
             match args {
@@ -385,6 +412,17 @@ mod tests {
                 }
                 ["diff", r] if *r == range => Ok(whole_diff.clone()),
                 ["diff", r, "--", path] if *r == range => Ok(format!("diff for {path}\n")),
+                ["show", rev_path] => {
+                    let prefix = format!("{branch}:");
+                    let path = rev_path
+                        .strip_prefix(&prefix)
+                        .ok_or_else(|| format!("unexpected show arg: {rev_path}"))?;
+                    shows
+                        .iter()
+                        .find(|(p, _)| p == path)
+                        .map(|(_, text)| text.clone())
+                        .ok_or_else(|| format!("path {path} does not exist on {branch}"))
+                }
                 _ => Err(format!("unexpected git args: {args:?}")),
             }
         })
@@ -541,6 +579,45 @@ mod tests {
         assert!(model.paths.is_empty());
         assert!(model.error.is_none());
         assert_eq!(row_count(&model.diff), 0);
+    }
+
+    #[test]
+    /// UI-R-277 — activating a file fetches its full new-side text through the git seam
+    /// and builds the viewer with it, so the rows cover lines outside the changed hunk.
+    fn ut_activated_file_is_shown_from_its_full_new_side_text() {
+        let mut model = Model::new(fixture_with_show(
+            "main",
+            "feature",
+            "M\tsrc/a.rs\n",
+            "",
+            &[("src/a.rs", "before\nA\nafter\n")],
+        ));
+        model.base.set_input("main".to_string());
+        model.branch.set_input("feature".to_string());
+        model.show_file("src/a.rs");
+        assert!(model.error.is_none());
+        assert!(
+            row_count(&model.diff) >= 3,
+            "the full new-side text has three lines; the hunk-only diff alone has one"
+        );
+    }
+
+    #[test]
+    /// UI-E-119 — a file deleted on the selected branch has no new-side text; `git show`
+    /// fails and the example falls back to the hunk-only view (UI-R-259) without an error.
+    fn ut_file_missing_on_the_branch_falls_back_to_hunk_only_without_an_error() {
+        let mut model = Model::new(fixture_with_show(
+            "main",
+            "feature",
+            "D\tsrc/gone.rs\n",
+            "",
+            &[],
+        ));
+        model.base.set_input("main".to_string());
+        model.branch.set_input("feature".to_string());
+        model.show_file("src/gone.rs");
+        assert!(model.error.is_none());
+        assert_eq!(row_count(&model.diff), 1);
     }
 
     fn row_count(diff: &DiffViewState) -> usize {
