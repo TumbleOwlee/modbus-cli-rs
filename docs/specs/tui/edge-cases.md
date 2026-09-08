@@ -129,6 +129,7 @@ Boundary behavior, error semantics, intentional or known constraints. The known-
 | **UI-E-125** | Word-diff span on a wrapped row (UI-R-260, UI-R-279) | the span is split at the wrap point and continues on the next display row, which keeps the row band elsewhere |
 | **UI-E-126** | Paired rows sharing no word token, so every token differs (UI-R-281) | the whole text of both rows is emphasised (UI-R-283), leaving the gutter and the cells past the text in the plain band |
 | **UI-E-127** | Added and removed rows on a terminal rendering no background color (UI-R-216) | they read as context rows: with the `+`/`-` marker column removed, the row style is the only kind cue and no textual fallback is drawn |
+| **UI-E-128** | Empty body line inside a hunk against a lone-space context line (UI-R-285) | both are context rows with empty text on both sides and are indistinguishable once rendered; only a line outside any hunk stays meta (UI-E-097) |
 | **UI-E-129** | Paired added and removed rows (UI-R-280) where either side holds more than 512 word tokens (UI-R-281), as a minified or base64 line does | neither row carries any word-diff span and both keep the plain full-width band of UI-R-278, exactly as an unpaired row does (UI-E-124) |
 
 ## File tree widget

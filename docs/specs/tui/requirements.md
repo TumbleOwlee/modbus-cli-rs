@@ -316,7 +316,7 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **UI-R-207** — The diff widget takes a unified diff text and, optionally, the full new-side file text, and parses the diff into hunks, each hunk's header line supplying the old-side and new-side starting line numbers of its body.
 
-**UI-R-208** — The diff widget classifies each parsed body line by its first character — space as context, `+` as added, `-` as removed — and keeps the remainder of the line as that line's text; every other line of the input is a meta line kept verbatim.
+**UI-R-208** — The diff widget classifies each parsed body line by its first character — space as context, `+` as added, `-` as removed — and keeps the remainder of the line as that line's text; every other non-empty line of the input is a meta line kept verbatim.
 
 **UI-R-209** — The diff widget aligns the diff into rows holding an optional old-side entry and an optional new-side entry: a context line occupies both entries of one row, a run of removed lines pairs positionwise with the run of added lines that follows it, a surplus line on either side occupies a row whose other entry is a filler, and, with the full new-side text supplied (UI-R-207), every file line between and around the hunks occupies a further row holding that line on both sides.
 
@@ -429,6 +429,8 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 **UI-R-283** — A row's word-diff spans (UI-R-281) are painted in the added-word emphasis style on an added row and in the removed-word emphasis style on a removed row (UI-R-282), every other cell of the row keeping the full-width band of UI-R-278.
 
 **UI-R-284** — Word-diff emphasis (UI-R-283) sets the background only: a span's foreground stays whatever UI-R-219 through UI-R-221 give it, so syntax highlighting survives inside the emphasised words.
+
+**UI-R-285** — A body line inside a hunk with no characters at all is a context line whose text is empty, so it occupies both entries of one row (UI-R-209) and both sides advance their file line counter and show their number in the gutter (UI-R-217), never a meta row (UI-R-210).
 
 ## File tree widget
 
