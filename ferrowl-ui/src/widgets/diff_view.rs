@@ -1015,7 +1015,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-262 — the split layout's shorter-side padding stays in the general style:
+    /// UI-E-123 — the split layout's shorter-side padding stays in the general style:
     /// UI-R-278/UI-R-279 paint only the display rows an entry actually occupies, so with
     /// wrapping on, the old side's padded display rows past its own text never carry the
     /// added/removed band.

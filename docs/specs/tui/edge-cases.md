@@ -124,6 +124,10 @@ Boundary behavior, error semantics, intentional or known constraints. The known-
 | **UI-E-120** | Active logical row occupying more display rows than the viewport height (UI-R-260, UI-R-264, UI-R-265) | `j` and `Down` scroll the viewport one display row at a time within that row until its last display row is visible and only then move to the next logical row, `k` and `Up` do the mirror image toward its first display row; the paging keys of UI-R-231 keep counting display rows throughout |
 | **UI-E-121** | Marked range (UI-R-267) covering an added or removed row painted by UI-R-278 | the range's colour wins on that side's gutter cell, so the marked span still reads as one continuous block, and the row style paints the rest of the row |
 | **UI-E-122** | The filler side (UI-R-212) of a row whose other side is added or removed | that side stays unpainted: UI-R-278 paints only the pane holding the entry, so a filler never carries a green or red band |
+| **UI-E-123** | Display rows of one pane past that side's last entry while the other side still has rows (UI-R-211, UI-R-212) | painted in the widget's general background and nothing else: the padding never carries the opposite side's added or removed band (UI-R-278) |
+| **UI-E-124** | Added or removed row left unpaired because the two runs differ in length (UI-R-280) | it carries no word-diff spans and is painted as one plain band (UI-R-278) |
+| **UI-E-125** | Word-diff span on a wrapped row (UI-R-260, UI-R-279) | the span is split at the wrap point and continues on the next display row, which keeps the row band elsewhere |
+| **UI-E-126** | Paired rows sharing no word token, so every token differs (UI-R-281) | the whole text of both rows is emphasised (UI-R-283), leaving the gutter and the cells past the text in the plain band |
 | **UI-E-127** | Added and removed rows on a terminal rendering no background color (UI-R-216) | they read as context rows: with the `+`/`-` marker column removed, the row style is the only kind cue and no textual fallback is drawn |
 
 ## File tree widget

@@ -420,6 +420,16 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **UI-R-279** — Every continuation display row of a wrapped added or removed row (UI-R-260, UI-R-261) is painted across its pane's full width in that row's style, as UI-R-278 paints the first display row.
 
+**UI-R-280** — Within a hunk, the removed rows of a run and the added rows of the run immediately following it are paired in order, the n-th removed row with the n-th added row.
+
+**UI-R-281** — For each pair of UI-R-280 the widget diffs the two texts over word tokens — one token being a run of word characters (letter, digit or `_`) and one being a run of any other characters — and the tokens present on only one side form that side's word-diff spans.
+
+**UI-R-282** — The diff widget carries an added-word and a removed-word emphasis style beside its row styles (UI-R-276), builder-settable, defaulting to a background lighter than the added and the removed row style's background respectively.
+
+**UI-R-283** — A row's word-diff spans (UI-R-281) are painted in the added-word emphasis style on an added row and in the removed-word emphasis style on a removed row (UI-R-282), every other cell of the row keeping the full-width band of UI-R-278.
+
+**UI-R-284** — Word-diff emphasis (UI-R-283) sets the background only: a span's foreground stays whatever UI-R-219 through UI-R-221 give it, so syntax highlighting survives inside the emphasised words.
+
 ## File tree widget
 
 **UI-R-234** — The file tree widget's state is built from a list of file paths and derives the directory nodes from the paths' components, so a caller supplies paths alone and never assembles a tree.
