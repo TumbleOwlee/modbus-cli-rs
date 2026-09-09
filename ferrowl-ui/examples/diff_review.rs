@@ -3,7 +3,7 @@
 
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use ferrowl_ui::{
-    AlternateScreen, Border,
+    AlternateScreen, Border, EventResult,
     state::{
         DiffViewState, DiffViewStateBuilder, FileStatus, FileTreeOutcome, FileTreeState,
         FileTreeStateBuilder, SuggestInputState, SuggestInputStateBuilder,
@@ -49,7 +49,15 @@ enum Focus {
 }
 
 impl Focus {
-    fn next(self) -> Self {
+    /// Cycles forward through base, branch, browser, diff, wrapping; the browser and
+    /// diff panes join the order only once `has_diff` reports a diff has been produced.
+    fn next(self, has_diff: bool) -> Self {
+        if !has_diff {
+            return match self {
+                Focus::BaseInput => Focus::BranchInput,
+                Focus::BranchInput | Focus::FileBrowser | Focus::DiffViewer => Focus::BaseInput,
+            };
+        }
         match self {
             Focus::BaseInput => Focus::BranchInput,
             Focus::BranchInput => Focus::FileBrowser,
@@ -58,7 +66,13 @@ impl Focus {
         }
     }
 
-    fn previous(self) -> Self {
+    fn previous(self, has_diff: bool) -> Self {
+        if !has_diff {
+            return match self {
+                Focus::BranchInput => Focus::BaseInput,
+                Focus::BaseInput | Focus::FileBrowser | Focus::DiffViewer => Focus::BranchInput,
+            };
+        }
         match self {
             Focus::BaseInput => Focus::DiffViewer,
             Focus::BranchInput => Focus::BaseInput,
@@ -190,6 +204,10 @@ impl Model {
         }
     }
 
+    fn has_diff(&self) -> bool {
+        self.diff.row(0).is_some()
+    }
+
     fn set_diff(&mut self, text: &str) {
         self.diff = DiffViewStateBuilder::default()
             .build_with_diff(text)
@@ -305,46 +323,61 @@ fn ui(f: &mut Frame, model: &mut Model) {
 fn handle_key(model: &mut Model, modifiers: KeyModifiers, code: KeyCode) {
     match (modifiers, code) {
         (KeyModifiers::NONE, KeyCode::Tab) => {
-            set_focus(model, model.focus.next());
+            let has_diff = model.has_diff();
+            set_focus(model, model.focus.next(has_diff));
             return;
         }
         (_, KeyCode::BackTab) | (KeyModifiers::SHIFT, KeyCode::Tab) => {
-            set_focus(model, model.focus.previous());
+            let has_diff = model.has_diff();
+            set_focus(model, model.focus.previous(has_diff));
+            return;
+        }
+        (KeyModifiers::NONE, KeyCode::Esc) => {
+            if !dispatch_to_focused(model, modifiers, code) {
+                model.done = true;
+            }
             return;
         }
         _ => {}
     }
 
-    // `q` quits only while an input pane is not focused: with an input focused, `q`
-    // must stay ordinary typed text for branch names containing it.
-    let input_focused = model.focus == Focus::BaseInput || model.focus == Focus::BranchInput;
-    if !input_focused && modifiers == KeyModifiers::NONE && code == KeyCode::Char('q') {
-        model.done = true;
-        return;
-    }
+    dispatch_to_focused(model, modifiers, code);
+}
 
+/// Sends one key to whichever pane holds focus, and reports whether that pane
+/// consumed it: an input closing its suggestion dropdown, the file tree activating or
+/// toggling a node, or the diff widget acting on the key all count as consumed, so
+/// `Esc` (UI-R-223) can be layered above the example's own exit handling.
+fn dispatch_to_focused(model: &mut Model, modifiers: KeyModifiers, code: KeyCode) -> bool {
     match model.focus {
         Focus::BaseInput => {
             let before = model.base.input().clone();
-            model.base.handle_events(modifiers, code);
+            let result = model.base.handle_events(modifiers, code);
             if &before != model.base.input() {
                 model.reload();
             }
+            matches!(result, EventResult::Consumed)
         }
         Focus::BranchInput => {
             let before = model.branch.input().clone();
-            model.branch.handle_events(modifiers, code);
+            let result = model.branch.handle_events(modifiers, code);
             if &before != model.branch.input() {
                 model.reload();
             }
+            matches!(result, EventResult::Consumed)
         }
         Focus::FileBrowser => {
-            if let Some(FileTreeOutcome::Activated(path)) = model.tree.handle_key(modifiers, code) {
-                model.show_file(&path);
+            let outcome = model.tree.handle_key(modifiers, code);
+            if let Some(FileTreeOutcome::Activated(path)) = &outcome {
+                model.show_file(path);
             }
+            outcome.is_some()
         }
         Focus::DiffViewer => {
-            model.diff.handle_events(modifiers, code);
+            matches!(
+                model.diff.handle_events(modifiers, code),
+                EventResult::Consumed
+            )
         }
     }
 }
@@ -459,7 +492,16 @@ mod tests {
     /// `Tab` cycles base, branch, browser, diff forward with wrap; `Shift+Tab` cycles the
     /// same order in reverse with wrap.
     fn ut_tab_cycles_the_four_panes_forward_and_shift_tab_backward_with_wrap() {
-        let mut model = Model::new(fixture("main", "main", "", ""));
+        let mut model = Model::new(fixture(
+            "main",
+            "feature",
+            "M\tsrc/a.rs\n",
+            "diff --git a/src/a.rs b/src/a.rs\n@@ -1 +1 @@\n-old\n+new\n",
+        ));
+        model.base.set_input("main".to_string());
+        model.branch.set_input("feature".to_string());
+        model.reload();
+        assert!(model.has_diff());
         set_focus(&mut model, Focus::BaseInput);
         let forward = [
             Focus::BaseInput,
@@ -476,6 +518,23 @@ mod tests {
             handle_key(&mut model, KeyModifiers::NONE, KeyCode::BackTab);
             assert_eq!(model.focus, *want);
         }
+    }
+
+    #[test]
+    /// Before a valid base+branch selection has produced a diff, `Tab` and `Shift+Tab`
+    /// skip the file browser and diff viewer, cycling base and branch alone.
+    fn ut_tab_skips_the_browser_and_diff_pane_until_a_diff_exists() {
+        let mut model = Model::new(fixture("main", "main", "", ""));
+        assert!(!model.has_diff());
+        set_focus(&mut model, Focus::BaseInput);
+        handle_key(&mut model, KeyModifiers::NONE, KeyCode::Tab);
+        assert_eq!(model.focus, Focus::BranchInput);
+        handle_key(&mut model, KeyModifiers::NONE, KeyCode::Tab);
+        assert_eq!(model.focus, Focus::BaseInput);
+        handle_key(&mut model, KeyModifiers::NONE, KeyCode::BackTab);
+        assert_eq!(model.focus, Focus::BranchInput);
+        handle_key(&mut model, KeyModifiers::NONE, KeyCode::BackTab);
+        assert_eq!(model.focus, Focus::BaseInput);
     }
 
     #[test]
@@ -618,6 +677,31 @@ mod tests {
         model.show_file("src/gone.rs");
         assert!(model.error.is_none());
         assert_eq!(row_count(&model.diff), 1);
+    }
+
+    #[test]
+    /// `Esc` exits the example when the focused pane has nothing open to dismiss.
+    fn ut_escape_exits_when_nothing_is_open_to_dismiss() {
+        let mut model = Model::new(fixture("main", "main", "", ""));
+        set_focus(&mut model, Focus::BranchInput);
+        assert!(!model.branch.suggestions_open());
+        handle_key(&mut model, KeyModifiers::NONE, KeyCode::Esc);
+        assert!(model.done);
+    }
+
+    #[test]
+    /// `Esc` closes an open suggestion dropdown instead of quitting, and a second `Esc`
+    /// with nothing left open then exits.
+    fn ut_escape_dismisses_an_open_suggestion_dropdown_before_quitting() {
+        let mut model = Model::new(fixture("main", "feature", "", ""));
+        set_focus(&mut model, Focus::BaseInput);
+        handle_key(&mut model, KeyModifiers::NONE, KeyCode::Char('m'));
+        assert!(model.base.suggestions_open());
+        handle_key(&mut model, KeyModifiers::NONE, KeyCode::Esc);
+        assert!(!model.done);
+        assert!(!model.base.suggestions_open());
+        handle_key(&mut model, KeyModifiers::NONE, KeyCode::Esc);
+        assert!(model.done);
     }
 
     fn row_count(diff: &DiffViewState) -> usize {
