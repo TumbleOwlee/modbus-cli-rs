@@ -14,7 +14,11 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **UI-R-002** — Screen layout top-to-bottom: the tab bar, a tab widget (UI-R-114) in `Horizontal` layout at its rendered extent across that direction (UI-R-121), one row under the default padding, flexible module content area, fixed-height log pane, one-row command line. The content area absorbs remaining height.
 
-**UI-R-003** — The application owns an ordered list of tabs and one active index. Each tab pairs one module content view with its own log pane. Exactly one tab is active and rendered; the others keep running in the background (UI-R-030).
+**UI-R-003** — The application owns an ordered list of tabs and one active index.
+
+**UI-R-189** — Each tab (UI-R-003) pairs one module content view with its own log pane.
+
+**UI-R-190** — Exactly one tab (UI-R-003) is active and rendered; the others keep running in the background (UI-R-030).
 
 **UI-R-004** — Every tab has a unique display name.
 
@@ -68,7 +72,13 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **UI-R-017** — App-level commands are dispatched by the application: tab lifecycle (`:quit`, `:qall`, `:new`, `:load`), session persistence (`:write`), tab reordering (`:swap`), session-script management (`:session`, `:script copy`), log-ring clear (`:log clear`). Exact syntax and aliases: [`api-contract.md`](./api-contract.md).
 
-**UI-R-018** — A command not handled at the app level is forwarded to the active tab's view. If handled, any `(level, message)` returned is appended to the tab's log; if unhandled, the application logs `Unknown command ':<input>'` at Warning. The level of a result message is chosen by the producer, never re-derived from message text.
+**UI-R-018** — A command not handled at the app level is forwarded to the active tab's view.
+
+**UI-R-191** — A command the active tab's view handles (UI-R-018) has any `(level, message)` it returns appended to that tab's log.
+
+**UI-R-192** — A command the active tab's view leaves unhandled (UI-R-018) makes the application log `Unknown command ':<input>'` at Warning.
+
+**UI-R-193** — The level of a command result message (UI-R-191) is chosen by the producer, never re-derived from message text.
 
 **UI-R-019** — `:quit` closes the active tab, stopping its module first, and quits the application only when it was the last tab. `:qall` quits immediately regardless of tab count.
 
@@ -86,7 +96,11 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **UI-R-080** — The dialog key defaults (UI-R-022, UI-R-078, UI-R-079) apply only when the focused widget did not consume the key.
 
-**UI-R-067** — A setup dialog opens with exactly one field focused, the first in its `Tab` cycle (UI-R-022), and its focus cursor names that same field. Every other field opens unfocused, nested sections included. Where the focused field is a text input, it is the dialog's only field painting a text cursor.
+**UI-R-067** — A setup dialog opens with exactly one field focused, the first in its `Tab` cycle (UI-R-022), and its focus cursor names that same field.
+
+**UI-R-194** — Every field of a freshly opened setup dialog other than the focused one (UI-R-067) opens unfocused, nested sections included.
+
+**UI-R-195** — Where a setup dialog's focused field (UI-R-067) is a text input, it is the dialog's only field painting a text cursor.
 
 **UI-R-068** — A single-line input's border is styled by validation first and focus second: text failing validation paints the error style focused or not; only a field whose text validates, or has no validator, paints the focused style when focused and the normal border otherwise. A disabled single-line input never paints the focused style.
 
@@ -96,7 +110,13 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **UI-R-023** — `Esc` on a dialog that may hold unsaved edits opens a close-confirmation popup; confirming (`Enter` or `Space`) closes, dismissing (`Esc`) returns to editing. A yes/no box defaults focus to the safe (cancel) choice.
 
-**UI-R-024** — The new-module flow is two staged overlays: module-type selector, then the chosen type's setup dialog. Confirming the selector swaps in the setup dialog; confirming a valid setup dialog creates and starts the tab. A dialog failing validation stays open.
+**UI-R-024** — The new-module flow is two staged overlays: module-type selector, then the chosen type's setup dialog.
+
+**UI-R-196** — Confirming the new-module type selector (UI-R-024) swaps in the chosen type's setup dialog.
+
+**UI-R-197** — Confirming a valid new-module setup dialog (UI-R-024) creates and starts the tab.
+
+**UI-R-198** — A new-module dialog (UI-R-024) failing validation stays open.
 
 **UI-R-025** — Creating a tab whose name collides with an existing tab is refused with a warning in the active tab's log, dialog left open.
 
@@ -108,23 +128,41 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 
 ## Script-manager dialog
 
-**UI-R-051** — In the script-manager dialog, while the script table is focused, `e` executes the selected script exactly once, using the script's current editor content (including unapplied edits) regardless of its enabled flag. No selection → no-op. Execution semantics: SC-R-035.
+**UI-R-051** — In the script-manager dialog, while the script table is focused, `e` executes the selected script exactly once, using the script's current editor content (including unapplied edits) regardless of its enabled flag. Execution semantics: SC-R-035.
+
+**UI-R-199** — `e` in the script-manager dialog with no script selected (UI-R-051) is a no-op.
 
 **UI-R-088** — An on-demand script run (UI-R-051) leaves the script-manager dialog open; the run's `print`/`C_Log` output and any error appear in the dialog's log pane.
 
 **UI-R-052** — The script-manager dialog carries a *Templates* button in its focus cycle, after the new-script name input. `Enter` or `Space` on it opens the template-browser overlay.
 
-**UI-R-053** — The template-browser overlay lists only templates applicable to the dialog's script context (SC-R-036), each with name and description, plus a read-only syntax-highlighted preview of the selected template's code. `Esc` or `q` closes without changing the script list. While open it takes precedence over all other dialog keys.
+**UI-R-053** — The template-browser overlay lists only templates applicable to the dialog's script context (SC-R-036), each with name and description, plus a read-only syntax-highlighted preview of the selected template's code.
+
+**UI-R-200** — `Esc` or `q` closes the template-browser overlay (UI-R-053) without changing the script list.
+
+**UI-R-201** — While the template-browser overlay (UI-R-053) is open it takes precedence over all other dialog keys.
 
 **UI-R-054** — Confirming a template appends it to the dialog's working script list as a new enabled script whose code copies the template body, selects it, closes the overlay, leaves the dialog open. The script takes the template's name; if taken, the first free `<name>-<n>` (n from 2); insertion is never refused for a name collision.
 
-**UI-R-055** — In the script-manager dialog, while the script table is focused, `Enter` on a selected script opens a rename prompt pre-filled with its name. `Enter` renames; `Esc` dismisses unchanged. Renaming changes only the name.
+**UI-R-055** — In the script-manager dialog, while the script table is focused, `Enter` on a selected script opens a rename prompt pre-filled with that script's name.
+
+**UI-R-202** — `Enter` in the rename prompt (UI-R-055) renames the script to the prompt's current text.
+
+**UI-R-203** — `Esc` in the rename prompt (UI-R-055) dismisses it with the script's name unchanged.
+
+**UI-R-204** — A rename (UI-R-202) changes only the script's name; its code body and enabled flag are untouched.
 
 **UI-R-089** — In the script rename prompt (UI-R-055), an empty (after trimming) or already-used name is refused and the prompt stays open.
 
 **UI-R-090** — In the script-manager dialog, `Enter` on the script table with no selection (UI-R-055) is a no-op.
 
-**UI-R-056** — In the script-manager dialog, while the script table is focused, `?` opens a keybind-help overlay listing the table's bindings (rename, run once, toggle enabled, delete, compact) with a one-line description each. `Esc`, `q`, or `?` closes. While open it takes precedence over all other dialog keys. The table's title advertises only this overlay.
+**UI-R-056** — In the script-manager dialog, while the script table is focused, `?` opens a keybind-help overlay listing the table's bindings (rename, run once, toggle enabled, delete, compact) with a one-line description each.
+
+**UI-R-186** — `Esc`, `q`, or `?` closes the script-table keybind-help overlay (UI-R-056).
+
+**UI-R-187** — While the script-table keybind-help overlay (UI-R-056) is open it takes precedence over all other dialog keys.
+
+**UI-R-188** — While the script table is focused, its title advertises the keybind-help overlay (UI-R-056) and no other binding.
 
 **UI-R-058** — In the script-manager dialog, while the script table is focused, the table supports editing its working list: a non-empty name in the new-script input plus confirm adds a new enabled, empty script (empty or already-used name refused, per UI-R-089).
 
@@ -258,7 +296,7 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **UI-R-037** — Syntax highlighting is pure text-to-span computation: for a language and one line of source (plus a carry-over line state for multi-line constructs) it returns `(start_char, end_char, kind)` spans, sorted by start, non-overlapping, character indices. Four languages: Lua, JSON, Markdown and Diff.
 
-**UI-R-038** — The carry-over state lets multi-line constructs (Lua long strings and long comments) highlight correctly across lines when highlighted in order.
+**UI-R-038** — When lines are highlighted in order, the carry-over state passes an open multi-line construct (Lua long string, long comment) from each line to the next, so every line from the one carrying the opening delimiter through the one carrying the closing delimiter is highlighted as that construct rather than restarting as ordinary code at the line boundary.
 
 **UI-R-039** — Highlight kinds are a fixed enumeration (keyword, identifier, number, string, comment, punctuation, JSON key, literal, object identifier, function identifier, diff added, diff removed, diff meta); the consumer maps kind to colors. Highlighting never mutates the source.
 
@@ -308,7 +346,9 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **UI-R-085** — File-sink logging (`:log <file>`) is module-forwarded, semantics in the module's area; with a file sink configured, buffered lines flush to disk once per UI tick (and on sink teardown), not per line.
 
-**UI-R-046** — A table cell wider than the visible width is reachable by horizontal scroll tied to the selected column. Live-updated cells can be highlighted briefly after they change. The tab bar's own overflow scroll is UI-R-117.
+**UI-R-046** — A table cell wider than the visible width is reachable by horizontal scroll tied to the selected column. The tab bar's own overflow scroll is UI-R-117.
+
+**UI-R-185** — A live-updated table cell (UI-R-046) whose value changes is painted in a change-highlight style for 2 seconds after the change (the same window MB-R-147's monitor recency marker uses), then returns to its normal style.
 
 ## Widget & focus-derive contract
 

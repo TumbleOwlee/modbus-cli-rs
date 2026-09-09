@@ -64,7 +64,25 @@ IDs stable, append-only (`SC-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **SC-R-017** — Time observed through `C_Time` is measured from the moment the sim thread's context is built. Rebuilding the context (SC-R-024) resets the origin to zero.
 
-**SC-R-035** — An owner supports executing a single script **once, on demand** (script-manager dialog, UI-R-051). Such a run builds its own context on its own short-lived thread, registers the same `C_*` modules its owner's sim would (SC-R-018), loads only that script, calls it exactly once, logs any error to the owner's script log, exits. It requires no running sim thread, shares no Lua state with one (SC-E-039), and ignores the enabled flag.
+**SC-R-035** — An owner supports executing a single script **once, on demand** (script-manager dialog, UI-R-051); the run's other properties are SC-R-052–SC-R-060.
+
+**SC-R-052** — An on-demand run (SC-R-035) builds its own Lua context on its own short-lived thread.
+
+**SC-R-053** — An on-demand run's context (SC-R-052) registers the same `C_*` modules its owner's sim thread would (SC-R-018).
+
+**SC-R-054** — An on-demand run (SC-R-035) loads only the script being run, no other script of the owner's list.
+
+**SC-R-055** — An on-demand run (SC-R-035) calls the loaded script exactly once.
+
+**SC-R-056** — An error raised by an on-demand run (SC-R-035) is logged to the owner's script log.
+
+**SC-R-057** — An on-demand run's thread (SC-R-052) exits once the single call returns.
+
+**SC-R-058** — An on-demand run (SC-R-035) requires no running sim thread; it runs whether or not the owner's sim thread is started.
+
+**SC-R-059** — An on-demand run's context (SC-R-052) shares no Lua state with a sim thread's context (SC-E-039).
+
+**SC-R-060** — An on-demand run (SC-R-035) ignores the script's enabled flag; a disabled script runs.
 
 **SC-R-049** — Errors of an on-demand run (SC-R-035) are logged under a `[run]` prefix, distinct from the `[sim]` prefix of sim diagnostics (SC-R-032), since `ferrowl run --exit-on-error` keys its exit code off `[sim]` (CL-R-031).
 
@@ -90,7 +108,11 @@ IDs stable, append-only (`SC-R-nnn`). See [`../README.md`](../README.md). Compan
 
 ## Script lifecycle
 
-**SC-R-022** — A script is defined by a name, a code body (default empty), an enabled flag (default enabled). Only enabled scripts with non-empty code are handed to a sim thread. Persisted shape is `config-session/`'s envelope.
+**SC-R-022** — A script is defined by a name, a code body (default empty), and an enabled flag (default enabled).
+
+**SC-R-061** — Only enabled scripts with non-empty code (SC-R-022) are handed to a sim thread.
+
+**SC-R-062** — A script's persisted shape (SC-R-022) is `config-session/`'s envelope.
 
 **SC-R-023** — Scripts are stored inline in device/session config files, not external `.lua` files.
 
@@ -104,7 +126,11 @@ IDs stable, append-only (`SC-R-nnn`). See [`../README.md`](../README.md). Compan
 
 ## Script templates
 
-**SC-R-036** — The binary carries a fixed library of Lua script templates, compiled in at build time. Each has a name, one-line description, Lua code body, and the set of script contexts (Modbus, OCPP client, OCPP server, session) it applies to. A template becomes a script only by being copied into a script list; nothing loads template code from disk at run time (SC-R-023).
+**SC-R-036** — The binary carries a fixed library of Lua script templates, compiled in at build time.
+
+**SC-R-063** — Each built-in script template (SC-R-036) has a name, a one-line description, a Lua code body, and the set of script contexts (Modbus, OCPP client, OCPP server, session) it applies to.
+
+**SC-R-064** — A built-in template (SC-R-036) becomes a script only by being copied into a script list; nothing loads template code from disk at run time (SC-R-023).
 
 **SC-R-037** — Every template's code body is loadable by the Lua runtime; a template failing to compile is a build/test failure.
 
@@ -144,4 +170,8 @@ IDs stable, append-only (`SC-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **SC-R-048** — The execution hook (SC-R-034) enforces no memory ceiling (SC-E-032).
 
-**SC-R-039** — An error raised by the hook (stop-flag or wall-clock) flows through the same per-script path as any runtime error: SC-R-032's isolation and `[sim]` logging for a sim thread, SC-R-049's `[run]` logging for an on-demand run. Other scripts still run that cycle. A hook-raised stop lets a pending stop-and-join complete promptly.
+**SC-R-039** — An error raised by the hook (stop-flag or wall-clock) flows through the same per-script path as any runtime error: SC-R-032's isolation and `[sim]` logging for a sim thread, SC-R-049's `[run]` logging for an on-demand run.
+
+**SC-R-065** — A hook-raised error in one script (SC-R-039) does not stop the cycle: the sim thread's other scripts still run that cycle.
+
+**SC-R-066** — A hook-raised stop (SC-R-039) lets a pending stop-and-join complete within SC-R-047's fixed 1,000 ms cap, measured from the hook firing.

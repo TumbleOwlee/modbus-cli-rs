@@ -23,11 +23,11 @@ Boundary behavior, error semantics, intentional constraints. Working as implemen
 
 ## Multidrop bus safety
 
-On a shared/multidrop RTU upstream bus, `unit_ids` (`BR-R-015`) keeps the bridge from colliding with other devices on the wire: an unfiltered bridge would forward a request meant for another device downstream, get it rejected/timed out, and answer upstream with a failure colliding on the bus with the real device's own correct answer — omitting `unit_ids` is safe only on a dedicated point-to-point upstream link.
+- **BR-E-010** — **Unfiltered bridge on a multidrop bus** — on a shared/multidrop RTU upstream bus, a bridge with no `unit_ids` filter (BR-R-015) forwards a request meant for another device downstream, gets it rejected or timed out, and answers upstream with a failure that collides on the wire with the real device's own correct answer; omitting `unit_ids` is therefore safe only on a dedicated point-to-point upstream link.
 
 ## Exit codes
 
-`--exit-on-error` uses exit 3, distinct from the clap usage-error code 2, mirroring `run` (`cli-headless/edge-cases.md` CL-E-003).
+- **BR-E-011** — **`--exit-on-error` exit code** — `--exit-on-error` exits 3, distinct from the clap usage-error code 2, mirroring `run` (CL-E-003).
 
 - **BR-E-008** — **`;` inside a descriptor value** — a multi-file CA list is the one descriptor value carrying its own delimiter, because `,` separates keys and the merged `CertVerification` takes a list where the retired `ca_file`/`client_ca_file` took one path. A path containing a literal `;` is unreachable through a descriptor; bridge is CLI-only (BR-R-002) with no config file to fall back on, and a repeated key would break BR-R-004's one-key-one-value grammar for every other key.
 - **BR-E-009** — **`tls.*` on an `rtu` descriptor** — rejected outright (exit 1) rather than ignored, even `tls.mode=none`, which would be a no-op if honoured. A serial link has no TLS layer, so such a key can only express a mistake about which descriptor is being written; failing at setup says so when it is cheap to fix, where silent acceptance would leave the operator believing a plaintext bus was protected (BR-R-023).

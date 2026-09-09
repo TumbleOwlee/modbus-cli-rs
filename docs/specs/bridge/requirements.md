@@ -46,7 +46,13 @@ Per [`../README.md`](../README.md)'s ownership rules, this area does **not** own
 
 **BR-R-021** — Under `tls.mode=tls` or `tls.mode=mutual` (BR-R-020), an absent `tls.identity.source` and an absent `tls.verification.verify` take those defaults wherever the selected variant defines that field, so a descriptor naming only a mode resolves to an ephemeral identity and root-store verification with no extra CA files (the block form requires `identity` and `verification` written out, MB-R-105); a defaulted field is subject to every rule an explicit one faces.
 
-**BR-R-022** — `tls.verification.verify=root-store` on an upstream descriptor and `tls.identity.source=ephemeral` on a downstream one (the role-only halves of MB-R-167's three checks) are each a setup failure (exit 1, BR-R-013); those two rejections apply to a defaulted value (BR-R-021) exactly as to a written one, so an upstream `tls.mode=mutual` with no `tls.verification.verify` and a downstream `tls.mode=mutual` with no `tls.identity.source` are each a setup failure, while an upstream `tls.mode=tls` and a downstream `tls.mode=tls` are accepted.
+**BR-R-022** — `tls.verification.verify=root-store` on an upstream descriptor (one role-only half of MB-R-167's three checks) is a setup failure (exit 1, BR-R-013).
+
+**BR-R-028** — `tls.identity.source=ephemeral` on a downstream descriptor (the other role-only half of MB-R-167's three checks) is a setup failure (exit 1, BR-R-013).
+
+**BR-R-029** — The BR-R-022 and BR-R-028 rejections apply to a defaulted value (BR-R-021) exactly as to a written one, so an upstream `tls.mode=mutual` with no `tls.verification.verify` and a downstream `tls.mode=mutual` with no `tls.identity.source` are each a setup failure.
+
+**BR-R-030** — An upstream `tls.mode=tls` and a downstream `tls.mode=tls` are accepted, neither being caught by BR-R-022, BR-R-028, or BR-R-029.
 
 **BR-R-023** — Any `tls.*` key on a `transport=rtu` descriptor is a setup failure (exit 1, BR-R-013) naming the offending key, whatever its path or value, including `tls.mode=none`.
 

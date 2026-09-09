@@ -60,9 +60,15 @@ IDs stable, append-only (`MB-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **MB-R-020** — Encoding `Ascii` zero-pads input to exactly `2 × width` bytes, on the right for `Left`, on the left for `Right`. Longer input is truncated, keeping the *first* bytes for `Left` and the *last* for `Right`.
 
-**MB-R-021** — Every numeric format carries a display resolution (scale factor, default `1.0`). Display = `raw × resolution`. Encode/decode never apply it; wire words are raw.
+**MB-R-021** — Every numeric format carries a display resolution (scale factor, default `1.0`), and its displayed value is `raw × resolution`.
 
-**MB-R-022** — Numeric string input accepts a plain decimal literal or a `0x`-prefixed hex literal. Signed integer formats also accept `-0x…`, the negation of the hex bit pattern. A `0x` literal on a float format is the IEEE 754 bit pattern.
+**MB-R-212** — Encode and decode never apply a format's display resolution (MB-R-021); wire words are raw.
+
+**MB-R-022** — Numeric string input accepts a plain decimal literal or a `0x`-prefixed hex literal.
+
+**MB-R-206** — A signed integer format additionally accepts `-0x…` (MB-R-022), the negation of the hex bit pattern.
+
+**MB-R-207** — A `0x` literal on a float format (MB-R-022) is the IEEE 754 bit pattern, not a decimal value.
 
 **MB-R-023** — Decoding fewer words than the format's width fails with a too-few-bytes error. More words: only the first `width` consumed.
 
@@ -108,7 +114,11 @@ IDs stable, append-only (`MB-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **MB-R-038** — Before the first poll on each connection, the client waits `delay_ms`.
 
-**MB-R-039** — Polling on a fixed tick of `interval_ms`. `interval_ms` 0 = 1 ms tick. A missed tick delays the schedule, never fires catch-up ticks.
+**MB-R-039** — Polling runs on a fixed tick of `interval_ms`.
+
+**MB-R-204** — `interval_ms` 0 polls on a 1 ms tick (MB-R-039).
+
+**MB-R-205** — A missed poll tick (MB-R-039) delays the schedule, never fires catch-up ticks.
 
 **MB-R-040** — Every individual request (read or write) is bounded by `timeout_ms`.
 
@@ -224,7 +234,11 @@ IDs stable, append-only (`MB-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **MB-R-074** — An RTU server opens the port once and serves it as a single persistent point-to-point connection, no accept loop.
 
-**MB-R-075** — With `reconnect` enabled (default), a serial-open failure does not fail the server's start; it retries per MB-R-051, MB-R-130–MB-R-134. Disabled: start fails with a serial error. For a client it is a failed connection attempt under MB-R-050–MB-R-055.
+**MB-R-075** — With `reconnect` enabled (default), a serial-open failure does not fail a server's start; it retries per MB-R-051, MB-R-130–MB-R-134.
+
+**MB-R-208** — With `reconnect` disabled, a serial-open failure fails a server's start with a serial error (MB-R-075).
+
+**MB-R-209** — For a client, a serial-open failure is a failed connection attempt under MB-R-050–MB-R-055 (MB-R-075).
 
 ---
 
@@ -304,13 +318,23 @@ IDs stable, append-only (`MB-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **MB-R-138** — Under `ClientTlsPolicy::Mutual` with `identity: CertSource::SelfSigned`, a client presents an ephemeral self-signed certificate/key pair as its mTLS identity, generated and cached per MB-R-169/MB-R-170 (once per module instance, reused across reconnects/restarts/config edits, regenerated only on a transition into self-signed), never written to disk.
 
-**MB-R-139** — The dialog offers a client-role Self Signed toggle, shown whenever mTLS is selected. On: Client Cert/Key inputs hidden and excluded from the resolved config regardless of text, resolving to `ClientTlsPolicy::Mutual` with `identity: CertSource::SelfSigned`; validation does not require those files. Stored text is left unmodified, so Off restores the paths and re-requires them.
+**MB-R-139** — The dialog offers a client-role Self Signed toggle, shown whenever mTLS is selected.
+
+**MB-R-213** — With the client-role Self Signed toggle On (MB-R-139), the Client Cert/Key inputs are hidden and excluded from the resolved config regardless of their text, which resolves to `ClientTlsPolicy::Mutual` with `identity: CertSource::SelfSigned`.
+
+**MB-R-214** — With the client-role Self Signed toggle On (MB-R-139), validation does not require the Client Cert/Key files.
+
+**MB-R-215** — The client-role Self Signed toggle (MB-R-139) leaves the stored Client Cert/Key text unmodified, so switching it Off restores those paths and re-requires them.
 
 ---
 
 ## Module lifecycle and device configuration
 
-**MB-R-076** — Each Modbus module instance is a client, server, or monitor (never more than one), over TCP, RTU, RtuOverTcp, Udp, Ascii, or AsciiOverTcp. A client or server owns one shared register store, one register set, one log. A monitor (MB-R-140–MB-R-145) owns one log and one observed-value table instead of a store, and user-authored display interpretations instead of an access-checked register set.
+**MB-R-076** — Each Modbus module instance is a client, a server, or a monitor (never more than one), over TCP, RTU, RtuOverTcp, Udp, Ascii, or AsciiOverTcp.
+
+**MB-R-210** — A client or server instance (MB-R-076) owns one shared register store, one register set, and one log.
+
+**MB-R-211** — A monitor instance (MB-R-076, MB-R-140–MB-R-145) owns one log and one observed-value table instead of a store, and user-authored display interpretations instead of an access-checked register set.
 
 **MB-R-077** — A module's store is built from its device config's register definitions: each fixed-address register declares `[address, address + format width)` under key (slave id, kind).
 
@@ -454,7 +478,11 @@ IDs stable, append-only (`MB-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **MB-R-147** — For each slave id, a monitor derives a recency marker for every (table kind, address) touched by an MB-R-146 record's address/quantity range, timestamped at that record's timestamp. A marker is active for 2 seconds, the register table's change-highlight duration (`ferrowl::module::modbus::table::CHANGE_HIGHLIGHT`), then lapses.
 
-**MB-R-148** — A monitor lets the user edit or remove an existing interpretation from a slave id's set (MB-R-145). Edit replaces kind/address/format in place, under the existing name or a new one; remove deletes it. Neither writes to the bus or touches the observed-value table (MB-R-144).
+**MB-R-148** — A monitor lets the user edit an existing interpretation in a slave id's set (MB-R-145), replacing kind/address/format in place, under the existing name or a new one.
+
+**MB-R-216** — A monitor lets the user remove an existing interpretation from a slave id's set (MB-R-145, MB-R-148), deleting it.
+
+**MB-R-217** — Neither editing (MB-R-148) nor removing (MB-R-216) an interpretation writes to the bus or touches the observed-value table (MB-R-144).
 
 **MB-R-150** — Before opening its RTU or Ascii serial port, on initial start or reconnect (MB-R-050–MB-R-055 client, MB-R-130–MB-R-134 server, MB-R-192 monitor), a module instance checks every other configured instance in the session for an Rtu/Ascii endpoint on the same path (after `~` expansion).
 
@@ -466,6 +494,10 @@ IDs stable, append-only (`MB-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **MB-R-152** — A monitor module's displayed status follows MB-R-137's three-state rule with "serial port open" for "transport connected": `CONNECTED` while the port is open and read; `RECONNECTING` while the task runs but the port is not open (MB-R-130–MB-R-134, MB-R-192); `DISCONNECTED` while the task is not running.
 
-**MB-R-154** — A format's display text is its name followed by a parenthesized qualifier: numeric → byte order (`Big Endian` or `Little Endian`); `Ascii` → alignment (`Left` or `Right`). `Ascii` displays as `ASCII`; every other format as named in the data contract's format table. Register order, resolution, and bit-field selector do not appear.
+**MB-R-154** — A format's display text is its name followed by a parenthesized qualifier: numeric → byte order (`Big Endian` or `Little Endian`); `Ascii` → alignment (`Left` or `Right`).
+
+**MB-R-218** — In a format's display text (MB-R-154) the name part renders `Ascii` as `ASCII` and every other format as named in the data contract's format table.
+
+**MB-R-219** — A format's display text (MB-R-154) never shows register order, resolution, or bit-field selector.
 
 **MB-R-155** — A codec error naming a format renders it with the format's display text (MB-R-154), not a derived debug form.
