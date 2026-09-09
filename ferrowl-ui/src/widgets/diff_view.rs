@@ -417,8 +417,18 @@ impl DiffView {
 
     /// Draws one display row of a meta row (UI-R-210): the full width, in the meta style.
     /// A meta row wraps like any other row (UI-R-260 exempts none), so with `wrap` on
-    /// `sub_row` selects which of its wrapped chunks this call draws.
-    fn draw_meta(&self, buf: &mut Buffer, rect: Rect, text: &str, wrap: bool, sub_row: usize) {
+    /// `sub_row` selects which of its wrapped chunks this call draws. With wrapping off,
+    /// the text is drawn from its `h_scroll`-th column onward (UI-R-310), as a content row
+    /// is.
+    fn draw_meta(
+        &self,
+        buf: &mut Buffer,
+        rect: Rect,
+        text: &str,
+        wrap: bool,
+        sub_row: usize,
+        h_scroll: usize,
+    ) {
         // The meta style covers the whole rect first: a `Paragraph` only paints the cells
         // its text occupies, so a row wider than `text` would otherwise show a trailing
         // run of unstyled (`general`) cells past the end of the line (UI-R-210).
@@ -438,7 +448,8 @@ impl DiffView {
             );
             Paragraph::new(Text::from(line)).render(rect, buf);
         } else if sub_row == 0 {
-            Paragraph::new(Text::from(text.to_string()).style(self.style.meta)).render(rect, buf);
+            let visible: String = text.chars().skip(h_scroll).collect();
+            Paragraph::new(Text::from(visible).style(self.style.meta)).render(rect, buf);
         }
     }
 
@@ -717,6 +728,7 @@ impl StatefulWidget for &DiffView {
                                 text,
                                 wrap,
                                 sub_row,
+                                h_scroll,
                             );
                             if matches!(self.border, Border::Full(_)) {
                                 self.draw_meta(
@@ -725,6 +737,7 @@ impl StatefulWidget for &DiffView {
                                     text,
                                     wrap,
                                     sub_row,
+                                    h_scroll,
                                 );
                             }
                         }
@@ -877,7 +890,7 @@ impl StatefulWidget for &DiffView {
                                     "display_rows() pairs RowPart::Meta with DiffRow::Meta"
                                 )
                             };
-                            self.draw_meta(buf, rect, text, wrap, sub_row);
+                            self.draw_meta(buf, rect, text, wrap, sub_row, h_scroll);
                         }
                         RowPart::Pair { old_sub, new_sub } => {
                             let DiffRow::Pair { kind, old, new } = &rows[row_idx] else {
@@ -2458,13 +2471,15 @@ mod tests {
     }
 
     #[test]
-    /// UI-E-141 — a meta row wider than a pane's inner width in the bordered split layout
-    /// clips at that pane's inner width, independently in each pane, with no ellipsis and
-    /// no spill onto either pane's border.
+    /// UI-E-141, UI-R-310 — a meta row wider than a pane's inner width in the bordered
+    /// split layout clips the portion visible from the current horizontal offset at that
+    /// pane's inner width, independently in each pane, with no ellipsis and no spill onto
+    /// either pane's border.
     fn ut_bordered_split_meta_row_is_clipped_at_each_pane_border() {
         let mut st = state_with(
             "@@ -1,1 +1,1 @@ a very long hunk header that exceeds one pane's width\n a\n",
         );
+        st.set_h_scroll(3);
         let w = DiffViewBuilder::default()
             .border(Border::Full(Margin::new(0, 0)))
             .build()
@@ -2488,6 +2503,119 @@ mod tests {
             "new pane's right border untouched by the clipped text"
         );
         assert_ne!(b[(18, 1)].symbol(), "…", "no ellipsis, text simply stops");
+        assert_eq!(
+            b[(1, 1)].symbol(),
+            "-",
+            "the window has moved past the header's first three characters"
+        );
+    }
+
+    #[test]
+    /// UI-R-310 — a meta row follows the horizontal scroll offset the same way a content
+    /// row does: it is drawn from its offset-th column onward, in the split layout, and
+    /// the content row underneath moves by the same offset.
+    fn ut_meta_row_follows_the_horizontal_offset() {
+        let mut st = state_with("@@ -1,1 +1,1 @@\n-old text\n+new text\n");
+        st.set_h_scroll(3);
+        let w = DiffView::default();
+        let mut b = buffer(40, 2);
+        StatefulWidget::render(&w, Rect::new(0, 0, 40, 2), &mut b, &mut st);
+        assert_eq!(
+            row_text(&b, 0, 20)[..12].trim_end(),
+            "-1,1 +1,1 @@",
+            "meta row now reads from the header's fourth character"
+        );
+        let content_row = row_text(&b, 1, 20);
+        assert!(
+            content_row.contains(" text"),
+            "the shifted text is still visible: {content_row:?}"
+        );
+        assert!(
+            !content_row.contains("old"),
+            "the content row below moved past its first three characters too: {content_row:?}"
+        );
+    }
+
+    #[test]
+    /// UI-R-310 — a meta row follows the horizontal scroll offset in the unified layout
+    /// too, the third call site that threads it through.
+    fn ut_meta_row_follows_the_horizontal_offset_in_unified_layout() {
+        let mut st = DiffViewStateBuilder::default()
+            .layout(DiffLayout::Unified)
+            .build_with_diff("@@ -1,1 +1,1 @@\n a\n")
+            .unwrap();
+        st.set_h_scroll(3);
+        let w = DiffView::default();
+        let mut b = buffer(20, 2);
+        StatefulWidget::render(&w, Rect::new(0, 0, 20, 2), &mut b, &mut st);
+        assert_eq!(
+            row_text(&b, 0, 20)[..12].trim_end(),
+            "-1,1 +1,1 @@",
+            "unified layout's meta row also reads from the offset column"
+        );
+    }
+
+    #[test]
+    /// UI-R-310, UI-R-304 — the single horizontal offset reaches both panes' meta rows
+    /// identically in the bordered split layout, so they keep showing the same text as
+    /// each other, and neither pane's border is touched.
+    fn ut_bordered_split_meta_rows_scroll_together_in_both_panes() {
+        let mut st = state_with("@@ -1,1 +1,1 @@ trailing text past both panes\n a\n");
+        st.set_h_scroll(3);
+        let w = DiffViewBuilder::default()
+            .border(Border::Full(Margin::new(0, 0)))
+            .build()
+            .unwrap();
+        let mut b = buffer(40, 4);
+        StatefulWidget::render(&w, Rect::new(0, 0, 40, 4), &mut b, &mut st);
+        let old_inner: String = (1..19).map(|x| b[(x, 1)].symbol().to_string()).collect();
+        let new_inner: String = (21..39).map(|x| b[(x, 1)].symbol().to_string()).collect();
+        assert_eq!(old_inner, new_inner, "both panes show the same offset text");
+        assert_eq!(
+            &old_inner[..1],
+            "-",
+            "each pane's window has moved past the header's first three characters"
+        );
+        assert_eq!(b[(0, 1)].symbol(), "│", "old pane's left border untouched");
+        assert_eq!(
+            b[(19, 1)].symbol(),
+            "│",
+            "old pane's right border untouched"
+        );
+        assert_eq!(b[(20, 1)].symbol(), "│", "new pane's left border untouched");
+        assert_eq!(
+            b[(39, 1)].symbol(),
+            "│",
+            "new pane's right border untouched"
+        );
+    }
+
+    #[test]
+    /// UI-E-145 — a horizontal offset past the last column of a meta row's text leaves
+    /// the row's cells all in the meta style with no character, and does not snap back.
+    fn ut_meta_row_past_its_last_column_shows_only_the_meta_style() {
+        let mut st = state_with("@@ -1,1 +1,1 @@\n a\n");
+        st.set_h_scroll(100);
+        let meta = Style::default().fg(ratatui::style::Color::Magenta);
+        let w = DiffViewBuilder::default()
+            .style(DiffViewStyleBuilder::default().meta(meta).build().unwrap())
+            .build()
+            .unwrap();
+        let mut b = buffer(20, 2);
+        StatefulWidget::render(&w, Rect::new(0, 0, 20, 2), &mut b, &mut st);
+        for x in 0..20 {
+            assert_eq!(
+                b[(x, 0)].fg,
+                meta.fg.unwrap(),
+                "column {x} in the meta style"
+            );
+            assert_eq!(
+                b[(x, 0)].symbol(),
+                " ",
+                "column {x} carries no header character"
+            );
+        }
+        assert_eq!(st.h_scroll(), 100, "the offset does not snap back");
     }
 
     #[test]

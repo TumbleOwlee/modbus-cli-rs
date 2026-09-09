@@ -2158,6 +2158,30 @@ mod tests {
     }
 
     #[test]
+    /// UI-R-311 — the right clamp of the horizontal scroll counts a meta row's text, not
+    /// only content rows, so `l` stops at the widest meta line's last column when it is
+    /// wider than every content row. Green on its first run: `max_h_scroll`'s `DiffRow::Meta`
+    /// arm already counts meta text alongside the pair arm.
+    fn ut_horizontal_clamp_counts_the_widest_meta_row() {
+        let mut s = DiffViewStateBuilder::default()
+            .build_with_diff("@@ -1,1 +1,1 @@ a much longer header than any content row\n a\n")
+            .unwrap();
+        s.set_visible_height(2);
+        s.set_content_width(10);
+        for _ in 0..200 {
+            s.handle_events(KeyModifiers::NONE, KeyCode::Char('l'));
+        }
+        let header_len = "@@ -1,1 +1,1 @@ a much longer header than any content row"
+            .chars()
+            .count();
+        assert_eq!(
+            s.h_scroll(),
+            header_len - 1,
+            "clamped at the header's last column"
+        );
+    }
+
+    #[test]
     /// UI-R-232 (movement half) — `$` brings the active row's focused-side last column
     /// into view, computed from the remembered content width so it works even unfocused
     /// (the code editor's UI-R-299 exception, mirrored here).
