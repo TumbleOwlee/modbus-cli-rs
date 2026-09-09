@@ -2,6 +2,10 @@
 
 mod button;
 mod code_input_field;
+mod command_line;
+mod diff_view;
+mod editor_dialog;
+mod file_tree;
 mod input_field;
 mod markdown_input_field;
 mod selection;
@@ -12,6 +16,10 @@ mod vim;
 
 pub use button::*;
 pub use code_input_field::*;
+pub use command_line::*;
+pub use diff_view::*;
+pub use editor_dialog::*;
+pub use file_tree::*;
 pub use input_field::*;
 pub use markdown_input_field::*;
 pub use selection::*;

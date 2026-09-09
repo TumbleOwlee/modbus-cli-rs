@@ -112,6 +112,7 @@ impl StatefulWidget for &CodeInputField {
         if visible_height == 0 {
             return;
         }
+        state.set_visible_height(visible_height);
 
         let line_count = state.lines().len();
         let active = state.active_line();
@@ -164,6 +165,7 @@ impl StatefulWidget for &CodeInputField {
         let gutter_width = (gutter_text_width + 1).min(area.width as usize) as u16;
         let content_x = area.x + gutter_width;
         let content_width = area.width.saturating_sub(gutter_width) as usize;
+        state.set_content_width(content_width.max(1));
 
         // Adjust horizontal scroll so the cursor stays in view on the active line.
         let cursor_col = state.cursor_col();
@@ -678,5 +680,29 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    /// UI-R-293 — a render records the visible height in rows of the area it drew into.
+    fn ut_render_records_visible_height() {
+        let w = CodeInputFieldBuilder::default().build().unwrap();
+        let mut st = CodeInputFieldStateBuilder::default().build().unwrap();
+        let mut b = buffer(20, 5);
+        StatefulWidget::render(&w, Rect::new(0, 0, 20, 5), &mut b, &mut st);
+        assert_eq!(st.visible_height(), 5);
+    }
+
+    #[test]
+    /// UI-R-303 — zero before the first render, and a render scrolled to bring the
+    /// active line into view records that scroll on the state.
+    fn ut_vertical_scroll_offset_defaults_to_zero_and_follows_a_render() {
+        let w = CodeInputFieldBuilder::default().build().unwrap();
+        let mut st = CodeInputFieldStateBuilder::default().build().unwrap();
+        assert_eq!(st.scroll_offset(), 0);
+        st.set_content("0\n1\n2\n3\n4\n5\n6\n7\n8\n9");
+        st.set_active_line(9);
+        let mut b = buffer(20, 5);
+        StatefulWidget::render(&w, Rect::new(0, 0, 20, 5), &mut b, &mut st);
+        assert_eq!(st.scroll_offset(), 5);
     }
 }

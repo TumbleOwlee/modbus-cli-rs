@@ -25,3 +25,7 @@ ratatui = { workspace = true }
 
 [dev-dependencies]
 ferrowl-ui-derive = { path = "../ferrowl-ui-derive" }
+
+[[example]]
+name = "diff_review"
+test = true

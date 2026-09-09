@@ -115,6 +115,49 @@ impl MarkdownInputField {
             rule: false,
         }
     }
+
+    /// Reports the number of display rows `text` would occupy if drawn by this widget at
+    /// `width`, applying the same wrapping, hanging-indent and gutter rules as a render
+    /// (UI-R-188), without drawing anything or touching any state.
+    ///
+    /// Deliberately duplicates the render loop's block/line/wrap fold rather than sharing
+    /// it: the render loop also tracks the cursor's revealed-as-source line and the
+    /// per-line row data it draws from, neither of which measurement has any use for, and
+    /// factoring those out left the shared helper carrying more parameters than either
+    /// call site's own logic.
+    pub fn measure(&self, text: &str, width: u16) -> usize {
+        let lines: Vec<&str> = text.split('\n').collect();
+        let line_count = lines.len();
+        let gutter_width = if self.line_numbers {
+            line_count.to_string().len() as u16 + 1
+        } else {
+            0
+        };
+        let content_width = (width.saturating_sub(gutter_width) as usize).max(1);
+
+        let mut block_state = BlockState::default();
+        let mut fence_carry = LineState::default();
+        let mut rows = 0usize;
+        for line in &lines {
+            let (block, next_block_state) = block_line(line, &block_state);
+            let fence_info = block_state.fence_info().map(str::to_string);
+            block_state = next_block_state;
+
+            let (rendered, next_carry) = render_line(
+                &block,
+                line,
+                fence_info.as_deref(),
+                fence_carry,
+                &self.markdown_theme,
+                &self.syntax_theme,
+                self.style.general,
+            );
+            fence_carry = next_carry;
+
+            rows += wrap_line(&rendered, content_width).len().max(1);
+        }
+        rows
+    }
 }
 
 /// Locates `cursor_col` (a char index into the unwrapped source line) within `rows`, the
@@ -347,5 +390,89 @@ impl StatefulWidget for MarkdownInputField {
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         StatefulWidget::render(&self, area, buf, state);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    /// UI-E-137 — measuring the empty text is one display row, the single empty source line.
+    fn ut_measure_empty_text_is_one_row() {
+        let w = MarkdownInputFieldBuilder::default().build().unwrap();
+        assert_eq!(w.measure("", 20), 1);
+    }
+
+    #[test]
+    /// UI-E-138 — at a width leaving no columns for text, gutter included, the available
+    /// text width is treated as one column, so every source line wraps one character per row.
+    fn ut_measure_at_zero_text_width_wraps_one_character_per_row() {
+        let w = MarkdownInputFieldBuilder::default()
+            .line_numbers(true)
+            .build()
+            .unwrap();
+        assert_eq!(w.measure("abc", 0), 3);
+    }
+
+    #[test]
+    /// UI-R-188 — a wrapped paragraph's measured row count matches the sum of the row
+    /// counts the widget's own wrap layout (`wrap_line`) produces for each source line at
+    /// the same width — the wrapping rule itself is UI-R-131's, pinned elsewhere; this
+    /// pins only that `measure` folds it the same way a render does.
+    fn ut_measure_matches_rendered_row_count_for_wrapped_paragraphs() {
+        let w = MarkdownInputFieldBuilder::default().build().unwrap();
+        assert_eq!(w.measure("one\ntwo\nthree", 20), 3);
+
+        let long = "this line is deliberately much longer than ten columns";
+        let (rendered, _) = render_line(
+            &ferrowl_syntax::markdown::block_line(long, &BlockState::default()).0,
+            long,
+            None,
+            LineState::default(),
+            &w.markdown_theme,
+            &w.syntax_theme,
+            w.style.general,
+        );
+        let expected = wrap_line(&rendered, 10).len();
+        assert_eq!(w.measure(long, 10), expected);
+    }
+
+    #[test]
+    /// UI-R-188 — `measure` mutates no state: calling it around a render leaves the state
+    /// exactly as the render alone would have, and the field itself unchanged too.
+    fn ut_measure_mutates_no_state() {
+        use crate::state::MarkdownInputFieldStateBuilder;
+        use crate::traits::SetFocus;
+
+        let w = MarkdownInputFieldBuilder::default().build().unwrap();
+
+        let mut render_only = MarkdownInputFieldStateBuilder::default()
+            .build()
+            .expect("defaults");
+        render_only.set_content("one\ntwo\nthree");
+        SetFocus::set_focused(&mut render_only, true);
+        let mut b1 = Buffer::empty(Rect::new(0, 0, 20, 10));
+        StatefulWidget::render(&w, Rect::new(0, 0, 20, 10), &mut b1, &mut render_only);
+
+        let mut measured_around = MarkdownInputFieldStateBuilder::default()
+            .build()
+            .expect("defaults");
+        measured_around.set_content("one\ntwo\nthree");
+        SetFocus::set_focused(&mut measured_around, true);
+        let _ = w.measure("some text\nanother line", 20);
+        let mut b2 = Buffer::empty(Rect::new(0, 0, 20, 10));
+        StatefulWidget::render(&w, Rect::new(0, 0, 20, 10), &mut b2, &mut measured_around);
+        let _ = w.measure("some text\nanother line", 20);
+
+        assert_eq!(
+            format!("{render_only:?}"),
+            format!("{measured_around:?}"),
+            "measure calls around the render must leave the state exactly as the render alone would"
+        );
+        assert_eq!(
+            b1, b2,
+            "measure must not affect what the render draws either"
+        );
     }
 }

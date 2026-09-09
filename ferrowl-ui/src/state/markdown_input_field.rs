@@ -11,14 +11,16 @@ use crate::traits::{HandleEvents, IsFocus, SetFocus};
 /// and scroll bookkeeping wrapping requires.
 #[derive(Builder, Debug, Clone, Getters, CopyGetters, Setters)]
 #[getset(set = "pub")]
+#[builder(build_fn(private, name = "build_state"))]
 pub struct MarkdownInputFieldState {
     /// The composed vim-modal editor state (UI-R-181): buffer, modes, motions, operators,
     /// registers, single-level undo, disabled flag. Built with `vim(true)`; its `language`
-    /// stays `None` (markdown gets no auto-indent and no format-on-blur).
-    #[getset(get = "pub")]
-    #[builder(
-        default = "CodeInputFieldStateBuilder::default().vim(true).build().expect(\"defaults\")"
-    )]
+    /// stays `None` (markdown gets no auto-indent and no format-on-blur). `readonly_nav` is
+    /// always off (see `MarkdownInputFieldStateBuilder::build`): the widget wraps its text
+    /// and paces its own paging in `handle_events`, so the composed editor's UI-R-296
+    /// through UI-R-300 read-only viewport keys must never fire underneath it.
+    #[getset(skip)]
+    #[builder(default = "markdown_inner()")]
     inner: CodeInputFieldState,
     /// Display rows per source line from the last render; empty before the first render.
     #[getset(skip)]
@@ -58,7 +60,36 @@ pub struct MarkdownInputFieldState {
     pending_delete_count: Option<usize>,
 }
 
+/// Builds the composed editor state with its read-only viewport navigation (UI-R-296
+/// through UI-R-300) turned off, so the markdown widget's own paging and horizontal
+/// key handling are never shadowed by the inner editor's.
+fn markdown_inner() -> CodeInputFieldState {
+    let mut inner = CodeInputFieldStateBuilder::default()
+        .vim(true)
+        .build()
+        .expect("defaults");
+    inner.set_readonly_nav(false);
+    inner
+}
+
+impl MarkdownInputFieldStateBuilder {
+    /// Normalizes `readonly_nav` off on the built state's inner editor, whether it came
+    /// from the default (`markdown_inner`) or a caller-supplied `.inner(...)`: either way,
+    /// the composed editor's own paging and horizontal-scroll keys must never fire
+    /// underneath the markdown widget's (UI-R-125, UI-R-155).
+    pub fn build(&self) -> Result<MarkdownInputFieldState, MarkdownInputFieldStateBuilderError> {
+        let mut s = self.build_state()?;
+        s.inner.set_readonly_nav(false);
+        Ok(s)
+    }
+}
+
 impl MarkdownInputFieldState {
+    /// The composed vim-modal editor state (UI-R-125).
+    pub fn inner(&self) -> &CodeInputFieldState {
+        &self.inner
+    }
+
     pub fn content(&self) -> String {
         self.inner.content()
     }
@@ -767,5 +798,61 @@ mod tests {
         key(&mut s, 'g');
         key(&mut s, 'g');
         assert_eq!(s.active_line(), 0);
+    }
+
+    #[test]
+    /// UI-R-125, UI-R-155 — a read-only markdown field keeps its own `h`/`l`/`0`/`$`
+    /// (consumed and ignored, UI-E-072) and its own display-row paging, unshadowed by the
+    /// composed editor's UI-R-296..UI-R-300 read-only viewport scrolling, which the markdown
+    /// state turns off on its inner editor.
+    fn ut_read_only_markdown_field_keeps_its_own_h_l_and_paging() {
+        let mut s = state_with("one\ntwo\nthree");
+        s.set_read_only(true);
+        let before_col = s.cursor_col();
+        let before_scroll = s.row_scroll();
+        key(&mut s, 'h');
+        key(&mut s, 'l');
+        key(&mut s, '0');
+        key(&mut s, '$');
+        assert_eq!(
+            s.cursor_col(),
+            before_col,
+            "consumed and ignored, per UI-E-072"
+        );
+        assert_eq!(s.row_scroll(), before_scroll);
+        assert_eq!(
+            s.inner().h_scroll(),
+            0,
+            "the composed editor's viewport never scrolled"
+        );
+        let r = s.handle_events(KeyModifiers::NONE, KeyCode::PageDown);
+        assert!(
+            matches!(r, EventResult::Unhandled(..)),
+            "PageDown is not one of the markdown field's own keys, and the composed \
+             editor's paging is off, so it passes through unhandled"
+        );
+    }
+
+    #[test]
+    /// UI-R-125, UI-R-155 — the `readonly_nav` normalisation applies even when the inner
+    /// editor is supplied explicitly through the builder, not just the field's own default.
+    fn ut_caller_supplied_inner_still_has_readonly_nav_off() {
+        let mut s = MarkdownInputFieldStateBuilder::default()
+            .inner(
+                crate::state::code_input_field::CodeInputFieldStateBuilder::default()
+                    .vim(true)
+                    .build()
+                    .unwrap(),
+            )
+            .build()
+            .expect("defaults");
+        s.set_content("one\ntwo\nthree");
+        s.set_read_only(true);
+        let r = s.handle_events(KeyModifiers::NONE, KeyCode::PageDown);
+        assert!(
+            matches!(r, EventResult::Unhandled(..)),
+            "the caller-supplied inner must have its readonly_nav normalized off too, \
+             or PageDown would be swallowed by the composed editor's own paging"
+        );
     }
 }

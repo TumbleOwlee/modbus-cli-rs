@@ -20,6 +20,9 @@ Boundary behavior, error semantics, intentional or known constraints. The known-
 | **UI-E-010** | `:quit` on the last tab | quits the application |
 | **UI-E-011** | `:log` bare, or `:log <path>` (path ≠ `clear`) | not app-level; forwarded to the view as a module command |
 | **UI-E-012** | Generic name shadows a module name | generic always wins; module commands reached only for unrecognized tokens |
+| **UI-E-139** | `Enter` on an empty command line (UI-R-191) | a submit outcome carrying the empty string, and the line closes; the widget does not special-case empty input, the consumer does |
+| **UI-E-140** | Command line with both an error and a notice set (UI-R-194, UI-R-195) | the error is shown and the notice is retained, appearing once the consumer clears the error |
+| **UI-E-093** | Command-line help box taller than the rows available above the line (UI-R-196) | the box is clipped to the available rows and stays anchored to the bottom, matching the app's no-minimum-size stance (UI-E-047) |
 
 ## Navigation and tab jumps
 
@@ -54,6 +57,8 @@ Boundary behavior, error semantics, intentional or known constraints. The known-
 | **UI-E-034** | A rename is an edit | restarts the sim thread when the dialog closes (SC-R-024): the Lua context is keyed by script name |
 | **UI-E-061** | `Esc` on a monitor view overlay (UI-R-112) with nothing typed into it yet | close-confirm popup opens anyway — monitor overlays track no dirty flag, so the confirmation is unconditional |
 | **UI-E-062** | `Esc` on a monitor add/edit-interpretation dialog while one of its own sub-popups is open (the delete confirmation, the predefined-register picker) | dismisses only that sub-popup; does not reach the dialog's close-confirm (UI-R-112), same rule as UI-E-033 |
+| **UI-E-094** | Frame smaller than the editor dialog's minimum size (UI-R-200) | the box takes the whole frame and is clipped, no minimum is enforced against the terminal (UI-E-047) |
+| **UI-E-095** | `Enter` in `Insert` mode inside the editor dialog (UI-R-205) | the field splits the line; confirming (UI-R-202) is reachable only from `Normal` mode |
 
 ## Code editor
 
@@ -73,6 +78,10 @@ Boundary behavior, error semantics, intentional or known constraints. The known-
 | **UI-E-079** | Mutating edit on an enabled field that has gutter labels (UI-R-164) | labels are never resynced by the widget: an inserted, split or deleted line shifts rows out from under the labels and leaves them stale; labels are intended for disabled, read-only use, and keeping them in sync is the consumer's job |
 | **UI-E-080** | Gutter-label list longer than the buffer | the surplus labels are never rendered, but still count toward the gutter width of UI-R-167 |
 | **UI-E-083** | Gutter labels wider than the field's whole area (UI-R-172) | the gutter takes the full area width and the text content is left zero columns; no minimum content width is reserved and no label is dropped, matching the app's no-minimum-size stance (UI-E-047, UI-E-055) |
+| **UI-E-133** | `PageDown`, `PageUp`, `Ctrl+D` or `Ctrl+U` before the first render (UI-R-293) | the visible height is one row, so a page and a half page both move the active line by one line |
+| **UI-E-134** | Paging (UI-R-294, UI-R-295) at the first or last buffer line | the move clamps to that line; no wrap-around, matching UI-E-076 |
+| **UI-E-135** | `h`, `l`, `Left`, `Right`, `0` or `$` on an *enabled* code editor | unchanged cursor motion (UI-R-029); the horizontal viewport scrolling of UI-R-296 through UI-R-299 exists only while the field is disabled |
+| **UI-E-136** | Vertical move onto a line shorter than the horizontal scroll offset (UI-R-300) | that row shows only its gutter and no text until the view is scrolled back; the view never snaps to the shorter line |
 
 ## Syntax highlighting
 
@@ -91,6 +100,55 @@ Boundary behavior, error semantics, intentional or known constraints. The known-
 | **UI-E-089** | `h`, `l`, `0`, `$`, `w`, `b`, `e` in a read-only markdown input field | consumed and ignored; only line/display-row navigation (`j`, `k`, `gg`, `G`, `Ctrl+D`, `Ctrl+U`) and yank act (UI-R-139) |
 | **UI-E-090** | Fence opened and never closed before the end of the buffer (UI-R-177) | every following line stays fence body to the last line of the buffer |
 | **UI-E-076** | `Ctrl+D` / `Ctrl+U` near the first or last display row (UI-R-136) | movement clamps to the first/last row; no wrap-around |
+| **UI-E-137** | Measuring the empty text (UI-R-188) | one display row, the single empty source line |
+| **UI-E-138** | Measuring at a width that leaves no columns for text, gutter included (UI-R-188) | the available text width is treated as one column, so every source line wraps one character per display row |
+
+## Diff widget
+
+| ID | Condition | Behavior |
+|---|---|---|
+| **UI-E-097** | Body line appearing before any hunk header, or a line the parser does not recognize (UI-R-208) | kept as a meta row; nothing is dropped and no parse error is raised |
+| **UI-E-098** | `\ No newline at end of file` marker in the input (UI-R-208) | a meta row of its own, following the line it belongs to |
+| **UI-E-099** | Empty diff text (UI-R-207) | no rows; the panes render empty and the selected-row query (UI-R-226) reports no rows |
+| **UI-E-100** | Visual selection spanning rows whose one side is a filler (UI-R-209, UI-R-226) | the filler rows are part of the reported range, and the per-row query (UI-R-227) reports no line number for that side |
+| **UI-E-101** | Layout toggled (UI-R-215) while a Visual selection is active | active row and selection are unchanged: both layouts address the same aligned rows (UI-R-213) |
+| **UI-E-102** | Gutter-label list longer than the widget's row count (UI-R-218) | the surplus labels are never rendered but still count toward the gutter width, as UI-E-080 |
+| **UI-E-111** | Word longer than the available width with wrapping on (UI-R-260) | broken at a character boundary; never truncated, never overflowed, as UI-E-070 |
+| **UI-E-112** | Wrapping on in a pane too narrow for the gutter (UI-R-260) | the available text width is treated as one column, one character per display row, as UI-E-138 |
+| **UI-E-113** | `Ctrl+F` on a widget built without the full new-side text (UI-R-258, UI-R-259) | consumed and ignored; the display stays hunk-only |
+| **UI-E-114** | Full new-side text disagreeing with the patch's context lines (UI-R-253) | the supplied text supplies the new-side content and the patch supplies the row's classification; no error is raised and nothing is dropped |
+| **UI-E-115** | Annotation or marked range naming a side and file line range no row covers (UI-R-266, UI-R-269) | silently not rendered; the widget raises no error and drops no row |
+| **UI-E-116** | Several annotations anchored to the same row (UI-R-270) | drawn one block after another beneath that row, in the order the consumer supplied them |
+| **UI-E-117** | Marked range covering a row where that side holds a filler (UI-R-267) | that row's gutter cell stays blank and unpainted, so the block is interrupted where the side has no line |
+| **UI-E-118** | Annotations hidden or shown with `Ctrl+A` while the active row is below them (UI-R-275) | the active row is unchanged and the scroll re-settles in display rows (UI-R-265) |
+| **UI-E-120** | Active logical row occupying more display rows than the viewport height (UI-R-260, UI-R-264, UI-R-265) | `j` and `Down` scroll the viewport one display row at a time within that row until its last display row is visible and only then move to the next logical row, `k` and `Up` do the mirror image toward its first display row; the paging keys of UI-R-231 keep counting display rows throughout |
+| **UI-E-121** | Marked range (UI-R-267) covering an added or removed row painted by UI-R-278 | the range's colour wins on that side's gutter cell, so the marked span still reads as one continuous block, and the row style paints the rest of the row |
+| **UI-E-122** | The filler side (UI-R-212) of a row whose other side is added or removed | that side stays unpainted: UI-R-278 paints only the pane holding the entry, so a filler never carries a green or red band |
+| **UI-E-123** | Display rows of one pane past that side's last entry while the other side still has rows (UI-R-211, UI-R-212) | painted in the widget's general background and nothing else: the padding never carries the opposite side's added or removed band (UI-R-278) |
+| **UI-E-124** | Added or removed row left unpaired because the two runs differ in length (UI-R-280) | it carries no word-diff spans and is painted as one plain band (UI-R-278) |
+| **UI-E-125** | Word-diff span on a wrapped row (UI-R-260, UI-R-279) | the span is split at the wrap point and continues on the next display row, which keeps the row band elsewhere |
+| **UI-E-126** | Paired rows sharing no word token, so every token differs (UI-R-281) | the whole text of both rows is emphasised (UI-R-283), leaving the gutter and the cells past the text in the plain band |
+| **UI-E-127** | Added and removed rows on a terminal rendering no background color (UI-R-216) | they read as context rows: with the `+`/`-` marker column removed, the row style is the only kind cue and no textual fallback is drawn |
+| **UI-E-128** | Empty body line inside a hunk against a lone-space context line (UI-R-285) | both are context rows with empty text on both sides and are indistinguishable once rendered; only a line outside any hunk stays meta (UI-E-097) |
+| **UI-E-129** | Paired added and removed rows (UI-R-280) where either side holds more than 512 word tokens (UI-R-281), as a minified or base64 line does | neither row carries any word-diff span and both keep the plain full-width band of UI-R-278, exactly as an unpaired row does (UI-E-124) |
+| **UI-E-130** | Borderless split layout on an area whose width leaves an odd column once the separator is taken (UI-R-287) | the separator widens to two columns and the panes stay equal (UI-R-211); no pane is ever one column wider than the other |
+| **UI-E-131** | A full-width meta row (UI-R-210) in the borderless split layout | it spans the separator column too, since it spans the widget's full width; UI-R-288 governs the separator on every other row |
+| **UI-E-132** | Borderless split layout on an area narrower than three columns (UI-R-287) | the separator is dropped to zero columns so both panes keep at least one column; the panes abut, as they do with too little width for any seam |
+| **UI-E-141** | Meta row text wider than a pane's inner width in the bordered split layout (UI-R-304) | the portion visible from the current horizontal offset (UI-R-310) is clipped at that pane's inner width, independently in each pane; no ellipsis, and no character ever spills onto or past a pane border |
+| **UI-E-142** | Focus change (UI-R-305) on a diff widget drawn without a border (UI-R-286, its default) | nothing repaints: with no border there is no focus cue at all, and the focused side (UI-R-228) stays invisible too |
+| **UI-E-143** | An annotation block inner row whose text does not fill the block's inner width, in any layout (UI-R-270) | the surplus columns are drawn in the widget's general background style |
+| **UI-E-144** | The border cells of an annotation block (UI-R-270) | they are drawn in the block's own border style in every layout, the bordered split included, where they sit strictly inside the pane's inner area and overwrite no pane border cell (UI-R-308) |
+| **UI-E-145** | Horizontal offset (UI-R-232) past the last column of a meta row's text (UI-R-310) | that row shows no text, only its meta row style (UI-R-276) across the area it is drawn in; the view never snaps back to the shorter row, as UI-E-136 |
+
+## File tree widget
+
+| ID | Condition | Behavior |
+|---|---|---|
+| **UI-E-103** | File tree built from an empty path list (UI-R-234) | no rows; the selection query (UI-R-243) reports no node |
+| **UI-E-110** | Rendering a file tree built from an empty path list (UI-R-252, UI-E-103) | no row carries the highlighted-row style, since there is no selected node; the widget draws its border and an empty interior |
+| **UI-E-104** | Path with no directory component (UI-R-234) | a file node at depth zero, directly under the root |
+| **UI-E-105** | `h` or `Left` on a top-level node that is not an expanded directory (UI-R-241) | the selection is unchanged; there is no parent to move to |
+| **UI-E-106** | Row wider than the file tree's area (UI-R-238) | the row is clipped at the area width; the file tree never scrolls horizontally |
 
 ## Rendering and terminal size
 
@@ -171,3 +229,9 @@ Boundary behavior, error semantics, intentional or known constraints. The known-
 ### Markdown input field has no consumer in the application
 
 **UI-E-077** — The markdown input field is a library widget in the TUI crate with no use in any application view; it is exercised only by its runnable example and by automated buffer-render tests. Absence of a consumer is deliberate, not an oversight.
+
+### Review-flow widgets have no consumer in the application
+
+**UI-E-096** — The diff widget, the markdown measurement, the command-line widget and the editor dialog are library surface in the TUI crate with no use in any application view; each is exercised only by runnable examples and automated tests. Absence of a consumer is deliberate, not an oversight, as for the markdown input field (UI-E-077).
+
+**UI-E-109** — The file tree widget in the application: library surface with no consumer in any application view, exercised by the example and automated tests only, as UI-E-096 records for the diff widget, the markdown measurement, the command-line widget and the editor dialog.

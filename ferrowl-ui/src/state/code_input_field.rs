@@ -30,12 +30,33 @@ pub struct CodeInputFieldState {
     #[getset(get_copy = "pub")]
     #[builder(default = "0")]
     cursor_col: usize,
+    /// Zero-based buffer line drawn at the top of the viewport by the last render;
+    /// zero before the first render (UI-R-303).
     #[getset(get_copy = "pub")]
     #[builder(default = "0")]
     scroll_offset: usize,
     #[getset(get_copy = "pub")]
     #[builder(default = "0")]
     h_scroll: usize,
+    /// Visible height in rows of the last render; one row before the first render
+    /// (UI-R-293, UI-E-133).
+    #[getset(get_copy = "pub")]
+    #[builder(default = "1")]
+    visible_height: usize,
+    /// Content width in columns of the last render, excluding the gutter; one column
+    /// before the first render, the same pre-render convention as `visible_height`.
+    /// Crate-private and unlisted in `api-contract.md`: it exists only so `$`
+    /// (UI-R-299) can compute its scroll offset without depending on a render.
+    #[getset(skip)]
+    #[builder(setter(skip), default = "1")]
+    content_width: usize,
+    /// Gates the read-only navigation intercept of UI-R-296 through UI-R-300. On by
+    /// default; a widget composing this state for its own read-only viewport (the
+    /// markdown input field) turns it off so its own paging and horizontal navigation
+    /// are not shadowed by this state's.
+    #[getset(skip)]
+    #[builder(setter(skip), default = "true")]
+    readonly_nav: bool,
     // `set_focused` needs the format-on-blur side effect (see `impl SetFocus` below), so
     // getset's auto-generated setter is skipped here to avoid it shadowing the trait
     // method on direct calls; the getter is hand-written just below.
@@ -230,6 +251,110 @@ impl CodeInputFieldState {
         }
         self.cursor_col = 0;
         self.clamp_normal();
+    }
+
+    /// Crate-private: the only caller composing this state for its own read-only
+    /// viewport (the markdown input field) needs to turn UI-R-296..UI-R-300 off.
+    pub(crate) fn set_readonly_nav(&mut self, on: bool) {
+        self.readonly_nav = on;
+    }
+
+    /// Crate-private: records the last render's content width so `$` (UI-R-299) can
+    /// compute its scroll offset without depending on a render.
+    pub(crate) fn set_content_width(&mut self, w: usize) {
+        self.content_width = w;
+    }
+
+    /// Moves `active_line` by `rows` (at least one), clamped to the buffer's first and
+    /// last line (UI-R-294, UI-R-295, UI-E-134). Skips the Normal-mode column clamp
+    /// while disabled, so a read-only field keeps its cursor column and therefore its
+    /// horizontal scroll across the move (UI-R-300).
+    fn page_move(&mut self, down: bool, rows: usize) {
+        let rows = rows.max(1);
+        self.active_line = if down {
+            (self.active_line + rows).min(self.lines.len() - 1)
+        } else {
+            self.active_line.saturating_sub(rows)
+        };
+        if !self.disabled {
+            self.clamp_normal();
+        }
+    }
+
+    /// The last column of the widest buffer line (UI-R-297).
+    fn max_h_scroll(&self) -> usize {
+        self.lines
+            .iter()
+            .map(|l| l.chars().count())
+            .max()
+            .unwrap_or(0)
+            .saturating_sub(1)
+    }
+
+    /// Paging (UI-R-294, UI-R-295) and, while disabled, the read-only horizontal
+    /// scrolling of UI-R-296 through UI-R-300. Gated by `readonly_nav` so a composing
+    /// widget can turn the whole intercept off; the flag is read nowhere else.
+    fn handle_readonly_nav(
+        &mut self,
+        modifiers: KeyModifiers,
+        code: KeyCode,
+    ) -> Option<EventResult> {
+        if !self.readonly_nav {
+            return None;
+        }
+        match (modifiers, code) {
+            (KeyModifiers::NONE, KeyCode::PageDown) => {
+                self.page_move(true, self.visible_height);
+                Some(EventResult::Consumed)
+            }
+            (KeyModifiers::NONE, KeyCode::PageUp) => {
+                self.page_move(false, self.visible_height);
+                Some(EventResult::Consumed)
+            }
+            (KeyModifiers::CONTROL, KeyCode::Char('d')) => {
+                self.page_move(true, (self.visible_height / 2).max(1));
+                Some(EventResult::Consumed)
+            }
+            (KeyModifiers::CONTROL, KeyCode::Char('u')) => {
+                self.page_move(false, (self.visible_height / 2).max(1));
+                Some(EventResult::Consumed)
+            }
+            (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::Char('h')) if self.disabled => {
+                self.h_scroll = self.h_scroll.saturating_sub(1);
+                self.cursor_col = self.h_scroll;
+                Some(EventResult::Consumed)
+            }
+            (KeyModifiers::NONE, KeyCode::Left) if self.disabled => {
+                self.h_scroll = self.h_scroll.saturating_sub(1);
+                self.cursor_col = self.h_scroll;
+                Some(EventResult::Consumed)
+            }
+            (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::Char('l')) if self.disabled => {
+                self.h_scroll = (self.h_scroll + 1).min(self.max_h_scroll());
+                self.cursor_col = self.h_scroll;
+                Some(EventResult::Consumed)
+            }
+            (KeyModifiers::NONE, KeyCode::Right) if self.disabled => {
+                self.h_scroll = (self.h_scroll + 1).min(self.max_h_scroll());
+                self.cursor_col = self.h_scroll;
+                Some(EventResult::Consumed)
+            }
+            (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::Char('0')) if self.disabled => {
+                self.h_scroll = 0;
+                self.cursor_col = self.h_scroll;
+                Some(EventResult::Consumed)
+            }
+            (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::Char('$')) if self.disabled => {
+                let last = self.lines[self.active_line]
+                    .chars()
+                    .count()
+                    .saturating_sub(1);
+                self.h_scroll = (last + 1).saturating_sub(self.content_width);
+                self.cursor_col = last;
+                Some(EventResult::Consumed)
+            }
+            _ => None,
+        }
     }
 
     fn clamp_cursor(&mut self) {
@@ -505,14 +630,18 @@ impl CodeInputFieldState {
         match (modifiers, code) {
             (KeyModifiers::NONE, KeyCode::Up) => {
                 self.active_line = self.active_line.saturating_sub(1);
-                self.clamp_normal();
+                if !self.disabled {
+                    self.clamp_normal();
+                }
                 true
             }
             (KeyModifiers::NONE, KeyCode::Down) => {
                 if self.active_line + 1 < self.lines.len() {
                     self.active_line += 1;
                 }
-                self.clamp_normal();
+                if !self.disabled {
+                    self.clamp_normal();
+                }
                 true
             }
             (KeyModifiers::NONE, KeyCode::Left) => {
@@ -550,12 +679,16 @@ impl CodeInputFieldState {
                     if self.active_line + 1 < self.lines.len() {
                         self.active_line += 1;
                     }
-                    self.clamp_normal();
+                    if !self.disabled {
+                        self.clamp_normal();
+                    }
                     true
                 }
                 'k' => {
                     self.active_line = self.active_line.saturating_sub(1);
-                    self.clamp_normal();
+                    if !self.disabled {
+                        self.clamp_normal();
+                    }
                     true
                 }
                 '0' => {
@@ -856,6 +989,11 @@ impl IsFocus for CodeInputFieldState {
 
 impl HandleEvents for CodeInputFieldState {
     fn handle_events(&mut self, modifiers: KeyModifiers, code: KeyCode) -> EventResult {
+        if self.mode != VimMode::Insert
+            && let Some(r) = self.handle_readonly_nav(modifiers, code)
+        {
+            return r;
+        }
         if !self.vim {
             return self.handle_edit_key(modifiers, code);
         }
@@ -886,14 +1024,18 @@ impl CodeInputFieldState {
             (KeyModifiers::NONE, KeyCode::Up) => {
                 if self.active_line > 0 {
                     self.active_line -= 1;
-                    self.clamp_cursor();
+                    if !self.disabled {
+                        self.clamp_cursor();
+                    }
                 }
                 EventResult::Consumed
             }
             (KeyModifiers::NONE, KeyCode::Down) => {
                 if self.active_line + 1 < self.lines.len() {
                     self.active_line += 1;
-                    self.clamp_cursor();
+                    if !self.disabled {
+                        self.clamp_cursor();
+                    }
                 }
                 EventResult::Consumed
             }
@@ -1781,7 +1923,9 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-036 — a disabled editor permits motion and visual yank but ignores edits.
+    /// UI-R-036, UI-R-296 — a disabled editor permits motion and visual yank but ignores
+    /// edits; `l` now scrolls the viewport (UI-R-296) rather than moving the cursor within
+    /// the line, so the cursor follows the scroll instead of moving on its own.
     fn disabled_field_allows_motion_and_visual_yank_but_not_edits() {
         let mut s = CodeInputFieldStateBuilder::default()
             .disabled(true)
@@ -1791,6 +1935,7 @@ mod tests {
         s.set_cursor_col(0);
         key(&mut s, 'l');
         assert_eq!(s.cursor_col(), 1);
+        assert_eq!(s.h_scroll(), 1);
         key(&mut s, 'v');
         assert_eq!(s.vim_mode(), VimMode::Visual { linewise: false });
         key(&mut s, 'y');
@@ -1960,6 +2105,225 @@ mod tests {
             s.gutter_labels(),
             &Some(vec!["one".to_string(), "two".to_string()]),
             "labels are never resynced by the widget on a mutating edit"
+        );
+    }
+
+    // -- paging and read-only horizontal scrolling ----------------------
+
+    #[test]
+    /// UI-R-293 — before the first render, the visible height is one row.
+    fn ut_visible_height_defaults_to_one_row_before_first_render() {
+        let s = vim_state();
+        assert_eq!(s.visible_height(), 1);
+    }
+
+    #[test]
+    /// UI-R-294, UI-E-134 — PageDown/PageUp move by the visible height and clamp at both ends.
+    fn ut_page_down_and_up_move_by_visible_height_and_clamp() {
+        let mut s = vim_state();
+        s.set_content("a\nb\nc\nd\ne\nf");
+        s.set_active_line(0);
+        s.set_visible_height(3);
+        press(&mut s, KeyModifiers::NONE, KeyCode::PageDown);
+        assert_eq!(s.active_line(), 3);
+        press(&mut s, KeyModifiers::NONE, KeyCode::PageDown);
+        assert_eq!(s.active_line(), 5, "clamps to the last line");
+        press(&mut s, KeyModifiers::NONE, KeyCode::PageUp);
+        assert_eq!(s.active_line(), 2);
+        press(&mut s, KeyModifiers::NONE, KeyCode::PageUp);
+        assert_eq!(s.active_line(), 0, "clamps to the first line");
+    }
+
+    #[test]
+    /// UI-R-295 — Ctrl+D/Ctrl+U move by half the visible height, rounded down, never below one.
+    fn ut_ctrl_d_and_ctrl_u_move_by_half_the_visible_height() {
+        let mut s = vim_state();
+        s.set_content("a\nb\nc\nd\ne\nf\ng");
+        s.set_active_line(0);
+        s.set_visible_height(5);
+        press(&mut s, KeyModifiers::CONTROL, KeyCode::Char('d'));
+        assert_eq!(s.active_line(), 2);
+        press(&mut s, KeyModifiers::CONTROL, KeyCode::Char('u'));
+        assert_eq!(s.active_line(), 0);
+
+        s.set_visible_height(1);
+        press(&mut s, KeyModifiers::CONTROL, KeyCode::Char('d'));
+        assert_eq!(
+            s.active_line(),
+            1,
+            "half of one row is still at least one line"
+        );
+    }
+
+    #[test]
+    /// UI-E-133 — paging before the first render moves the active line by one line.
+    fn ut_paging_before_first_render_moves_one_line() {
+        let mut s = vim_state();
+        s.set_content("a\nb\nc");
+        s.set_active_line(0);
+        press(&mut s, KeyModifiers::NONE, KeyCode::PageDown);
+        assert_eq!(s.active_line(), 1);
+        press(&mut s, KeyModifiers::CONTROL, KeyCode::Char('d'));
+        assert_eq!(s.active_line(), 2);
+    }
+
+    #[test]
+    /// UI-R-296, UI-R-297 — a disabled field scrolls horizontally with h/l instead of moving
+    /// the cursor within the line, clamped at zero and at the widest line's last column.
+    fn ut_disabled_h_l_scroll_the_viewport_and_clamp_at_both_ends() {
+        let mut s = CodeInputFieldStateBuilder::default()
+            .disabled(true)
+            .build()
+            .unwrap();
+        s.set_content("abc\nabcdefghij");
+        key(&mut s, 'h');
+        assert_eq!(s.h_scroll(), 0, "clamps at zero");
+        key(&mut s, 'l');
+        assert_eq!(s.h_scroll(), 1);
+        assert_eq!(s.cursor_col(), 1, "cursor follows the scroll");
+        for _ in 0..20 {
+            key(&mut s, 'l');
+        }
+        assert_eq!(s.h_scroll(), 9, "clamps to the widest line's last column");
+    }
+
+    #[test]
+    /// UI-R-298 — a disabled field's `0` sets the horizontal scroll to the first column.
+    fn ut_disabled_zero_scrolls_to_first_column() {
+        let mut s = CodeInputFieldStateBuilder::default()
+            .disabled(true)
+            .build()
+            .unwrap();
+        s.set_content("abcdef");
+        key(&mut s, 'l');
+        key(&mut s, 'l');
+        assert_ne!(s.h_scroll(), 0);
+        key(&mut s, '0');
+        assert_eq!(s.h_scroll(), 0);
+        assert_eq!(s.cursor_col(), 0);
+    }
+
+    #[test]
+    /// UI-R-299 — a disabled field's `$` scrolls to the smallest offset bringing the active
+    /// line's last column into view, whether or not the field is focused.
+    fn ut_disabled_dollar_brings_last_column_into_view() {
+        let mut s = CodeInputFieldStateBuilder::default()
+            .disabled(true)
+            .build()
+            .unwrap();
+        s.set_content("abcdefghij");
+        s.set_content_width(4);
+        key(&mut s, '$');
+        assert_eq!(s.h_scroll(), 6);
+        assert_eq!(s.cursor_col(), 9);
+    }
+
+    #[test]
+    /// UI-R-299 — `$` has no focus precondition: it scrolls the same whether or not the
+    /// field is currently focused, the case the render-time cursor-follow chain cannot serve.
+    fn ut_disabled_dollar_scrolls_when_the_field_is_unfocused() {
+        let mut s = CodeInputFieldStateBuilder::default()
+            .disabled(true)
+            .build()
+            .unwrap();
+        s.set_content("abcdefghij");
+        s.set_content_width(4);
+        s.set_focused(false);
+        key(&mut s, '$');
+        assert_eq!(s.h_scroll(), 6);
+    }
+
+    #[test]
+    /// UI-R-300, UI-E-136 — a vertical move in a disabled field leaves the horizontal scroll
+    /// unchanged whatever the length of the line moved onto.
+    fn ut_disabled_vertical_move_keeps_horizontal_scroll_on_shorter_line() {
+        let mut s = CodeInputFieldStateBuilder::default()
+            .disabled(true)
+            .build()
+            .unwrap();
+        s.set_content("abcdefghij\nab");
+        for _ in 0..5 {
+            key(&mut s, 'l');
+        }
+        let scroll = s.h_scroll();
+        key(&mut s, 'j');
+        assert_eq!(s.active_line(), 1);
+        assert_eq!(s.h_scroll(), scroll);
+    }
+
+    #[test]
+    /// UI-R-301 — paging and read-only horizontal scrolling are available in the plain
+    /// (non-vim) editor profile as well as vim-modal.
+    fn ut_paging_and_readonly_scroll_work_in_the_plain_profile() {
+        let mut s = CodeInputFieldStateBuilder::default()
+            .vim(false)
+            .disabled(true)
+            .build()
+            .unwrap();
+        s.set_content("aa\nbb\ncc\ndd");
+        s.set_active_line(0);
+        s.set_visible_height(2);
+        press(&mut s, KeyModifiers::NONE, KeyCode::PageDown);
+        assert_eq!(s.active_line(), 2);
+        press(&mut s, KeyModifiers::NONE, KeyCode::Char('l'));
+        assert_eq!(s.h_scroll(), 1);
+    }
+
+    #[test]
+    /// UI-R-302 — a disabled vim-modal editor still enters Visual mode and holds a selection.
+    fn ut_disabled_vim_field_still_enters_visual_and_holds_selection() {
+        let mut s = CodeInputFieldStateBuilder::default()
+            .disabled(true)
+            .build()
+            .unwrap();
+        s.set_content("abc");
+        key(&mut s, 'v');
+        assert_eq!(s.vim_mode(), VimMode::Visual { linewise: false });
+        press(&mut s, KeyModifiers::NONE, KeyCode::Esc);
+        assert_eq!(s.vim_mode(), VimMode::Normal);
+        press(&mut s, KeyModifiers::SHIFT, KeyCode::Char('V'));
+        assert_eq!(s.vim_mode(), VimMode::Visual { linewise: true });
+    }
+
+    #[test]
+    /// UI-E-135 — an *enabled* editor keeps h/l/0/$ as cursor motion; the read-only viewport
+    /// scrolling exists only while the field is disabled.
+    fn ut_enabled_field_keeps_cursor_motion_for_h_l_zero_dollar() {
+        let mut s = vim_state();
+        s.set_content("abcdef");
+        s.set_cursor_col(0);
+        key(&mut s, 'l');
+        assert_eq!(s.cursor_col(), 1);
+        assert_eq!(s.h_scroll(), 0);
+        key(&mut s, '$');
+        assert_eq!(s.cursor_col(), 5);
+        assert_eq!(s.h_scroll(), 0);
+        key(&mut s, '0');
+        assert_eq!(s.cursor_col(), 0);
+    }
+
+    #[test]
+    /// UI-R-125, UI-R-155 — with `readonly_nav` off, the read-only viewport scrolling and
+    /// paging of UI-R-294..UI-R-300 never fire, leaving the keys to whatever the composing
+    /// widget (the markdown field) does with them instead.
+    fn ut_readonly_nav_off_leaves_h_l_and_paging_to_the_composing_widget() {
+        let mut s = CodeInputFieldStateBuilder::default()
+            .disabled(true)
+            .build()
+            .unwrap();
+        s.set_readonly_nav(false);
+        s.set_content("abcdef");
+        s.set_cursor_col(0);
+        key(&mut s, 'l');
+        assert_eq!(
+            s.h_scroll(),
+            0,
+            "the horizontal-scroll intercept is off, so `l` cannot have scrolled the view"
+        );
+        let r = s.handle_events(KeyModifiers::NONE, KeyCode::PageDown);
+        assert!(
+            matches!(r, EventResult::Unhandled(..)),
+            "paging is off too, and nothing else in the disabled field claims PageDown"
         );
     }
 }

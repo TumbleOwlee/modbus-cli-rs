@@ -338,3 +338,40 @@ fn it_renders_a_document_covering_every_construct() {
     );
     assert!(row_text(&b, 0, 20).contains("H1"));
 }
+
+#[test]
+/// UI-R-188 — `measure` agrees with the display-row height a real render actually uses,
+/// with and without the line-number gutter: the rendered height (last non-blank row's
+/// index plus one, not a count of non-blank rows — that would drop the blank rows
+/// separating blocks, which `measure` rightly counts) matches `measure`'s own count.
+fn it_measure_agrees_with_the_rendered_buffer() {
+    let content = "# H1\n## H2\n### H3\n#### H4\n##### H5\n###### H6\n\n\
+         - a\n  - nested\n1. one\n- [ ] todo\n- [x] done\n\n\
+         > quote\n>> nested quote\n\n---\n\n\
+         ```lua\nlocal x = 1\n```\n\n\
+         ```json\n{\"a\": 1}\n```\n\n\
+         ```\nno info string\n```\n\n\
+         **bold** *italic* `code` ~~strike~~ [link](url) ![image](url)\n\n\
+         this line is deliberately much longer than the widget is wide so it must wrap\n\
+         andthiswordisalsoextremelylongandcannotfitonanyrowwithoutbreaking";
+    for line_numbers in [false, true] {
+        let w = MarkdownInputFieldBuilder::default()
+            .line_numbers(line_numbers)
+            .build()
+            .unwrap();
+        let mut s = state_with(content);
+        SetFocus::set_focused(&mut s, false);
+        let width = 20u16;
+        let mut b = buffer(width, 60);
+        StatefulWidget::render(&w, Rect::new(0, 0, width, 60), &mut b, &mut s);
+        let rendered_height = (0..60u16)
+            .rev()
+            .find(|&y| row_text(&b, y, width).chars().any(|c| c != ' '))
+            .map_or(0, |y| y as usize + 1);
+        assert_eq!(
+            w.measure(content, width),
+            rendered_height,
+            "line_numbers={line_numbers}"
+        );
+    }
+}

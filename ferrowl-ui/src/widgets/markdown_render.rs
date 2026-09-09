@@ -381,7 +381,11 @@ fn tokenize(chars: &[(char, Style)]) -> Vec<Vec<(char, Style)>> {
     tokens
 }
 
-fn word_wrap(chars: &[(char, Style)], width: usize, indent: usize) -> Vec<Vec<(String, Style)>> {
+pub(crate) fn word_wrap(
+    chars: &[(char, Style)],
+    width: usize,
+    indent: usize,
+) -> Vec<Vec<(String, Style)>> {
     let tokens = tokenize(chars);
     let mut rows: Vec<Vec<(char, Style)>> = Vec::new();
     let mut cur: Vec<(char, Style)> = Vec::new();

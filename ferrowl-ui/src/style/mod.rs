@@ -1,6 +1,7 @@
 //! Per-widget style bundles, defaulting to [`COLOR_SCHEME`](crate::COLOR_SCHEME).
 
 mod button;
+mod diff_view;
 mod input_field;
 mod markdown;
 mod selection;
@@ -11,6 +12,7 @@ mod table;
 mod text;
 
 pub use button::*;
+pub use diff_view::*;
 pub use input_field::*;
 pub use markdown::*;
 pub use selection::*;
