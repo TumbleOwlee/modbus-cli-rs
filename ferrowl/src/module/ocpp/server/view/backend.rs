@@ -214,7 +214,7 @@ where
         {
             return i;
         }
-        // Build the shared state and register it for the Lua sim (keyed by identity + scope).
+        // The Lua sim's shared state registration is keyed by identity + scope.
         let state = if scope.is_connector() {
             let arc = Arc::new(RwLock::new(V::Conn::default()));
             with_state_mut(&self.lua_states, |reg| {

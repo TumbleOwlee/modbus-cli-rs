@@ -106,6 +106,9 @@ impl HandleEvents for InputFieldState {
             (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::Char(c)) if !self.disabled => {
                 // Always consume, even if `c` is rejected below: a focused field must
                 // swallow typing so disallowed chars don't leak into app-level shortcuts.
+                // Left uncollapsed: `!self.disabled` here is redundant with the match guard
+                // above, but folding it into the outer `if` would tie the char-allow check to
+                // the disabled state textually, even though the two are unrelated conditions.
                 #[allow(clippy::collapsible_if)]
                 if self.allowed.is_none_or(|f| f(c)) {
                     if !self.disabled {

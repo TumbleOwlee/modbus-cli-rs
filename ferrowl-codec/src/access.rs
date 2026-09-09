@@ -7,11 +7,8 @@ use serde::{Deserialize, Serialize};
 /// Allowed access direction for a register.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub enum Access {
-    /// Register can only be read.
     ReadOnly,
-    /// Register can only be written.
     WriteOnly,
-    /// Register can be read and written.
     ReadWrite,
 }
 

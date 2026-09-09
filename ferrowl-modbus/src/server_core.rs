@@ -1476,7 +1476,7 @@ mod tests {
         Arc::new(RwLock::new(mem))
     }
 
-    // ---- WriteMultipleCoils: the written range's length comes from the request ----
+    // WriteMultipleCoils: the written range's length comes from the request.
 
     #[tokio::test]
     /// MB-R-062 — a multi-coil write is answered with the address written and the number of values written.
@@ -1547,8 +1547,6 @@ mod tests {
         .unwrap_err();
         assert_eq!(err, ExceptionCode::IllegalDataAddress);
     }
-
-    // ---- Coil / discrete-input reads ----
 
     #[tokio::test]
     /// MB-R-061 — a coil read reports each stored word as set when it is non-zero.
@@ -1640,8 +1638,6 @@ mod tests {
         assert_eq!(err, ExceptionCode::IllegalDataAddress);
     }
 
-    // ---- Register reads ----
-
     #[tokio::test]
     /// MB-R-057 — an input-register read is answered from the values stored in the shared store.
     async fn ut_read_input_registers_returns_seeded_values() {
@@ -1707,8 +1703,6 @@ mod tests {
         .unwrap_err();
         assert_eq!(err, ExceptionCode::IllegalDataAddress);
     }
-
-    // ---- Single writes ----
 
     #[tokio::test]
     /// MB-R-061 — a coil write stores a set coil, observable on read-back.
@@ -1795,8 +1789,6 @@ mod tests {
         assert_eq!(err, ExceptionCode::IllegalDataAddress);
     }
 
-    // ---- WriteMultipleRegisters ----
-
     #[tokio::test]
     /// MB-R-062 — a multi-register write is answered with the address written and the number of values written.
     async fn ut_write_multiple_registers_persists_all() {
@@ -1863,7 +1855,7 @@ mod tests {
         assert_eq!(err, ExceptionCode::IllegalDataAddress);
     }
 
-    // ---- ReadWriteMultipleRegisters (reads and writes the same holding region) ----
+    // ReadWriteMultipleRegisters reads and writes the same holding region.
 
     #[tokio::test]
     /// MB-R-063 — a read/write-multiple request applies the write and returns the values read before it.
@@ -2046,8 +2038,6 @@ mod tests {
         );
     }
 
-    // ---- Unsupported function codes ----
-
     #[tokio::test]
     /// MB-R-059 — report-server-id is rejected with `IllegalFunction`.
     async fn ut_report_server_id_is_illegal_function() {
@@ -2066,7 +2056,7 @@ mod tests {
         assert_eq!(err, ExceptionCode::IllegalFunction);
     }
 
-    // ---- Verbose logging: every arm's success/failure log branch ----
+    // Verbose logging: every arm's success/failure log branch.
 
     #[tokio::test]
     /// MB-R-067 — a TCP (verbose) server logs a success outcome for every supported request.

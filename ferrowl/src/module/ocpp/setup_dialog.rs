@@ -1786,7 +1786,7 @@ mod tests {
         // Directly forces the retired `wss`-below-TLS state the old hint row was written for.
         // `render` calls `sync_tls` first, which always derives `protocol` from the selector and
         // so overwrites this before anything reads it — the manual set only matters for proving
-        // the assertion below fails against pre-stage code (which had no such derivation); it
+        // the assertion below fails against code that lacked such a derivation; it
         // gives no coverage against a regression reintroducing the hint post-`sync_tls`.
         off.protocol.state.set_selection(1); // Wss
         let mut buf = Buffer::empty(area);

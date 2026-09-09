@@ -66,7 +66,7 @@ pub(crate) fn craft_response(name: &str, request: &Value, rfids: &RfidLists) -> 
     }
 }
 
-// ---- Shared `ServerVersion` body (both 2.0.1 and 2.1's `impl` blocks delegate to these). ----
+// Shared `ServerVersion` body (both 2.0.1 and 2.1's `impl` blocks delegate to these).
 
 /// 2.0.1 connectors are listed and addressed by EVSE id only; a nested/top-level `connectorId` is
 /// ignored for bucketing (connector kept `None`).

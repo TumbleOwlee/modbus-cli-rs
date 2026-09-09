@@ -317,7 +317,6 @@ mod tests {
         let mut app = app_with(&["a"]);
         assert!(!app.help_open);
 
-        // Open the topmost (help) layer.
         app.handle_nav_key(KeyModifiers::empty(), KeyCode::Char('?'));
         assert!(app.help_open, "`?` opens the keybind-help layer");
 

@@ -3,7 +3,6 @@ use mlua::UserData;
 use std::hash::Hash;
 use std::sync::{Arc, atomic::AtomicBool};
 
-/// Lua context builder
 pub struct ContextBuilder<K>
 where
     K: Hash + Eq + Default,
@@ -16,7 +15,6 @@ impl<K> Default for ContextBuilder<K>
 where
     K: Hash + Eq + Default,
 {
-    /// Create new context builder
     fn default() -> Self {
         Self {
             context: Ok(Context::<K>::default()),

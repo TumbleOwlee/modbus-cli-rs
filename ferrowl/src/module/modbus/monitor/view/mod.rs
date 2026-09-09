@@ -709,10 +709,8 @@ fn memory_table_rows(
                 .join(" ");
             let ascii: String = cells.iter().map(memory_cell_char).collect();
             let last = cells.len().saturating_sub(1);
-            // Compute each cell's recency/value-class color once and reuse it for
-            // both the Hex and Ascii spans, instead of two independent `memory_cell_style` calls
-            // per cell (it's a pure function of its arguments, so both calls always agreed on the
-            // color — computing it twice was wasted work, not divergent behavior).
+            // Each cell's recency/value-class color is computed once and reused for both the
+            // Hex and Ascii spans.
             let (hex_spans, ascii_spans): (Vec<_>, Vec<_>) = cells
                 .iter()
                 .enumerate()

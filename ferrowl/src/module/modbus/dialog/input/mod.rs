@@ -400,7 +400,7 @@ impl EditInputDialog {
         d.text_alignment.state = self.text_alignment.state.clone();
         d.text_width.state = self.text_width.state.clone();
 
-        // Set up default selection with sentinel and try to match prior text default.
+        // Index 0 is the "(no default)" sentinel.
         let mut default_vals = vec![NamedValue {
             name: "(no default)".to_string(),
             value: Scalar::Text("".into()),

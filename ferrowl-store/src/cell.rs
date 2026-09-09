@@ -114,7 +114,6 @@ impl<'a> ValueRange<'a> {
         }
     }
 
-    /// Returns the raw values.
     pub fn values(&self) -> &'a [u16] {
         self.values
     }

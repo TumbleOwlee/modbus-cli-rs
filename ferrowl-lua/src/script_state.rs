@@ -13,7 +13,6 @@ pub struct ScriptState {
 }
 
 impl ScriptState {
-    /// Create a new error state
     pub fn err(err: Error) -> Self {
         Self {
             state: ExecState::Err(err),
@@ -21,7 +20,6 @@ impl ScriptState {
         }
     }
 
-    /// Create a new success state
     pub fn ok() -> Self {
         Self {
             state: ExecState::Ok,
@@ -29,12 +27,10 @@ impl ScriptState {
         }
     }
 
-    /// Retrieve duration passed since last execution
     pub fn time_since(&self) -> std::time::Instant {
         self.time_since
     }
 
-    /// Retrieve error if present
     pub fn error(&self) -> Option<Error> {
         match self.state {
             ExecState::Err(ref e) => Some(e.clone()),
@@ -42,7 +38,6 @@ impl ScriptState {
         }
     }
 
-    /// Check whether the execution is in `Ok` state
     pub fn is_ok(&self) -> bool {
         match self.state {
             ExecState::Ok => true,
@@ -50,7 +45,6 @@ impl ScriptState {
         }
     }
 
-    /// Check whether the execution is in `Err` state
     pub fn is_err(&self) -> bool {
         !self.is_ok()
     }

@@ -103,6 +103,7 @@ struct App {
     pub error: Widget<InputFieldState, InputField<String>>,
 }
 
+// Fields exist to demo the derive; remove this allow once the example exercises them.
 #[derive(Debug)]
 #[allow(dead_code)]
 struct Person {
