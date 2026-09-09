@@ -60,6 +60,8 @@ fn it_convert_toml_to_json_preserves_data() {
 }
 
 #[test]
+/// CS-R-002 — encoding is selected solely from the path extension, case-insensitive; an
+/// unrecognized extension or none at all is `None`, never sniffed from content.
 fn it_filetype_infers_from_extension() {
     assert_eq!(FileType::from_path("a/b.toml"), Some(FileType::Toml));
     assert_eq!(FileType::from_path("a/b.JSON"), Some(FileType::Json));

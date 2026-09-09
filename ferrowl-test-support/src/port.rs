@@ -77,7 +77,7 @@ mod tests {
         assert_eq!(err.kind(), std::io::ErrorKind::AddrInUse);
     }
 
-    /// NF-R-043 — `release()` drops the binding and hands back the number,
+    /// NF-R-066 — `release()` drops the binding and hands back the number,
     /// which is then free to bind again. This rebind is a real TOCTOU window: any concurrent
     /// `bind(":0")`, in this process (a sibling test on another thread) or another, can steal
     /// the number first and make this assertion fail spuriously.
@@ -89,8 +89,8 @@ mod tests {
         std::net::TcpListener::bind(("127.0.0.1", port)).unwrap();
     }
 
-    /// NF-R-043 — `into_listener()` hands over the same bound socket, not a
-    /// fresh one.
+    /// NF-R-064, NF-R-065 — `port()` reports the bound port, and `into_listener()` hands over
+    /// that same bound socket, not a fresh one.
     #[test]
     fn ut_tcp_into_listener_keeps_binding() {
         let guard = reserve_tcp_port();
@@ -108,7 +108,7 @@ mod tests {
         assert_eq!(err.kind(), std::io::ErrorKind::AddrInUse);
     }
 
-    /// NF-R-043 — `release()` drops the binding and hands back the number,
+    /// NF-R-066 — `release()` drops the binding and hands back the number,
     /// which is then free to bind again. This rebind is a real TOCTOU window: any concurrent
     /// `bind(":0")`, in this process (a sibling test on another thread) or another, can steal
     /// the number first and make this assertion fail spuriously.
@@ -120,8 +120,8 @@ mod tests {
         std::net::UdpSocket::bind(("127.0.0.1", port)).unwrap();
     }
 
-    /// NF-R-043 — `into_socket()` hands over the same bound socket, not a
-    /// fresh one.
+    /// NF-R-064, NF-R-065 — `port()` reports the bound port, and `into_socket()` hands over that
+    /// same bound socket, not a fresh one.
     #[test]
     fn ut_udp_into_socket_keeps_binding() {
         let guard = reserve_udp_port();

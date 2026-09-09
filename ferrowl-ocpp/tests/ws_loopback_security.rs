@@ -539,7 +539,7 @@ async fn basic_auth_over_self_signed_tls_checks_credentials() {
 // level test is needed since the policy is rejected before any socket work starts.
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-/// OC-R-035, OC-R-040 — a `Mutual` CS identity is presented and a self-signed CSMS's `Mutual`
+/// OC-R-035, OC-R-040, OC-R-166 — a `Mutual` CS identity is presented and a self-signed CSMS's `Mutual`
 /// policy with a `CertVerification::CaFiles` list accepts it end-to-end over a real TLS+mTLS
 /// handshake: the server's own self-signed identity and the CA trusted for verifying client
 /// certificates are independent (unlike `build_server_config`'s unit-level coverage of the same
