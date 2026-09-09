@@ -1998,6 +1998,11 @@ mod tests {
         );
         assert_eq!(b[(8, 1)].bg, w.style.removed_word.bg.unwrap());
         assert_ne!(
+            b[(8, 1)].bg,
+            plain_b[(8, 1)].bg,
+            "emphasis background differs from the plain removed band"
+        );
+        assert_ne!(
             b[(8, 1)].fg,
             w.style.removed_word.fg.unwrap(),
             "foreground stays the syntax theme's, not the emphasis style's own"

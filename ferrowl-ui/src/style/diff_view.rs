@@ -102,7 +102,7 @@ mod tests {
     #[test]
     /// UI-R-282 — the word-emphasis backgrounds default to the scheme's
     /// `diff_added_word`/`diff_removed_word` colors and set no foreground.
-    fn ut_word_emphasis_styles_default_to_lighter_row_backgrounds() {
+    fn ut_word_emphasis_styles_default_to_the_schemes_word_colors() {
         let style = DiffViewStyle::default();
         assert_eq!(style.added_word.bg, Some(COLOR_SCHEME.diff_added_word));
         assert_eq!(style.removed_word.bg, Some(COLOR_SCHEME.diff_removed_word));
