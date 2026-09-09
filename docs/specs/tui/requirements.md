@@ -448,7 +448,7 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **UI-R-292** — Each of the four diff colors of UI-R-289 is a literal value of its scheme, computed from no other color of the scheme at build or at run time.
 
-**UI-R-304** — In the split layout drawn with a border (UI-R-286) a meta row (UI-R-210) is drawn once inside each pane's border, the same text in both panes, each spanning only that pane's inner width, so no meta row ever crosses or overwrites a pane border; in every other layout the meta row spans the widget's full width.
+**UI-R-304** — In the split layout drawn with a border (UI-R-286) a meta row (UI-R-210) is drawn once inside each pane's border, the same text in both panes, each spanning only that pane's inner width, so no meta row ever crosses or overwrites a pane border; in every other layout the meta row spans the area it is drawn in.
 
 **UI-R-305** — The diff widget carries a widget-level focus flag, settable and queryable as UI-R-049's focusable contract requires, defaulting to unfocused.
 
@@ -456,7 +456,7 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **UI-R-307** — While the diff widget is not focused (UI-R-305), every pane it draws paints the normal border style, whatever its focused side (UI-R-228), so a focus change into or out of the widget repaints both split panes at once.
 
-**UI-R-308** — In the split layout drawn with a border (UI-R-286) an annotation block (UI-R-270) is drawn once inside each pane's border, the same text in both panes, each spanning only that pane's inner width, so no annotation block ever crosses or overwrites a pane border; in every other layout the annotation block spans the widget's full width, both panes and the separator column (UI-R-287) together in the borderless split layout.
+**UI-R-308** — In the split layout drawn with a border (UI-R-286) an annotation block (UI-R-270) is drawn once inside each pane's border, the same text in both panes, each spanning only that pane's inner width, so no annotation block ever crosses or overwrites a pane border; in every other layout the annotation block spans the area it is drawn in, both panes and the separator column (UI-R-287) together in the borderless split layout.
 
 **UI-R-309** — In the bordered split layout (UI-R-308) an annotation block occupies the same display rows in both panes, its height being the greater of the two panes' measurements (UI-R-272), so every aligned row below it (UI-R-211) still sits on one screen row in both panes.
 

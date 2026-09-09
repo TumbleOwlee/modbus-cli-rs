@@ -5,7 +5,7 @@ use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use ferrowl_ui::{
     AlternateScreen, Border,
     state::{DiffViewState, DiffViewStateBuilder, Side},
-    traits::HandleEvents,
+    traits::{HandleEvents, SetFocus},
     widgets::{DiffView, DiffViewBuilder},
 };
 use ratatui::{Frame, layout::Margin};
@@ -30,10 +30,11 @@ struct App {
 
 impl Default for App {
     fn default() -> Self {
-        let state = DiffViewStateBuilder::default()
+        let mut state = DiffViewStateBuilder::default()
             .language(Some(ferrowl_syntax::Language::Lua))
             .build_with_diff(DIFF)
             .unwrap();
+        state.set_focused(true);
         let widget = DiffViewBuilder::default()
             .border(Border::Full(Margin::new(1, 0)))
             .build()

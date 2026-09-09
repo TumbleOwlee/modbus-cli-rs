@@ -443,8 +443,8 @@ impl DiffView {
     }
 
     /// Measures every annotation's own text height at `inner_width` (UI-R-272), using a
-    /// read-only, line-numberless [`MarkdownInputField`] — the same field `draw_annotation`
-    /// draws with, so the measured and drawn layouts cannot differ.
+    /// read-only, line-numberless [`MarkdownInputField`] — widths this field measures at are
+    /// theme-independent, so the measured and drawn layouts cannot differ.
     fn measure_annotations(&self, annotations: &[Annotation], inner_width: u16) -> Vec<usize> {
         let field = MarkdownInputFieldBuilder::default()
             .line_numbers(false)

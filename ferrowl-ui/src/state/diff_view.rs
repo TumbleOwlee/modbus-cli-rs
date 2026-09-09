@@ -50,7 +50,7 @@ pub enum DiffLayout {
     Unified,
 }
 
-/// Which pane holds input focus (UI-R-228).
+/// Which pane a side-sensitive operation reads (UI-R-228).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Side {
     Old,
@@ -153,8 +153,8 @@ pub struct DiffViewState {
     #[getset(get_copy = "pub")]
     #[builder(default = "DiffLayout::Split")]
     layout: DiffLayout,
-    /// The pane currently holding focus (UI-R-228). `set_focused_side` is the only way to
-    /// change it.
+    /// The pane a side-sensitive operation reads (UI-R-228); never affects border styling.
+    /// `set_focused_side` is the only way to change it.
     #[getset(get_copy = "pub", set = "pub")]
     #[builder(default = "Side::Old")]
     focused_side: Side,
