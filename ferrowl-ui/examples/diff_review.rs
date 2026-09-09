@@ -16,6 +16,7 @@ use ferrowl_ui::{
 use ratatui::{
     Frame,
     layout::{Constraint, Layout, Margin, Rect},
+    widgets::Block,
 };
 use std::{io::Stdout, process::Command, time::Duration};
 
@@ -96,7 +97,7 @@ fn panes(area: Rect) -> Panes {
     let top =
         Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]).split(rows[0]);
     let bottom =
-        Layout::horizontal([Constraint::Percentage(40), Constraint::Percentage(60)]).split(rows[1]);
+        Layout::horizontal([Constraint::Percentage(20), Constraint::Percentage(80)]).split(rows[1]);
     Panes {
         base: top[0],
         branch: top[1],
@@ -300,7 +301,14 @@ fn ui(f: &mut Frame, model: &mut Model) {
         .unwrap();
     f.render_stateful_widget(&branch_widget, panes.branch, &mut model.branch);
 
-    let tree_widget = FileTreeBuilder::default().build().unwrap();
+    let tree_widget = FileTreeBuilder::default()
+        .title(Some("File Tree".into()))
+        .border(Border::Full(Margin {
+            horizontal: 1,
+            vertical: 0,
+        }))
+        .build()
+        .unwrap();
     f.render_stateful_widget(&tree_widget, panes.browser, &mut model.tree);
 
     let diff_widget = DiffViewBuilder::default().build().unwrap();
@@ -310,6 +318,8 @@ fn ui(f: &mut Frame, model: &mut Model) {
     branch_widget.render_overlay(panes.branch, f.buffer_mut(), &mut model.branch);
 
     if let Some(err) = &model.error {
+        let mut block = Block::bordered().title("Diff View");
+        let inner = block.inner(panes.diff);
         ratatui::widgets::Widget::render(
             ratatui::text::Text::from(err.as_str()),
             panes.diff,
@@ -663,7 +673,7 @@ mod tests {
 
     #[test]
     /// A file deleted on the selected branch has no new-side text; `git show` fails and
-    /// the example falls back to the hunk-only view (UI-R-259) without an error.
+    /// the example falls back to the hunk-only view without an error.
     fn ut_file_missing_on_the_branch_falls_back_to_hunk_only_without_an_error() {
         let mut model = Model::new(fixture_with_show(
             "main",

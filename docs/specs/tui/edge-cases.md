@@ -20,8 +20,8 @@ Boundary behavior, error semantics, intentional or known constraints. The known-
 | **UI-E-010** | `:quit` on the last tab | quits the application |
 | **UI-E-011** | `:log` bare, or `:log <path>` (path ≠ `clear`) | not app-level; forwarded to the view as a module command |
 | **UI-E-012** | Generic name shadows a module name | generic always wins; module commands reached only for unrecognized tokens |
-| **UI-E-091** | `Enter` on an empty command line (UI-R-191) | a submit outcome carrying the empty string, and the line closes; the widget does not special-case empty input, the consumer does |
-| **UI-E-092** | Command line with both an error and a notice set (UI-R-194, UI-R-195) | the error is shown and the notice is retained, appearing once the consumer clears the error |
+| **UI-E-139** | `Enter` on an empty command line (UI-R-191) | a submit outcome carrying the empty string, and the line closes; the widget does not special-case empty input, the consumer does |
+| **UI-E-140** | Command line with both an error and a notice set (UI-R-194, UI-R-195) | the error is shown and the notice is retained, appearing once the consumer clears the error |
 | **UI-E-093** | Command-line help box taller than the rows available above the line (UI-R-196) | the box is clipped to the available rows and stays anchored to the bottom, matching the app's no-minimum-size stance (UI-E-047) |
 
 ## Navigation and tab jumps
