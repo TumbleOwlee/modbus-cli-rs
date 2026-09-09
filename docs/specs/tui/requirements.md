@@ -404,7 +404,7 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **UI-R-269** — The diff widget takes a list of annotations, each naming a side, a file line range on that side and a markdown text, settable when built and afterwards.
 
-**UI-R-270** — An annotation renders as a bordered block directly beneath the last row of its range, spanning the full width of the widget in the unified layout and both panes in the split layout.
+**UI-R-270** — An annotation renders as a bordered block directly beneath the last row of its range, spanning the full width of the area it is drawn in (UI-R-308).
 
 **UI-R-271** — An annotation's text is rendered by a read-only markdown input field, so its body shows the rendered markdown of UI-R-128 rather than its source.
 
@@ -455,6 +455,10 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 **UI-R-306** — While the diff widget is focused (UI-R-305) and drawn with a border (UI-R-286), every pane it draws paints the focused border style — both panes together in the split layout (UI-R-211), the single pane in the unified layout (UI-R-213).
 
 **UI-R-307** — While the diff widget is not focused (UI-R-305), every pane it draws paints the normal border style, whatever its focused side (UI-R-228), so a focus change into or out of the widget repaints both split panes at once.
+
+**UI-R-308** — In the split layout drawn with a border (UI-R-286) an annotation block (UI-R-270) is drawn once inside each pane's border, the same text in both panes, each spanning only that pane's inner width, so no annotation block ever crosses or overwrites a pane border; in every other layout the annotation block spans the widget's full width, both panes and the separator column (UI-R-287) together in the borderless split layout.
+
+**UI-R-309** — In the bordered split layout (UI-R-308) an annotation block occupies the same display rows in both panes, its height being the greater of the two panes' measurements (UI-R-272), so every aligned row below it (UI-R-211) still sits on one screen row in both panes.
 
 ## File tree widget
 
