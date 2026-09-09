@@ -641,7 +641,7 @@ mod tests {
     }
 
     #[test]
-    /// MB-R-076 — a module instance is a TCP server owning one store, register set, and log; register-cache edits rebuild it (MB-R-088).
+    /// MB-R-088 — a TCP server module's register-cache edits (add/rename/remove) rebuild its register set.
     fn ut_module_new_tcp_server_and_sync_accessors() {
         use super::ModbusModule;
         use crate::config::{Endpoint, ModuleSpec, Role};
@@ -820,7 +820,7 @@ mod tests {
     }
 
     #[test]
-    /// MB-R-076 — a module instance can be an RTU client, building its register set from the device config.
+    /// An RTU client module instance builds its register set from the device config.
     fn ut_module_new_rtu_client() {
         use super::ModbusModule;
         use crate::config::{Endpoint, ModuleSpec, Role};

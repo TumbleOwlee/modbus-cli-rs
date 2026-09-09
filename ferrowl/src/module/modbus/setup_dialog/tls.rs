@@ -339,8 +339,8 @@ mod tests {
     // --- TlsLevel::from_config -----------------------------------------------------------------
 
     #[test]
-    /// UI-R-024 — the TLS fields load from a no-TLS-block config for both roles as `Off`, since
-    /// `ModbusTlsConfig::default()` is both policies `None` (MB-R-104).
+    /// MB-R-162 — the TLS fields load from a no-TLS-block config for both roles as `Off`, since
+    /// `ModbusTlsConfig::default()` is both policies `None`.
     fn ut_from_config_default_both_roles_is_off() {
         let cfg = ModbusTlsConfig::default();
         assert_eq!(
@@ -354,7 +354,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-024 — a mutual-TLS client config loads at the MutualTls level.
+    /// A mutual-TLS client config loads at the MutualTls level.
     fn ut_from_config_mutual_tls_client() {
         let cfg = ModbusTlsConfig {
             client: ClientTlsPolicy::Mutual {
@@ -372,7 +372,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-024, MB-R-136 — a mutual-TLS server config loads at the MutualTls level.
+    /// MB-R-136 — a mutual-TLS server config loads at the MutualTls level.
     fn ut_from_config_mutual_tls_server() {
         let cfg = ModbusTlsConfig {
             server: ServerTlsPolicy::Mutual {
@@ -392,7 +392,7 @@ mod tests {
     // --- TlsLevel::build_config -----------------------------------------------------------------
 
     #[test]
-    /// UI-R-024 — a server TLS build resolves cert/key from raw text when self-signed is off.
+    /// MB-R-135 — a server TLS build resolves cert/key from raw text when self-signed is off.
     fn ut_build_config_tls_server_resolves_cert_key() {
         let cfg = TlsLevel::Tls
             .build_config(ClientOrServer::Server, inputs("cert", "key", "", "", &[]))
@@ -465,7 +465,7 @@ mod tests {
     }
 
     #[test]
-    /// MB-R-139 — a mutual-TLS client build with the self-signed toggle on excludes the
+    /// MB-R-213 — a mutual-TLS client build with the self-signed toggle on excludes the
     /// (possibly stale) client-cert/key text and resolves to `CertSource::SelfSigned`.
     fn ut_build_config_mutual_tls_client_self_signed_excludes_cert_key() {
         let mut i = inputs("", "", "stale.crt", "stale.key", &[]);
@@ -538,7 +538,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-024 — building the config for the inactive role leaves it at `ModbusTlsConfig`'s
+    /// Building the config for the inactive role leaves it at `ModbusTlsConfig`'s
     /// default placeholder (the caller stitches in the real inactive-role config, if any).
     fn ut_build_config_leaves_inactive_role_at_default() {
         let cfg = TlsLevel::Tls
@@ -550,7 +550,7 @@ mod tests {
     // --- validate_tls ----------------------------------------------------------------------------
 
     #[test]
-    /// UI-R-024 — a server at TLS with self_signed set needs no cert/key files.
+    /// A server at TLS with self_signed set needs no cert/key files.
     fn ut_validate_tls_server_self_signed_needs_no_files() {
         let cfg = ModbusTlsConfig {
             server: ServerTlsPolicy::Tls {
@@ -562,7 +562,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-024 — a server at TLS without self_signed requires an existing cert and key file.
+    /// A server at TLS without self_signed requires an existing cert and key file.
     fn ut_validate_tls_server_requires_cert_and_key_files() {
         let missing = ModbusTlsConfig {
             server: ServerTlsPolicy::Tls {
@@ -625,7 +625,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-024 — a client's CA file, when set, must exist; skip-verify alone needs no file.
+    /// A client's CA file, when set, must exist; skip-verify alone needs no file.
     fn ut_validate_tls_client_ca_file_must_exist_when_set() {
         let cfg = ModbusTlsConfig {
             client: ClientTlsPolicy::Tls {
@@ -656,7 +656,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-024 — a client at mTLS requires existing client cert and key files.
+    /// A client at mTLS requires existing client cert and key files.
     fn ut_validate_tls_client_mutual_tls_requires_client_cert_key_files() {
         let cfg = ModbusTlsConfig {
             client: ClientTlsPolicy::Mutual {
@@ -680,7 +680,7 @@ mod tests {
     }
 
     #[test]
-    /// MB-R-139 — a client at mTLS with self-signed set needs no cert/key files checked.
+    /// MB-R-214 — a client at mTLS with self-signed set needs no cert/key files checked.
     fn ut_validate_tls_client_self_signed_needs_no_files() {
         let cfg = ModbusTlsConfig {
             client: ClientTlsPolicy::Mutual {

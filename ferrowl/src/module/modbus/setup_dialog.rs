@@ -1097,7 +1097,8 @@ mod tests {
         assert!(text.contains("src"), "missing suggestion popup:\n{text}");
     }
 
-    /// UI-R-067 — the `:edit` open path establishes the same single-focus state as `create`.
+    /// UI-R-067, UI-R-194 — the `:edit` open path establishes the same single-focus state as
+    /// `create`, including the nested TLS section opening unfocused.
     /// Compared against the `Focus` derive's own normalisation rather than a hand-listed field
     /// set, so a field added later is covered as soon as it renders.
     #[test]
@@ -1176,8 +1177,8 @@ mod tests {
         }
     }
 
-    /// UI-R-067 — a freshly created dialog focuses exactly one field (`name`, first in the Tab
-    /// cycle) and paints exactly one text cursor for it. The cursor rather than the border,
+    /// UI-R-067, UI-R-195 — a freshly created dialog focuses exactly one field (`name`, first in
+    /// the Tab cycle) and paints exactly one text cursor for it. The cursor rather than the border,
     /// because `name` opens empty against `NonEmpty` and so paints its error border, not its
     /// focused one — border color alone would not identify the focused field.
     #[test]
@@ -1273,7 +1274,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-024 — the setup dialog resolves a reconnect-off selection into the config value.
+    /// The setup dialog resolves a reconnect-off selection into the config value.
     fn ut_resolve_reconnect_off_maps_to_some_false() {
         let mut dialog = SetupDialog::create(Timing {
             timeout_ms: 0,
@@ -1310,7 +1311,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-024 — Edit mode pre-fills the dialog from the existing config.
+    /// Edit mode pre-fills the dialog from the existing config.
     fn ut_edit_prefills_reconnect_off() {
         let timing = Timing {
             timeout_ms: 100,
@@ -1337,7 +1338,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-024 — a TCP setup dialog always offers the TLS level selector, but the detail
+    /// A TCP setup dialog always offers the TLS level selector, but the detail
     /// section (self-signed/cert/etc.) only appears once a level above Off is actually picked
     /// — the level selector alone must never imply the rest of the section is showing.
     fn ut_tcp_dialog_shows_tls_level_selector_but_not_detail_section_at_off() {
@@ -1364,7 +1365,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-024 — picking a TLS level above Off reveals the detail section (MB-R-104's fields
+    /// Picking a TLS level above Off reveals the detail section (MB-R-104's fields
     /// become settable only once the user has actually opted into TLS).
     fn ut_tls_shown_once_level_selected_above_off() {
         let mut dialog = SetupDialog::create(Timing {
@@ -1379,7 +1380,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-024 — a server that turns on Self-Signed does not need (or show) the
+    /// A server that turns on Self-Signed does not need (or show) the
     /// cert/key file row; toggling it back off restores the row.
     fn ut_self_signed_hides_server_cert_row() {
         let mut dialog = SetupDialog::create(Timing {
@@ -1399,7 +1400,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-024 — a client that turns on Skip Verify does not need (or show) the CA-file
+    /// A client that turns on Skip Verify does not need (or show) the CA-file
     /// row; toggling it back off restores the row.
     fn ut_skip_verify_hides_ca_file_row() {
         let mut dialog = SetupDialog::create(Timing {
@@ -1426,7 +1427,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-024 — the client-CA row's ADD/DEL buttons hug the dialog's right inner edge with
+    /// The client-CA row's ADD/DEL buttons hug the dialog's right inner edge with
     /// no trailing dead space, matching every other full-width row in the dialog. The row's own
     /// internal layout (border height, DEL visibility, row order) is `TlsSection`'s own concern,
     /// covered directly against a bare `TlsSection`; this test is specifically about the outer
@@ -1465,7 +1466,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-024 — an RTU setup dialog never shows the TLS section (MB-R-112).
+    /// MB-R-112 — an RTU setup dialog never shows the TLS section.
     fn ut_rtu_dialog_hides_tls_section() {
         let mut dialog = SetupDialog::create(Timing {
             timeout_ms: 0,
@@ -1479,8 +1480,8 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-024 — resolving an RTU dialog reports no TLS value at all, so applying it can never
-    /// clobber a device config's existing `tls` setting (MB-R-112).
+    /// MB-R-112 — resolving an RTU dialog reports no TLS value at all, so applying it can never
+    /// clobber a device config's existing `tls` setting.
     fn ut_resolve_rtu_reports_no_tls() {
         let mut dialog = SetupDialog::create(Timing {
             timeout_ms: 0,
@@ -1496,8 +1497,8 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-024 — an RtuOverTcp setup dialog shows the same fields as TCP (ip/port,
-    /// TLS level selector) and none of RTU's serial fields (MB-R-113).
+    /// MB-R-113 — an RtuOverTcp setup dialog shows the same fields as TCP (ip/port,
+    /// TLS level selector) and none of RTU's serial fields.
     fn ut_rtu_over_tcp_dialog_shows_tcp_like_fields() {
         let mut dialog = SetupDialog::create(Timing {
             timeout_ms: 0,
@@ -1706,7 +1707,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-024 — resolving a TCP dialog at TLS level Off reports an explicit no-TLS setting.
+    /// Resolving a TCP dialog at TLS level Off reports an explicit no-TLS setting.
     fn ut_resolve_tcp_tls_off_reports_some_none() {
         let mut dialog = SetupDialog::create(Timing {
             timeout_ms: 0,
@@ -1755,7 +1756,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-024 — resolving a TCP dialog at TLS level Tls (server, self-signed) builds a config
+    /// Resolving a TCP dialog at TLS level Tls (server, self-signed) builds a config
     /// with `self_signed` set and drops the mTLS-only client-CA field.
     fn ut_resolve_tcp_tls_server_self_signed_builds_config() {
         let mut dialog = SetupDialog::create(Timing {
