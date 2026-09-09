@@ -322,7 +322,7 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **UI-R-209** — The diff widget aligns the diff into rows holding an optional old-side entry and an optional new-side entry: a context line occupies both entries of one row, a run of removed lines pairs positionwise with the run of added lines that follows it, a surplus line on either side occupies a row whose other entry is a filler, and, with the full new-side text supplied (UI-R-207), every file line between and around the hunks occupies a further row holding that line on both sides.
 
-**UI-R-210** — A meta line (UI-R-208), file header and hunk header included, occupies a row of its own drawn in the diff widget's own meta row style (UI-R-276) across the full width of the widget, with a blank gutter on every side.
+**UI-R-210** — A meta line (UI-R-208), file header and hunk header included, occupies a row of its own drawn in the diff widget's own meta row style (UI-R-276) across the full width of the area it is drawn in (UI-R-304), with a blank gutter on every side.
 
 **UI-R-211** — In the split layout the diff widget draws two panes of equal width side by side, the old side left and the new side right, rendering one screen row per aligned row (UI-R-209) so corresponding old and new lines always sit on the same screen row.
 
@@ -358,7 +358,7 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **UI-R-227** — The diff widget answers, for any of its rows, that row's diff kind and its old-side and new-side file line numbers, each absent where that side holds a filler, so a consumer maps a selected row range (UI-R-226) to file lines without parsing the diff itself.
 
-**UI-R-228** — The diff widget carries a focused side, settable and queryable, whose pane paints the focused border style while the other paints the normal one.
+**UI-R-228** — The diff widget carries a focused side, settable and queryable, naming the side its side-sensitive operations read (UI-R-229); it never affects border styling, which follows the widget's own focus (UI-R-306, UI-R-307).
 
 **UI-R-229** — `yy` in `Normal` and `y` in Visual copy the focused side's text of the selected rows (UI-R-226) into the register and to the system clipboard, as the code editor's yank does (UI-R-030, UI-R-083), skipping rows whose focused side holds a filler.
 
@@ -434,7 +434,7 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **UI-R-285** — A body line inside a hunk with no characters at all is a context line whose text is empty, so it occupies both entries of one row (UI-R-209) and both sides advance their file line counter and show their number in the gutter (UI-R-217), never a meta row (UI-R-210).
 
-**UI-R-286** — The diff widget's border is a builder option, a border around its pane or panes or no border at all, defaulting to no border (UI-R-228).
+**UI-R-286** — The diff widget's border is a builder option, a border around its pane or panes or no border at all, defaulting to no border (UI-R-306, UI-R-307).
 
 **UI-R-287** — In the split layout drawn without a border (UI-R-286) a separator of at least one column sits between the two panes (UI-R-211), and with a border there is no separator, the two pane borders already parting the panes.
 
@@ -447,6 +447,14 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 **UI-R-291** — In every color scheme `diff_added` is darker than the scheme's success color and `diff_removed` is darker than its error color (UI-R-289) — darker meaning every RGB component is less than or equal to its counterpart and at least one is strictly less — keeping both row bands dark enough for the white foreground of UI-R-276.
 
 **UI-R-292** — Each of the four diff colors of UI-R-289 is a literal value of its scheme, computed from no other color of the scheme at build or at run time.
+
+**UI-R-304** — In the split layout drawn with a border (UI-R-286) a meta row (UI-R-210) is drawn once inside each pane's border, the same text in both panes, each spanning only that pane's inner width, so no meta row ever crosses or overwrites a pane border; in every other layout the meta row spans the widget's full width.
+
+**UI-R-305** — The diff widget carries a widget-level focus flag, settable and queryable as UI-R-049's focusable contract requires, defaulting to unfocused.
+
+**UI-R-306** — While the diff widget is focused (UI-R-305) and drawn with a border (UI-R-286), every pane it draws paints the focused border style — both panes together in the split layout (UI-R-211), the single pane in the unified layout (UI-R-213).
+
+**UI-R-307** — While the diff widget is not focused (UI-R-305), every pane it draws paints the normal border style, whatever its focused side (UI-R-228), so a focus change into or out of the widget repaints both split panes at once.
 
 ## File tree widget
 

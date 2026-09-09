@@ -134,6 +134,8 @@ Boundary behavior, error semantics, intentional or known constraints. The known-
 | **UI-E-130** | Borderless split layout on an area whose width leaves an odd column once the separator is taken (UI-R-287) | the separator widens to two columns and the panes stay equal (UI-R-211); no pane is ever one column wider than the other |
 | **UI-E-131** | A full-width meta row (UI-R-210) in the borderless split layout | it spans the separator column too, since it spans the widget's full width; UI-R-288 governs the separator on every other row |
 | **UI-E-132** | Borderless split layout on an area narrower than three columns (UI-R-287) | the separator is dropped to zero columns so both panes keep at least one column; the panes abut, as they do with too little width for any seam |
+| **UI-E-141** | Meta row text wider than a pane's inner width in the bordered split layout (UI-R-304) | it is clipped at that pane's inner width, independently in each pane; no ellipsis, and no character ever spills onto or past a pane border |
+| **UI-E-142** | Focus change (UI-R-305) on a diff widget drawn without a border (UI-R-286, its default) | nothing repaints: with no border there is no focus cue at all, and the focused side (UI-R-228) stays invisible too |
 
 ## File tree widget
 
