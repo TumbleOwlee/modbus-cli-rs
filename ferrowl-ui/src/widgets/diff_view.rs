@@ -15,7 +15,7 @@ use crate::state::{
     Annotation, DiffEntry, DiffKind, DiffLayout, DiffMode, DiffRow, DiffViewState,
     MarkdownInputFieldStateBuilder, MarkedRange, RowPart, Side,
 };
-use crate::style::{DiffViewStyle, SyntaxTheme};
+use crate::style::{DiffViewStyle, InputFieldStyleBuilder, SyntaxTheme};
 use crate::traits::{IsFocus, Margins};
 use crate::widgets::{MarkdownInputFieldBuilder, Title};
 
@@ -448,11 +448,33 @@ impl DiffView {
     fn measure_annotations(&self, annotations: &[Annotation], inner_width: u16) -> Vec<usize> {
         let field = MarkdownInputFieldBuilder::default()
             .line_numbers(false)
+            .style(
+                InputFieldStyleBuilder::default()
+                    .general(self.style.general)
+                    .build()
+                    .expect("InputFieldStyleBuilder fields all default"),
+            )
             .build()
             .expect("MarkdownInputFieldBuilder fields all default");
         annotations
             .iter()
             .map(|a| field.measure(&a.text, inner_width))
+            .collect()
+    }
+
+    /// Each annotation's height in the bordered split layout (UI-R-309): measured at both
+    /// panes' inner widths and reserved at the greater, so a block occupies the same display
+    /// rows in both panes and no aligned row below it is off by a row between them.
+    fn measure_annotations_paired(
+        &self,
+        annotations: &[Annotation],
+        old_inner: u16,
+        new_inner: u16,
+    ) -> Vec<usize> {
+        self.measure_annotations(annotations, old_inner)
+            .into_iter()
+            .zip(self.measure_annotations(annotations, new_inner))
+            .map(|(old, new)| std::cmp::max(old, new))
             .collect()
     }
 
@@ -492,8 +514,17 @@ impl DiffView {
             .expect("MarkdownInputFieldStateBuilder fields all default");
         state.set_content(text);
         state.set_read_only(true);
+        // `MarkdownInputField::render` opens with its own `buf.set_style(area, general)`
+        // over the whole rect it is given (UI-E-143): that is the surplus-column fill, so
+        // it must paint in the diff widget's own general style, not the field's default.
         let field = MarkdownInputFieldBuilder::default()
             .line_numbers(false)
+            .style(
+                InputFieldStyleBuilder::default()
+                    .general(self.style.general)
+                    .build()
+                    .expect("InputFieldStyleBuilder fields all default"),
+            )
             .build()
             .expect("MarkdownInputFieldBuilder fields all default");
         StatefulWidget::render(&field, inner, &mut scratch, &mut state);
@@ -614,32 +645,34 @@ impl StatefulWidget for &DiffView {
                     old_area.width.saturating_sub(old_gutter).max(1) as usize,
                     new_area.width.saturating_sub(new_gutter).max(1) as usize,
                 );
-                // Annotations keep spanning both panes as one block (UI-R-270): without a
-                // border, extend to the outer area's own right edge, since the separator
-                // column(s) between the panes and an odd unused column at odd widths both
-                // sit outside `old_area`/`new_area`; with a border, stop at the new pane's
-                // inner edge, the border cells already parting the panes.
-                let annotation_right = if matches!(self.border, Border::Full(_)) {
-                    new_area.x + new_area.width
-                } else {
-                    area.x + area.width
-                };
-                let annotation_width = annotation_right.saturating_sub(old_area.x);
+                // The borderless full span (both panes and any separator), used by
+                // annotations without a border (UI-R-308) since the separator column(s)
+                // between the panes and an odd unused column at odd widths both sit
+                // outside `old_area`/`new_area`.
+                let full_width = (area.x + area.width).saturating_sub(old_area.x);
 
-                // A meta row (UI-R-210, amended) is drawn inside the area it is drawn in:
-                // one pane's inner width when bordered (UI-R-304), each pane's border cells
-                // its own boundary; the full outer width when borderless (UI-E-131), since
-                // there the panes share no border to stay inside of.
-                let meta_width = if matches!(self.border, Border::Full(_)) {
+                // A row drawn inside the area it is drawn in: one pane's inner width when
+                // bordered (UI-R-304, UI-R-308), each pane's border cells its own
+                // boundary; the full outer width when borderless (UI-E-131), since there
+                // the panes share no border to stay inside of. One binding serves meta
+                // rows and annotations alike.
+                let block_width = if matches!(self.border, Border::Full(_)) {
                     old_area.width
                 } else {
-                    annotation_width
+                    full_width
                 };
-                state.set_meta_width(meta_width as usize);
+                state.set_meta_width(block_width as usize);
 
                 let annotations = state.annotations().clone();
-                let annotation_heights = self
-                    .measure_annotations(&annotations, annotation_width.saturating_sub(2).max(1));
+                let annotation_heights = if matches!(self.border, Border::Full(_)) {
+                    self.measure_annotations_paired(
+                        &annotations,
+                        old_area.width.saturating_sub(2).max(1),
+                        new_area.width.saturating_sub(2).max(1),
+                    )
+                } else {
+                    self.measure_annotations(&annotations, full_width.saturating_sub(2).max(1))
+                };
                 state.set_annotation_heights(annotation_heights.clone());
 
                 let visible_height = old_area.height as usize;
@@ -670,7 +703,7 @@ impl StatefulWidget for &DiffView {
                             };
                             self.draw_meta(
                                 buf,
-                                Rect::new(old_area.x, y_old, meta_width, 1),
+                                Rect::new(old_area.x, y_old, block_width, 1),
                                 text,
                                 wrap,
                                 sub_row,
@@ -678,7 +711,7 @@ impl StatefulWidget for &DiffView {
                             if matches!(self.border, Border::Full(_)) {
                                 self.draw_meta(
                                     buf,
-                                    Rect::new(new_area.x, y_new, meta_width, 1),
+                                    Rect::new(new_area.x, y_new, block_width, 1),
                                     text,
                                     wrap,
                                     sub_row,
@@ -737,25 +770,42 @@ impl StatefulWidget for &DiffView {
                             }
                         }
                         RowPart::Annotation { index, sub_row } => {
-                            // UI-R-270, UI-E-116: drawn once, spanning both panes; later
-                            // `sub_row`s of the same block draw nothing further.
+                            // Drawn once per pane in the bordered split, once across the
+                            // widget otherwise (UI-R-270, UI-R-308); later `sub_row`s of
+                            // the same block draw nothing further (UI-E-116).
                             if drawn_annotations.insert(index) {
                                 let total = annotation_heights[index] as u16 + 2;
                                 let own_remaining = total.saturating_sub(sub_row as u16);
-                                let pane_remaining =
+                                let old_remaining =
                                     (old_area.y + old_area.height).saturating_sub(y_old);
+                                let new_remaining =
+                                    (new_area.y + new_area.height).saturating_sub(y_new);
                                 self.draw_annotation(
                                     buf,
                                     Rect::new(
                                         old_area.x,
                                         y_old,
-                                        annotation_width,
-                                        own_remaining.min(pane_remaining),
+                                        block_width,
+                                        own_remaining.min(old_remaining),
                                     ),
                                     &annotations[index].text,
                                     total,
                                     sub_row as u16,
                                 );
+                                if matches!(self.border, Border::Full(_)) {
+                                    self.draw_annotation(
+                                        buf,
+                                        Rect::new(
+                                            new_area.x,
+                                            y_new,
+                                            new_area.width,
+                                            own_remaining.min(new_remaining),
+                                        ),
+                                        &annotations[index].text,
+                                        total,
+                                        sub_row as u16,
+                                    );
+                                }
                             }
                             continue;
                         }
@@ -933,6 +983,7 @@ mod tests {
     use crate::state::DiffViewStateBuilder;
     use crate::style::DiffViewStyleBuilder;
     use crate::traits::SetFocus;
+    use ratatui::style::Color;
 
     fn buffer(w: u16, h: u16) -> Buffer {
         Buffer::empty(Rect::new(0, 0, w, h))
@@ -1365,6 +1416,77 @@ mod tests {
     }
 
     #[test]
+    /// UI-R-308, UI-R-270, UI-E-144 — in a bordered split layout an annotation block is
+    /// drawn once inside each pane's border, each spanning only that pane's inner width,
+    /// so no annotation block ever crosses or overwrites a pane border.
+    fn ut_bordered_split_draws_the_annotation_inside_each_pane() {
+        let mut st = DiffViewStateBuilder::default()
+            .annotations(vec![Annotation {
+                side: Side::Old,
+                lines: 1..=1,
+                text: "hi".into(),
+            }])
+            .build_with_diff("@@ -1,1 +1,1 @@\n a\n")
+            .unwrap();
+        let w = DiffViewBuilder::default()
+            .border(Border::Full(Margin::new(0, 0)))
+            .build()
+            .unwrap();
+        let mut b = buffer(40, 8);
+        StatefulWidget::render(&w, Rect::new(0, 0, 40, 8), &mut b, &mut st);
+
+        // Row 0 is the pane border's own top row; row 1 = meta header, row 2 = the pair
+        // row, rows 3..=5 = the block (top border, one-line body, bottom border), both
+        // panes. Columns 0/19 and 20/39 are the panes' own border columns; the block's
+        // own left border sits one column inside each pane, at 1 and 21.
+        assert_eq!(b[(1, 3)].symbol(), "┌", "old pane's block top-left corner");
+        assert_eq!(b[(21, 3)].symbol(), "┌", "new pane's block top-left corner");
+        let border = w.style().border().fg.expect("style sets a color");
+        for y in 3..=5 {
+            assert_eq!(b[(0, y)].fg, border, "old pane's left border, row {y}");
+            assert_eq!(b[(19, y)].fg, border, "old pane's right border, row {y}");
+            assert_eq!(b[(20, y)].fg, border, "new pane's left border, row {y}");
+            assert_eq!(b[(39, y)].fg, border, "new pane's right border, row {y}");
+        }
+    }
+
+    #[test]
+    /// UI-E-143, UI-E-144 — an annotation block's inner row whose text does not fill its
+    /// inner width leaves the surplus columns in the widget's general style, not the
+    /// block's border style, and the block's own border cells still carry the border
+    /// style; both hold for a surplus row too, not just a surplus column.
+    fn ut_annotation_block_fills_surplus_inner_columns_with_the_general_style() {
+        let style = DiffViewStyleBuilder::default()
+            .border(Style::default().fg(Color::Red).bg(Color::Blue))
+            .general(Style::default().fg(Color::Green).bg(Color::Magenta))
+            .build()
+            .unwrap();
+        let w = DiffViewBuilder::default().style(style).build().unwrap();
+        let mut b = buffer(20, 5);
+        // "hi" is the read-only field's active line (line_idx 0), which the field
+        // always highlights on its own row regardless of this stage's fix, so surplus
+        // columns are asserted on its second line "yo" instead. `total_height` 5
+        // reserves a third body row beyond both source lines, a wholly surplus row.
+        w.draw_annotation(&mut b, Rect::new(0, 0, 20, 5), "hi\nyo", 5, 0);
+        assert_eq!(b[(0, 0)].fg, Color::Red, "top border, left corner");
+        assert_eq!(b[(19, 0)].fg, Color::Red, "top border, right corner");
+        assert_eq!(b[(0, 4)].fg, Color::Red, "bottom border, left corner");
+        let general_bg = w.style().general().bg.expect("style sets a color");
+        assert_eq!(
+            b[(10, 2)].bg,
+            general_bg,
+            "surplus column past \"yo\" on its own row"
+        );
+        assert_eq!(
+            b[(10, 3)].bg,
+            general_bg,
+            "wholly surplus row, no source line at all"
+        );
+        assert_ne!(b[(10, 2)].bg, Color::Reset, "not a bare reset cell");
+        assert_ne!(b[(10, 3)].bg, Color::Reset, "not a bare reset cell");
+    }
+
+    #[test]
     /// UI-R-271 — an annotation's body is rendered markdown, not its raw source: emphasis
     /// markers do not appear in the drawn text.
     fn ut_annotation_body_renders_markdown_not_its_source() {
@@ -1410,6 +1532,24 @@ mod tests {
         // border sits `measured + 1` rows below the top border.
         assert_eq!(b[(0, 2)].symbol(), "┌");
         assert_eq!(b[(0, 2 + measured as u16 + 1)].symbol(), "└");
+    }
+
+    #[test]
+    /// UI-R-309 — a bordered split's annotation block is reserved at the greater of the
+    /// two panes' own measurements, not one pane's alone, so a rendered frame — where the
+    /// two inner widths always agree — never has to rely on that agreement to hold.
+    fn ut_paired_annotation_measurement_takes_the_greater_height() {
+        let w = DiffView::default();
+        let annotations = vec![Annotation {
+            side: Side::Old,
+            lines: 1..=1,
+            text: "one two three".into(),
+        }];
+        // At width 13 "one two three" fits in a single row; at width 6 it greedily wraps
+        // to "one" / "two" / "three", three rows. The paired measurement must take the
+        // greater of the two.
+        let heights = w.measure_annotations_paired(&annotations, 13, 6);
+        assert_eq!(heights[0], 3);
     }
 
     #[test]
