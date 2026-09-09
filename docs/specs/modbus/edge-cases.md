@@ -122,29 +122,19 @@ Boundary behavior, error semantics, intentional constraints. The known-limitatio
 
 ### No max-registers-per-request bound at the protocol layer
 
-**MB-E-073** — Neither client core nor server core enforces the Modbus per-request limits (125 registers / 2000 bits). The **only** enforcement is the application-level read-operation planner, which splits generated poll batches at those limits.
-
-- A poll operation constructed directly (bypassing the planner) may exceed 125 registers and is sent as-is; the only guard is the `u16` count field, which fabricates `IllegalDataValue` above 65535.
-- The **server** answers any count the peer sends, limited only by the `u16` count field and declared addresses. It does not reject an over-long request with `IllegalDataValue`.
-- A write command is never split: a register wider than the limit would go as one write. Unreachable — widest format is 8 registers.
+**MB-E-073** — Neither client core nor server core enforces the Modbus per-request limits (125 registers / 2000 bits). The **only** enforcement is the application-level read-operation planner, which splits generated poll batches at those limits. A poll operation constructed directly (bypassing the planner) may exceed 125 registers and is sent as-is; the only guard is the `u16` count field, which fabricates `IllegalDataValue` above 65535. The **server** answers any count the peer sends, limited only by the `u16` count field and declared addresses, and does not reject an over-long request with `IllegalDataValue`. A write command is never split: a register wider than the limit would go as one write — unreachable, since the widest format is 8 registers.
 
 ### The RTU `Config` cannot be flattened into a `clap` command
 
-**MB-E-074** — The RTU connection config doubles as a `clap` argument group whose short flags collide: `-s` claimed by `slave` and `stop_bits`, `-d` by `data_bits` and `delay_ms`. Flattening it into a `clap::Parser` command panics at parse time via clap's debug assertions.
-
-The config is reached only through serde (session and device config files, `--module` key/value form), which is unaffected.
+**MB-E-074** — The RTU connection config doubles as a `clap` argument group whose short flags collide: `-s` claimed by `slave` and `stop_bits`, `-d` by `data_bits` and `delay_ms`. Flattening it into a `clap::Parser` command panics at parse time via clap's debug assertions. The config is reached only through serde (session and device config files, `--module` key/value form), which is unaffected.
 
 ### The RTU `slave` config field is inert
 
-**MB-E-075** — The RTU config carries `slave` (default 1), read by no code path: the client carries a slave id on every request and never attaches the link to one slave. Kept so existing config files keep parsing.
-
-An RTU **server** ignores it entirely: it answers whichever slave ids have declared regions.
+**MB-E-075** — The RTU config carries `slave` (default 1), read by no code path: the client carries a slave id on every request and never attaches the link to one slave. Kept so existing config files keep parsing. An RTU **server** ignores it entirely: it answers whichever slave ids have declared regions.
 
 ### Server-side reconnect retries only after the current serve loop ends
 
-**MB-E-076** — Every server transport (TCP, RTU, `RtuOverTcp`, `Udp`, `Ascii`, `AsciiOverTcp`) honors `reconnect` — bind failure, serial-open failure, or mid-serve failure retries with the shared backoff driver (MB-R-051, MB-R-071, MB-R-075, MB-R-120, MB-R-124, MB-R-130–134).
-
-Nuance: a mid-serve failure does not retry immediately. The server waits for the *current* serve loop to end on its own before the backoff wait — an in-flight connection is never torn down early to reach a retry sooner.
+**MB-E-076** — Every server transport (TCP, RTU, `RtuOverTcp`, `Udp`, `Ascii`, `AsciiOverTcp`) honors `reconnect` — bind failure, serial-open failure, or mid-serve failure retries with the shared backoff driver (MB-R-051, MB-R-071, MB-R-075, MB-R-120, MB-R-124, MB-R-130–134); a mid-serve failure does not retry immediately — the server waits for the *current* serve loop to end on its own before the backoff wait, since an in-flight connection is never torn down early to reach a retry sooner.
 
 ### Unbounded TCP server connections
 
@@ -152,9 +142,7 @@ Nuance: a mid-serve failure does not retry immediately. The server waits for the
 
 ### Only six transports
 
-**MB-E-078** — `RtuOverTcp` reuses the TCP config verbatim; only wire framing differs. `Udp` reuses the TCP config minus `tls` (no handshake, no DTLS). `Udp` does not inherit the RTU-family broadcast slave id 0 handling (MB-R-101–MB-R-103); on `Udp`, slave id 0 is ordinary.
-
-`Ascii` reuses the RTU config verbatim; only framing differs — LRC checksum and `:`/CR LF delimiters instead of CRC and silence-delimited binary. `AsciiOverTcp` reuses the TCP config verbatim, same framing swap as `RtuOverTcp`. Both `Ascii` and `AsciiOverTcp` inherit the RTU-family broadcast handling (MB-R-101–MB-R-103), unlike `Udp`.
+**MB-E-078** — `RtuOverTcp` reuses the TCP config verbatim; only wire framing differs. `Udp` reuses the TCP config minus `tls` (no handshake, no DTLS); `Udp` does not inherit the RTU-family broadcast slave id 0 handling (MB-R-101–MB-R-103), so on `Udp`, slave id 0 is ordinary. `Ascii` reuses the RTU config verbatim; only framing differs — LRC checksum and `:`/CR LF delimiters instead of CRC and silence-delimited binary. `AsciiOverTcp` reuses the TCP config verbatim, same framing swap as `RtuOverTcp`. Both `Ascii` and `AsciiOverTcp` inherit the RTU-family broadcast handling (MB-R-101–MB-R-103), unlike `Udp`.
 
 ### Display resolution is one-way
 
@@ -162,9 +150,7 @@ Nuance: a mid-serve failure does not retry immediately. The server waits for the
 
 ### Declaration failures are warned, not silent
 
-**MB-E-080** — A rejected `Memory::add_ranges` declaration leaves the register or gap cell without backing memory, so runtime reads/writes against it still fail. Every module-construction, module-reconfiguration, and runtime register-edit call site logs a Warning (MB-R-129/MB-R-184) naming the register (or, for a gap cell, slave id and register kind) and the rejected range at rejection time, so the eventual runtime failure is traceable.
-
-Reachable case: a register added at runtime at an address a `read_ranges` gap already declared read-only. Overlap (existing `Read` cell, requested `ReadWrite` region) is not a widening combination, so the declaration is rejected and dropped — with a Warning naming register and range.
+**MB-E-080** — A rejected `Memory::add_ranges` declaration leaves the register or gap cell without backing memory, so runtime reads/writes against it still fail. Every module-construction, module-reconfiguration, and runtime register-edit call site logs a Warning (MB-R-129/MB-R-184) naming the register (or, for a gap cell, slave id and register kind) and the rejected range at rejection time, so the eventual runtime failure is traceable. Reachable case: a register added at runtime at an address a `read_ranges` gap already declared read-only — overlap (existing `Read` cell, requested `ReadWrite` region) is not a widening combination, so the declaration is rejected and dropped, with a Warning naming register and range.
 
 ### Client writes are fire-and-forget
 
@@ -172,9 +158,7 @@ Reachable case: a register added at runtime at an address a `read_ranges` gap al
 
 ### The register's `access` does not gate store access
 
-**MB-E-082** — A register's `access` does **not** determine its cells' direction; its *kind* does (coils and holding registers read/write, discrete inputs and input registers read-only). `access` governs whether the register is polled (write-only excluded), whether a client-side write is mirrored into the store, and (MB-R-159/MB-R-151) whether the client attempts a write at all: a `ReadOnly` register on a **client** rejects `:set`/dialog writes locally; on a **server** MB-R-090 bypasses cell access checks.
-
-A `ReadOnly` holding register is therefore still writable by a remote master against a server module, even though the local UI cannot write it from a client module.
+**MB-E-082** — A register's `access` does **not** determine its cells' direction; its *kind* does (coils and holding registers read/write, discrete inputs and input registers read-only). `access` governs whether the register is polled (write-only excluded), whether a client-side write is mirrored into the store, and (MB-R-159/MB-R-151) whether the client attempts a write at all: a `ReadOnly` register on a **client** rejects `:set`/dialog writes locally; on a **server** MB-R-090 bypasses cell access checks — so a `ReadOnly` holding register is therefore still writable by a remote master against a server module, even though the local UI cannot write it from a client module.
 
 ### Bit-field mask absent from the width error
 

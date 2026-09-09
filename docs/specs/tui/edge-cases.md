@@ -122,7 +122,7 @@ Boundary behavior, error semantics, intentional or known constraints. The known-
 
 ### Single compile-time color scheme
 
-**UI-E-052** — Build-time feature-selected constant; no runtime theme switch. Changing themes requires rebuilding. Intentional.
+**UI-E-052** — Build-time feature-selected constant; no runtime theme switch.
 
 ### Single-level undo only
 
@@ -154,7 +154,7 @@ Boundary behavior, error semantics, intentional or known constraints. The known-
 
 ### Terminal-restore paths are not unit-tested
 
-**UI-E-060** — UI-R-001 requires terminal restore on normal exit, error exit, and from a panic hook. None of the three — `AlternateScreen`'s `Drop` impl (`ferrowl-ui/src/screen.rs`), `AlternateScreen::release()` from the error-exit branch (`ferrowl/src/main.rs`, after `app.run()` returns `Err`), or the same `release()` in the panic hook (`main.rs`, before `runtime.block_on`) — is exercised by an automated test. All three mutate the real terminal's raw-mode/alternate-screen state; doing so inside the test harness's process would corrupt its terminal (the panic-hook path also requires actually panicking), so this is left to manual verification (`cargo run -- --demo`, then exit normally, force an error exit, trigger a panic, checking the prompt is intact each time).
+**UI-E-060** — UI-R-001 requires terminal restore on normal exit, error exit, and from a panic hook. None of the three teardown paths — restore on normal exit, restore from the error-exit branch, or restore from the panic hook — is exercised by an automated test. All three mutate the real terminal's raw-mode/alternate-screen state; doing so inside the test harness's process would corrupt its terminal (the panic-hook path also requires actually panicking), so this is left to manual verification (`cargo run -- --demo`, then exit normally, force an error exit, trigger a panic, checking the prompt is intact each time).
 
 ### Markdown rendering covers a fixed construct set
 

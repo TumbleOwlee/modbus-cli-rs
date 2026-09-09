@@ -61,12 +61,7 @@ Boundary behavior, error semantics, intentional or known constraints. The known-
 
 ### Execution ceiling — an infinite loop is interrupted mid-cycle
 
-**SC-E-032** — Every context installs an execution hook (SC-R-034, `every_nth_instruction` every 1,000 instructions) checking the stop flag (SC-R-046) and enforcing a fixed 1,000 ms wall-clock cap (SC-R-047). A script looping forever is interrupted the first time the hook fires after either condition is met:
-
-- A pending stop-and-join (script edit, tab close, module reconfigure, app shutdown): the hook raises to unwind the runaway script, so the cycle ends and the join completes promptly. Before this hook the stop flag was observed only *between* cycles, so a runaway script blocked any thread joining it — typically the UI thread.
-- Independent of any stop request, the 1,000 ms cap aborts a cycle (or on-demand run, SC-R-035) that runs long, bounding worst-case CPU pinning to just over the cap with no operator action.
-
-Both constants fixed (SC-R-034, SC-R-047), not configurable. No memory ceiling (SC-R-048): a script allocating without bound (ever-growing table) is not stopped — the hook checks instruction count and wall-clock only.
+**SC-E-032** — Every context installs an execution hook (SC-R-034, `every_nth_instruction` every 1,000 instructions) checking the stop flag (SC-R-046) and enforcing a fixed 1,000 ms wall-clock cap (SC-R-047). A script looping forever is interrupted the first time the hook fires after either condition is met: a pending stop-and-join (script edit, tab close, module reconfigure, app shutdown) makes the hook raise to unwind the runaway script, so the cycle ends and the join completes promptly — before this hook the stop flag was observed only *between* cycles, so a runaway script blocked any thread joining it, typically the UI thread; independent of any stop request, the 1,000 ms cap aborts a cycle (or on-demand run, SC-R-035) that runs long, bounding worst-case CPU pinning to just over the cap with no operator action. Both constants fixed (SC-R-034, SC-R-047), not configurable. No memory ceiling (SC-R-048): a script allocating without bound (ever-growing table) is not stopped — the hook checks instruction count and wall-clock only.
 
 ### Lua register writes are store-only (client)
 
@@ -94,6 +89,4 @@ Both constants fixed (SC-R-034, SC-R-047), not configurable. No memory ceiling (
 
 ### A run-once (`e`) executes in an isolated Lua VM
 
-**SC-E-039** — The on-demand single-script execution (SC-R-035, `e` in the script-manager dialog) builds a **fresh** context on its own thread and shares no Lua state with the owner's running sim: sim globals are invisible to the run, the run's globals are discarded when its thread exits, `C_Time` restarts from zero. A script depending on state built over previous sim cycles behaves differently under `e`.
-
-The run touches the same shared register/charging-station state as a concurrent sim, serialized only by per-operation locks. A run-once and a sim cycle interleaving writes to the same register is possible and not prevented.
+**SC-E-039** — The on-demand single-script execution (SC-R-035, `e` in the script-manager dialog) builds a **fresh** context on its own thread and shares no Lua state with the owner's running sim: sim globals are invisible to the run, the run's globals are discarded when its thread exits, `C_Time` restarts from zero. A script depending on state built over previous sim cycles behaves differently under `e`. The run touches the same shared register/charging-station state as a concurrent sim, serialized only by per-operation locks; a run-once and a sim cycle interleaving writes to the same register is possible and not prevented.

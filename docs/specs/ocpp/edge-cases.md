@@ -126,9 +126,7 @@ Boundary behavior, error semantics, intentional constraints. The known-limitatio
 
 ### CS reconnect resets on handshake, not on message exchange
 
-**OC-E-084** — A CS reconnects on a failed dial or dropped connection with the shared bounded-exponential-backoff driver (MB-R-051; OC-R-048, OC-R-105–107), governed by `reconnect` (default enabled). A non-terminate command sent while backing off is dropped, not queued (MB-R-054).
-
-Nuance: backoff resets to 1 s as soon as the WebSocket handshake completes, before any OCPP message (OC-R-105). A peer that accepts the socket and immediately drops it, every time, sees the backoff reset on every attempt — retrying near 1 s — rather than growing as it would if reset required a message exchange.
+**OC-E-084** — A CS reconnects on a failed dial or dropped connection with the shared bounded-exponential-backoff driver (MB-R-051; OC-R-048, OC-R-105–107), governed by `reconnect` (default enabled). A non-terminate command sent while backing off is dropped, not queued (MB-R-054). Backoff resets to 1 s as soon as the WebSocket handshake completes, before any OCPP message (OC-R-105): a peer that accepts the socket and immediately drops it, every time, sees the backoff reset on every attempt — retrying near 1 s — rather than growing as it would if reset required a message exchange.
 
 ### CSMS bind retry
 
@@ -140,9 +138,7 @@ Nuance: backoff resets to 1 s as soon as the WebSocket handshake completes, befo
 
 ### No version-neutral semantic layer
 
-**OC-E-087** — Deliberately no neutral abstraction over the three versions. The surface is the per-version action set, so every action can be listed and every raw payload inspected; sharing between 2.0.1 and 2.1 is plain shared functions.
-
-Consequence: adding a version means adding its action table, inbound handlers, and action-spec module. No single seam makes it free.
+**OC-E-087** — Deliberately no neutral abstraction over the three versions. The surface is the per-version action set, so every action can be listed and every raw payload inspected; sharing between 2.0.1 and 2.1 is plain shared functions. Consequence: adding a version means adding its action table, inbound handlers, and action-spec module — no single seam makes it free.
 
 ### `NotifyPeriodicEventStream` is not an action
 
@@ -174,10 +170,4 @@ Consequence: adding a version means adding its action table, inbound handlers, a
 
 ### The CS and CSMS connection drivers stay separate
 
-**OC-E-095** — `cs::core::run` and `csms::core::run_connection` share a skeleton (build dispatch, start connection, `on_connected`, `select!` loop over commands, `shutdown`, `on_disconnected`) and are deliberately not unified.
-
-Differences thread through the whole body, not the ends. CSMS carries a `ConnectionId` into every handler call (`on_connected(conn)`, `handle_call(conn, action)`, `on_disconnected(conn)`), so `CsActionHandler` and `CsmsActionHandler` have different signatures and no single generic bound covers both without an adapter trait. CS returns `RunEnd::{Terminated, Disconnected}`, which its retry loop classifies to stop or back off; CSMS returns `()` and deregisters from the registry. Command enums differ in name and variants.
-
-Consequence: a change to the duplex loop is made twice. Unifying costs a handler-adapter trait plus a generic over the return type to save ~45 lines across two 90-line files, and would obscure the retry-classification contract `RunEnd` makes explicit.
-
-`wait_backoff` in `ferrowl-util` is already shared: a utility over a channel and a clock, not a lifecycle abstraction spanning the roles.
+**OC-E-095** — `cs::core::run` and `csms::core::run_connection` share a skeleton (build dispatch, start connection, `on_connected`, `select!` loop over commands, `shutdown`, `on_disconnected`) and are deliberately not unified: differences thread through the whole body, not the ends. CSMS carries a `ConnectionId` into every handler call (`on_connected(conn)`, `handle_call(conn, action)`, `on_disconnected(conn)`), so `CsActionHandler` and `CsmsActionHandler` have different signatures and no single generic bound covers both without an adapter trait. CS returns `RunEnd::{Terminated, Disconnected}`, which its retry loop classifies to stop or back off; CSMS returns `()` and deregisters from the registry. Command enums differ in name and variants. Consequence: a change to the duplex loop is made twice — unifying costs a handler-adapter trait plus a generic over the return type to save ~45 lines across two 90-line files, and would obscure the retry-classification contract `RunEnd` makes explicit. `wait_backoff` in `ferrowl-util` is already shared: a utility over a channel and a clock, not a lifecycle abstraction spanning the roles.

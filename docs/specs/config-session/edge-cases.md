@@ -19,11 +19,7 @@ Boundary and error behavior of the envelope, plus known limitations. Protocol-sp
 
 ## A session referencing a device config that does not exist
 
-- **CS-E-008** — Both module types handle a missing or unreadable device path the same way: the instance is **skipped** with a warning on stderr (`Skipping '<name>': failed to load '<path>': …`), startup continues without that tab. A broken `device` path never silently degrades to defaults.
-
-A **blank** `device` path is not an error: a quick-start with no device file, built on the default device config. Only a *non-blank* path that fails is skipped.
-
-Neither case aborts startup.
+- **CS-E-008** — Both module types handle a missing or unreadable device path the same way: the instance is **skipped** with a warning on stderr (`Skipping '<name>': failed to load '<path>': …`), startup continues without that tab. A broken `device` path never silently degrades to defaults. A **blank** `device` path is not an error: a quick-start with no device file, built on the default device config; only a *non-blank* path that fails is skipped. Neither case aborts startup.
 
 ## Duplicate instance names
 
