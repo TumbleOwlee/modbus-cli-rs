@@ -16,7 +16,7 @@ use ferrowl_ui::{
 use ratatui::{
     Frame,
     layout::{Constraint, Layout, Margin, Rect},
-    widgets::Block,
+    widgets::{Block, Widget},
 };
 use std::{io::Stdout, process::Command, time::Duration};
 
@@ -311,21 +311,31 @@ fn ui(f: &mut Frame, model: &mut Model) {
         .unwrap();
     f.render_stateful_widget(&tree_widget, panes.browser, &mut model.tree);
 
-    let diff_widget = DiffViewBuilder::default().build().unwrap();
-    f.render_stateful_widget(&diff_widget, panes.diff, &mut model.diff);
-
-    base_widget.render_overlay(panes.base, f.buffer_mut(), &mut model.base);
-    branch_widget.render_overlay(panes.branch, f.buffer_mut(), &mut model.branch);
-
     if let Some(err) = &model.error {
-        let mut block = Block::bordered().title("Diff View");
+        let block = Block::bordered().title("Diff View");
         let inner = block.inner(panes.diff);
+        block.render(panes.diff, f.buffer_mut());
+        let diff_area = inner.inner(Margin {
+            vertical: 0,
+            horizontal: 1,
+        });
         ratatui::widgets::Widget::render(
             ratatui::text::Text::from(err.as_str()),
-            panes.diff,
+            diff_area,
             f.buffer_mut(),
         );
+    } else {
+        let diff_widget = DiffViewBuilder::default()
+            .border(Border::Full(Margin {
+                horizontal: 1,
+                vertical: 0,
+            }))
+            .build()
+            .unwrap();
+        f.render_stateful_widget(&diff_widget, panes.diff, &mut model.diff);
     }
+    base_widget.render_overlay(panes.base, f.buffer_mut(), &mut model.base);
+    branch_widget.render_overlay(panes.branch, f.buffer_mut(), &mut model.branch);
 }
 
 /// Routes one key event to whichever pane currently holds focus, cycling focus on
@@ -473,7 +483,7 @@ mod tests {
 
     #[test]
     /// The top row holds two inputs side by side, above a browser and a diff pane split
-    /// left/right.
+    /// left/right, with the diff pane given four times the browser's width (20/80).
     fn ut_panes_put_two_inputs_above_a_browser_and_a_diff_pane() {
         let p = panes(Rect::new(0, 0, 100, 40));
         assert_eq!(p.base.y, p.branch.y);
@@ -481,6 +491,51 @@ mod tests {
         assert_eq!(p.browser.y, p.diff.y);
         assert!(p.browser.y > p.base.y);
         assert!(p.browser.x < p.diff.x);
+        assert_eq!(p.browser.width, 20);
+        assert_eq!(p.diff.width, 80);
+    }
+
+    fn rendered_text(model: &mut Model) -> String {
+        let mut term = ratatui::Terminal::new(ratatui::backend::TestBackend::new(100, 40)).unwrap();
+        term.draw(|f| ui(f, model)).unwrap();
+        let buf = term.backend().buffer();
+        let mut out = String::new();
+        for y in 0..buf.area.height {
+            for x in 0..buf.area.width {
+                out.push_str(buf[(x, y)].symbol());
+            }
+            out.push('\n');
+        }
+        out
+    }
+
+    #[test]
+    /// The file browser pane renders inside a titled, bordered block.
+    fn ut_file_tree_pane_renders_with_a_title_and_border() {
+        let mut model = Model::new(fixture("main", "main", "", ""));
+        let text = rendered_text(&mut model);
+        assert!(
+            text.contains("File Tree"),
+            "missing file tree title:\n{text}"
+        );
+        assert!(text.contains('│'), "missing vertical border:\n{text}");
+    }
+
+    #[test]
+    /// When the git seam fails, the diff pane renders the error inside a titled,
+    /// bordered block instead of the diff viewer.
+    fn ut_error_renders_inside_a_titled_bordered_diff_pane() {
+        let git: GitFn = Box::new(|_: &[&str]| Err("not a git repository".to_string()));
+        let mut model = Model::new(git);
+        let text = rendered_text(&mut model);
+        assert!(
+            text.contains("Diff View"),
+            "missing diff view title:\n{text}"
+        );
+        assert!(
+            text.contains("not a git repository"),
+            "missing error text:\n{text}"
+        );
     }
 
     #[test]
