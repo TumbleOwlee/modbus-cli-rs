@@ -212,8 +212,8 @@ mod tests {
     #[test]
     /// UI-R-291 — "darker" defined component-wise: every RGB component of the band
     /// at or below success/error's and at least one strictly below. The band is also
-    /// checked not fully black, which is not part of UI-R-291's definition but is what
-    /// makes the step-3 placeholder value fail this test rather than pass it.
+    /// checked not fully black, which is not part of UI-R-291's definition but rules
+    /// out a black band satisfying the darker check trivially.
     fn ut_scheme_diff_bands_are_darker_than_success_and_error() {
         let darker = |palette: Color, band: Color| {
             let Color::Rgb(pr, pg, pb) = palette else {
