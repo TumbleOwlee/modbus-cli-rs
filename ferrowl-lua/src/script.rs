@@ -1,6 +1,5 @@
 use crate::ScriptState;
 
-/// Loaded lua script
 pub struct Script {
     state: ScriptState,
     func: mlua::Function,
@@ -15,13 +14,11 @@ impl Script {
         }
     }
 
-    /// Retrieve duration since last execution
     pub fn since_last_execution(&self) -> std::time::Duration {
         let now = std::time::Instant::now();
         now.duration_since(self.state.time_since())
     }
 
-    /// Execute the loaded script
     pub fn exec(&mut self) -> crate::Result<()> {
         match self.func.call::<()>(()) {
             Ok(_) => {

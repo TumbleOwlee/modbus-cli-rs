@@ -229,7 +229,6 @@ pub fn load_device(path: &str) -> Result<DeviceConfig, ConfigError> {
     Ok(device)
 }
 
-/// Load an OCPP device-type config file.
 pub fn load_ocpp_device(path: &str) -> Result<OcppDeviceConfig, ConfigError> {
     load(path)
 }
@@ -243,7 +242,6 @@ pub fn load_monitor_device(path: &str) -> Result<MonitorDeviceConfig, ConfigErro
     load(path)
 }
 
-/// Load a session file.
 pub fn load_session(path: &str) -> Result<Session, ConfigError> {
     load(path)
 }

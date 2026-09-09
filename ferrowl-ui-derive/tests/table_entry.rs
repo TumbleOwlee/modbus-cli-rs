@@ -4,8 +4,6 @@ use ferrowl_ui::widgets::{Header, TableEntry};
 use ferrowl_ui_derive::TableEntry;
 use ratatui::style::{Color, Style};
 
-// --- Plain row: default header name, default height ------------------------
-
 #[derive(TableEntry)]
 struct ScriptRow {
     #[column(name = "Name", min = 10, max = 40)]
@@ -53,8 +51,6 @@ fn it_header_names_and_widths_from_attrs() {
     assert_eq!((w[1].min, w[1].max), (6, 6));
 }
 
-// --- Custom height, custom header name, ignored non-column field -----------
-
 #[derive(TableEntry)]
 #[row(height = 3)]
 #[table_entry(header = KvHeader)]
@@ -79,8 +75,6 @@ fn it_custom_height_and_header_name() {
     assert_eq!(row.values(), ["k".to_string(), "v".to_string()]);
     assert_eq!(KvHeader::header(), ["Key".to_string(), "Value".to_string()]);
 }
-
-// --- Status coloring via `styles` ------------------------------------------
 
 #[derive(TableEntry)]
 #[table_entry(styles = cs_styles)]

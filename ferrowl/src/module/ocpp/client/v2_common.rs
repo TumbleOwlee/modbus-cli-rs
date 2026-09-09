@@ -73,7 +73,7 @@ pub(crate) fn unknown_evse(request: &serde_json::Value, state: &CsState) -> Opti
     }
 }
 
-// ---- Shared concrete `ClientState` over `CsState` (defined once; both versions reuse it). ----
+// Shared concrete `ClientState` over `CsState` (defined once; both versions reuse it).
 
 impl ClientState for CsState {
     fn connector_count(&self) -> usize {
@@ -132,7 +132,7 @@ impl ClientState for CsState {
     }
 }
 
-// ---- Shared `ClientVersion` body (both 2.0.1 and 2.1's `impl` blocks delegate to these). ----
+// Shared `ClientVersion` body (both 2.0.1 and 2.1's `impl` blocks delegate to these).
 
 const STATUS_CHOICES: [&str; 5] = [
     "Available",

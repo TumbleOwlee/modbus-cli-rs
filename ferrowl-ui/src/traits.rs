@@ -46,12 +46,10 @@ impl ToLabel for &str {
     }
 }
 
-/// Sets whether a widget has keyboard focus.
 pub trait SetFocus {
     fn set_focused(&mut self, focus: bool);
 }
 
-/// Queries whether a widget has keyboard focus.
 pub trait IsFocus {
     fn is_focused(&self) -> bool;
 }

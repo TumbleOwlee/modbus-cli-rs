@@ -33,18 +33,13 @@ struct Context(HashMap<&'static str, Vec<Box<dyn Joinable>>>);
 /// the global context. These tasks can be joined using `ferrowl_util::tokio::join_all()`.
 pub static GLOBAL_CONTEXT: &str = "";
 
-/// Context storage.
-///
 /// For each named context this structure collects all `JoinHandle` return by `tokio::spawn`
 static CONTEXT: Lazy<Mutex<Context>> = Lazy::new(|| Mutex::new(Context::default()));
 
 /// Spawn the given future as a tokio task in background in the global context ("")
 ///
-/// The future will be passed to tokio::spawn to create a task. The returned JoinHandle will not be
-/// returned to the caller. Instead it will be stored in the static background context. You will
-/// have to await the call else the task will not be stored in the background context at all.
-/// This context is used to provide the `join_all()` and `join_all_of_context(ctx)` functionality.
-/// See the respective documentation for details.
+/// The returned `JoinHandle` is not returned to the caller; it is stored in the static
+/// background context instead. The call must be awaited, or the task is not stored at all.
 ///
 /// # Examples
 ///
@@ -65,12 +60,8 @@ where
 
 /// Spawn the given future as a tokio task in background in the given context
 ///
-/// The future will be passed to tokio::spawn to create a task. The returned JoinHandle will not be
-/// returned to the caller. Instead it will be stored in the named static background context given by `ctx`.
-/// You will have to await the call else the task will not be stored in the background context at all.
-/// This context is used to provide the `join_all()` and `join_all_of_context(ctx)` functionality.
-/// See the respective documentation for details.
-///
+/// The returned `JoinHandle` is not returned to the caller; it is stored in the named static
+/// background context given by `ctx`. The call must be awaited, or the task is not stored at all.
 pub async fn spawn_detach_with_context<F: Send + IntoFuture + Future + 'static>(
     ctx: &'static str,
     future: F,
@@ -84,12 +75,8 @@ pub async fn spawn_detach_with_context<F: Send + IntoFuture + Future + 'static>(
 
 /// Join all tasks that are stored in any of the contexts
 ///
-/// Each task spawned by `tokio::crate::spawn_detach()` or `tokio::crate::spawn_detach_with_context()`
-/// will be part of a background context. A call to `join_all()` will await all stored JoinHandle
-/// and will only return if at any given time no more tasks are stored in the context.
-///
-/// This call will not guarantee that no more tasks are added after returning. It only awaits all
-/// tasks that were added before returning.
+/// Returns once all handles stored at the time of the call have finished; gives no guarantee
+/// that no tasks are added after the call returns.
 pub async fn join_all() {
     loop {
         let mut context = CONTEXT.lock().await;
@@ -108,13 +95,8 @@ pub async fn join_all() {
 
 /// Join all tasks that are stored in the named context
 ///
-/// Each task spawned by `tokio::crate::spawn_detach_with_context()` with the same context name
-/// will be awaited by calling `join_all_of_context(ctx)`. A call to `join_all_of_context()` will
-/// await all stored JoinHandle and will only return if at any given time no more tasks are stored
-/// for the given context name.
-///
-/// This call will not guarantee that no more tasks are added to the context after returning.
-/// It only awaits all tasks that were added before returning.
+/// Returns once all handles stored under `ctx` at the time of the call have finished; gives no
+/// guarantee that no tasks are added after the call returns.
 pub async fn join_all_of_context(ctx: &'static str) {
     loop {
         let mut context = CONTEXT.lock().await;

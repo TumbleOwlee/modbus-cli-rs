@@ -187,8 +187,6 @@ fn it_focus_previous_skips_disabled_gated_widget() {
     assert!(!app.second.is_focused());
 }
 
-// --- whole-view SetFocus / IsFocus -----------------------------------------
-
 #[test]
 /// UI-R-049 — focusing the container focuses its first eligible field and reports focused.
 fn it_set_focused_true_focuses_first_and_reports_focused() {
@@ -248,8 +246,6 @@ fn it_set_focused_keeps_remembered_eligible_gated_pane() {
     assert!(app.second.is_focused());
     assert!(!app.first.is_focused());
 }
-
-// --- NestedFocus: #[focusable(nestable)] + #[focus(nested)] ---------------
 
 #[focusable(nestable)]
 #[derive(Builder, Clone, Debug, Focus)]
@@ -324,8 +320,6 @@ fn it_single_field_section_try_focus_next_false_immediately() {
     assert!(!section.try_focus_next());
     assert!(!section.try_focus_previous());
 }
-
-// --- NestedFocus: embedding a nestable struct via #[focus(nested)] --------
 
 #[focusable]
 #[derive(Builder, Debug, Focus)]
@@ -453,8 +447,6 @@ fn it_nested_handle_events_arm_converts_unhandled_tab_to_consumed() {
     let result = app.handle_events(KeyModifiers::NONE, KeyCode::Tab);
     assert!(matches!(result, ferrowl_ui::EventResult::Consumed));
 }
-
-// --- NestedFocus: when-gated nested field, and entry into an ineligible inner pane -----------
 
 #[focusable]
 #[derive(Builder, Debug, Focus)]

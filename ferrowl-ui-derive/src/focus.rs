@@ -113,19 +113,15 @@ pub fn expand_focus(input: syn::DeriveInput) -> syn::Result<TokenStream> {
         ));
     }
 
-    // Number of focusable fields.
     let def_len = definitions.len();
 
-    // Generate enum name based on struct name.
     let enum_name = Ident::new(&format!("{identifier}Focus"), Span::call_site());
 
     let enum_fields = definitions.iter().map(|i| &i.enum_field);
     let impl_array = quote! {
-        // Array for static indexing
         let focuses = [#(#enum_name::#enum_fields),*];
     };
 
-    // Generate code for disabling current focus.
     let mut impl_disable = quote! {};
     for def in definitions.iter() {
         let name = &def.widget_name;
@@ -141,7 +137,7 @@ pub fn expand_focus(input: syn::DeriveInput) -> syn::Result<TokenStream> {
         }
     };
 
-    // Generate code for enabling new focus. Built once per direction: for a plain field the two
+    // Built once per direction: for a plain field the two
     // are byte-for-byte identical (the `else` branch below); for a `#[focus(nested)]` field,
     // forward entry calls the direction-aware
     // "enter at first eligible" helper and backward entry calls "enter at last eligible" instead
@@ -214,7 +210,6 @@ pub fn expand_focus(input: syn::DeriveInput) -> syn::Result<TokenStream> {
                     break;
                 }
 
-                // Iterate
                 current_index = (current_index + #delta) % #def_len;
             }
         }
@@ -222,7 +217,6 @@ pub fn expand_focus(input: syn::DeriveInput) -> syn::Result<TokenStream> {
     let impl_previous = focus_loop(quote! { (#def_len - 1) }, &impl_enable_backward);
     let impl_next = focus_loop(quote! { 1 }, &impl_enable_forward);
 
-    // Generate implementation for focus switching methods.
     let focus_def = quote! {
         impl #impl_generic #identifier #ty_generic #where_clause {
             // `% #def_len` collapses to `% 1` for single-field views; that is
@@ -295,7 +289,6 @@ pub fn expand_focus(input: syn::DeriveInput) -> syn::Result<TokenStream> {
         }
     };
 
-    // Generate Enum for focus states.
     let enum_fields = definitions.iter().map(|i| &i.enum_field);
     let enum_def = quote! {
         #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -304,11 +297,11 @@ pub fn expand_focus(input: syn::DeriveInput) -> syn::Result<TokenStream> {
         }
     };
 
-    // Implementation of HandleEvents. A `#[focus(nested)]` field's arm additionally tries
+    // A `#[focus(nested)]` field's arm additionally tries
     // `NestedFocus` stepping on an `Unhandled` Tab/BackTab from that field's own `handle_events`,
     // converting to `Consumed` on success or re-emitting the original `Unhandled` on failure (so
     // it bubbles to whichever outer call site owns this struct's own `focus_next`/`focus_previous`
-    // fallback). Every non-nested field's arm is emitted identically to before.
+    // fallback). Every non-nested field's arm forwards directly to that field's own `handle_events`.
     let mut impl_handle_events = quote! {};
     for def in definitions.iter() {
         let from = &def.widget_name;

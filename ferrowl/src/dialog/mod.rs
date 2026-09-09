@@ -88,8 +88,6 @@ mod tests {
     use super::*;
     use ferrowl_ui::widgets::ValidateResult;
 
-    // ---- NonEmpty ----
-
     #[test]
     /// UI-R-048 — the non-empty field validator rejects empty input.
     fn non_empty_rejects_empty() {
@@ -102,8 +100,6 @@ mod tests {
         assert!(matches!(NonEmpty::validate("hello"), ValidateResult::None));
         assert!(matches!(NonEmpty::validate(" "), ValidateResult::None));
     }
-
-    // ---- Address ----
 
     #[test]
     /// UI-R-048 — the address field validator accepts the `virtual` keyword.
@@ -153,8 +149,6 @@ mod tests {
         assert!(!Address::allowed_char('z'));
         assert!(!Address::allowed_char(' '));
     }
-
-    // ---- Bitmask ----
 
     #[test]
     /// UI-R-048 — an empty bitmask field validates as none.

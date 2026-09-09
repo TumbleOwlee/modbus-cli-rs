@@ -579,7 +579,6 @@ where
             interval_ms,
         } = config;
 
-        // Wait timeout until first operation
         sleep(Duration::from_millis(delay_ms as u64)).await;
 
         // `interval_ms` of 0 means "as fast as possible"; tokio's interval requires a non-zero

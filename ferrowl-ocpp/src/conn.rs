@@ -1,7 +1,7 @@
 //! The shared duplex connection engine used by both CS and CSMS.
 //!
 //! OCPP-J is bidirectional on a single socket, so a connection is driven by three concurrent
-//! pieces (Decision 2 in the design plan):
+//! pieces:
 //!
 //! * a **writer task** that owns the websocket sink and serializes every outbound frame fed to it
 //!   over an mpsc channel;

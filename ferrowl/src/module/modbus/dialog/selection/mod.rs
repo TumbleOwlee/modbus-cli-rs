@@ -395,7 +395,7 @@ impl EditSelectionDialog<NamedValue> {
         d.number_bitmask.state = self.number_bitmask.state.clone();
         d.text_alignment.state = self.text_alignment.state.clone();
         d.text_width.state = self.text_width.state.clone();
-        // Convert selected default → text (skip sentinel at index 0).
+        // Index 0 is the "(no default)" sentinel; skip it.
         let sel = self.default_value.state.selection();
         if sel > 0
             && let Some(nv) = self.default_value.state.values().get(sel)

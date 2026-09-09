@@ -22,9 +22,7 @@ pub struct Context<K>
 where
     K: Hash + Eq + Default,
 {
-    /// Native lua context
     lua: Lua,
-    /// Collection of all loaded lua scripts
     scripts: HashMap<K, Script>,
     /// SC-R-034 — wall-clock origin of the cycle (or on-demand run) currently executing; read by
     /// the hook installed in `install_execution_hook`, reset by every script-invoking method
@@ -146,12 +144,10 @@ where
         self.lua.globals().set("print", f)
     }
 
-    /// Retrieve iterator over all loaded scripts
     pub fn iter<'a>(&'a self) -> std::collections::hash_map::Iter<'a, K, Script> {
         self.scripts.iter()
     }
 
-    /// Retrieve mutable iterator over all loaded scripts
     pub fn iter_mut<'a>(&'a mut self) -> std::collections::hash_map::IterMut<'a, K, Script> {
         self.scripts.iter_mut()
     }
@@ -175,7 +171,6 @@ where
         }
     }
 
-    /// Execute all loaded scripts
     pub fn call_all(&mut self) -> std::result::Result<(), Vec<Error>> {
         self.begin_cycle();
         Self::exec_collecting_errors(self.iter_mut())

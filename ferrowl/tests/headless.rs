@@ -122,7 +122,7 @@ baud_rate = 9600
 /// `load_monitor_device` hard-fails the headless run (exit 1), same as today's
 /// `load_device` failure for `Role::Client`/`Role::Server`. `role = "monitor"` is only
 /// resolvable via `--session` (typed `ModuleSpec`) — the `--module key=val` flag's parser
-/// deliberately only accepts `client`/`server` (CL-R territory, out of this plan's scope).
+/// deliberately only accepts `client`/`server`.
 fn it_headless_fails_on_monitor_module_with_bad_device_path() {
     let dir = reserve_temp_dir("ferrowl_it_headless_monitor_bad");
     let session_path = dir.join("bad_device_session.toml");

@@ -19,7 +19,6 @@ pub struct Ring<T, const CAP: usize> {
 }
 
 impl<T, const CAP: usize> Ring<T, CAP> {
-    /// Creates an empty ring.
     pub fn new() -> Self {
         Self {
             buf: array::from_fn(|_| None),
@@ -33,12 +32,10 @@ impl<T, const CAP: usize> Ring<T, CAP> {
         CAP
     }
 
-    /// The number of items currently stored.
     pub fn len(&self) -> usize {
         self.len
     }
 
-    /// Whether the ring holds no items.
     pub fn is_empty(&self) -> bool {
         self.len == 0
     }
@@ -112,7 +109,6 @@ impl<T, const CAP: usize> Ring<T, CAP> {
         (0..count).filter_map(|_| self.pop()).collect()
     }
 
-    /// Removes all items.
     pub fn clear(&mut self) {
         for slot in &mut self.buf {
             *slot = None;

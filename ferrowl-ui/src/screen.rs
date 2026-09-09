@@ -31,11 +31,9 @@ where
     pub fn new() -> Result<Self, std::io::Error> {
         enable_raw_mode()?;
 
-        // Setup output
         let mut output = W::init();
         execute!(output, EnterAlternateScreen, EnableMouseCapture)?;
 
-        // Setup terminal
         let backend = CrosstermBackend::new(output);
         let mut terminal = Terminal::new(backend)?;
         execute!(terminal.backend_mut(), DisableMouseCapture)?;

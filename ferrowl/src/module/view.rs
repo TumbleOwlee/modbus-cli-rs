@@ -92,7 +92,6 @@ pub trait ModuleView: SetFocus + IsFocus {
     /// Called once per UI tick before [`render`].
     fn refresh<'a>(&'a mut self) -> RefreshFuture<'a>;
 
-    /// Status if dialog is shown
     fn is_overlay_active(&self) -> bool;
 
     /// Execute a module command string asynchronously.

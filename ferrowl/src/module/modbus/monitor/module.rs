@@ -120,8 +120,7 @@ impl ModbusMonitorModule {
     /// `abort()`ed outright (the same fallback `stop()` itself uses when a graceful
     /// `Terminate`-then-wait doesn't finish in time) since there is no `async` context here to
     /// await a graceful stop. The caller is expected to `:start` again afterwards, exactly as it
-    /// already had to after a fresh `new()`'d module — this method changes what carries over,
-    /// not the start/stop lifecycle itself.
+    /// already had to after a fresh `new()`'d module.
     pub fn reconfigure(self, spec: &ModuleSpec, device: &MonitorDeviceConfig) -> Self {
         // MB-R-150 — release any claim this instance held before rebuilding: "recovers…once the
         // conflicting instance stops" applies just as much to a reconfigure as to a stop.

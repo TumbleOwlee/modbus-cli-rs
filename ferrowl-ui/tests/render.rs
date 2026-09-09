@@ -35,8 +35,6 @@ fn full_border() -> Border {
     Border::Full(Margin::new(0, 0))
 }
 
-// ---- traits ----
-
 #[test]
 fn init_and_to_label() {
     // `Init` for the standard streams.
@@ -46,8 +44,6 @@ fn init_and_to_label() {
     assert_eq!(String::from("x").to_label(), "x");
     assert_eq!("y".to_label(), "y");
 }
-
-// ---- styles ----
 
 #[test]
 fn style_defaults_build() {
@@ -59,8 +55,6 @@ fn style_defaults_build() {
     let _ = TableStyle::default();
     let _ = TextStyle::default();
 }
-
-// ---- Button ----
 
 #[test]
 fn button_render_variants() {
@@ -97,8 +91,6 @@ fn button_render_variants() {
     StatefulWidget::render(&wide, Rect::new(0, 0, 8, 6), &mut b, &mut st);
 }
 
-// ---- Text ----
-
 #[test]
 fn text_render_variants() {
     // Borderless, short.
@@ -118,8 +110,6 @@ fn text_render_variants() {
     let mut b = buffer(10, 8);
     StatefulWidget::render(t, Rect::new(0, 0, 10, 8), &mut b, &mut s);
 }
-
-// ---- InputField ----
 
 #[test]
 fn input_field_render_variants() {
@@ -181,8 +171,6 @@ fn input_field_render_variants() {
         &mut b,
     );
 }
-
-// ---- CodeInputField ----
 
 #[test]
 fn code_input_field_render_variants() {
@@ -332,8 +320,6 @@ fn code_input_field_h_scroll_clips_mid_span() {
     );
 }
 
-// ---- TabBar ----
-
 #[test]
 /// UI-R-114, UI-R-116, UI-R-121, UI-R-174 — padded title columns written
 /// one character per column, active-tab style over every cell, under
@@ -422,8 +408,6 @@ fn it_tab_bar_render_variants() {
     }
 }
 
-// ---- Selection ----
-
 #[test]
 fn selection_render_variants() {
     // Borderless, focused, selected item wider than the area -> horizontal offset.
@@ -456,8 +440,6 @@ fn selection_render_variants() {
     let mut b = buffer(20, 6);
     StatefulWidget::render(&w, Rect::new(0, 0, 20, 6), &mut b, &mut st);
 }
-
-// ---- SuggestInput ----
 
 #[derive(Debug, Clone)]
 struct FixedProvider(Vec<&'static str>);
@@ -558,8 +540,6 @@ fn suggest_input_popup_no_panic_on_tiny_buffer() {
     w.render_overlay(Rect::new(0, 0, 10, 10), &mut b, &mut closed);
 }
 
-// ---- Title conversions + Widget<S, W> pair forwarding ----
-
 #[test]
 fn title_conversions_and_widget_pair() {
     use ferrowl_ui::traits::{HandleEvents, IsFocus, Margins, SetFocus};
@@ -598,8 +578,6 @@ fn title_conversions_and_widget_pair() {
     let mut b = buffer(20, 1);
     StatefulWidget::render(pair, Rect::new(0, 0, 20, 1), &mut b, &mut s);
 }
-
-// ---- Table ----
 
 #[derive(Clone, Default)]
 struct Row(String, String);

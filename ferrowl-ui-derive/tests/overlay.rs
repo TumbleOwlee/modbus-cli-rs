@@ -4,8 +4,6 @@ use crossterm::event::{KeyCode, KeyModifiers};
 use ferrowl_ui::traits::{OverlayKeys, OverlayRoute};
 use ferrowl_ui_derive::Overlay;
 
-// --- Payloads --------------------------------------------------------------
-
 #[derive(Debug, PartialEq)]
 struct Editor {
     step: i32,
@@ -51,8 +49,6 @@ fn route(o: &mut Overlay, code: KeyCode) -> OverlayRoute {
     o.route_keys(NONE, code)
 }
 
-// --- Structural ------------------------------------------------------------
-
 #[test]
 /// UI-R-021 — an overlay reports active for any variant other than None.
 fn it_is_active() {
@@ -78,8 +74,6 @@ fn it_close_resets_to_none() {
     assert_eq!(o, Overlay::None);
 }
 
-// --- esc_close -------------------------------------------------------------
-
 #[test]
 /// UI-R-079 — Esc requests close on an overlay variant that opted into esc_close.
 fn it_esc_closes_esc_close_variant() {
@@ -104,8 +98,6 @@ fn it_esc_unhandled_without_esc_close() {
     assert_eq!(route(&mut o, KeyCode::Esc), OverlayRoute::Unhandled);
     assert!(o.is_active());
 }
-
-// --- focus_cycle -----------------------------------------------------------
 
 #[test]
 /// UI-R-022 — Tab advances the overlay's field focus.
@@ -135,8 +127,6 @@ fn it_tab_unhandled_without_focus_cycle() {
     let mut o = Overlay::Conf(Confirm);
     assert_eq!(route(&mut o, KeyCode::Tab), OverlayRoute::Unhandled);
 }
-
-// --- fall-through ----------------------------------------------------------
 
 #[test]
 /// UI-R-022 — keys other than the dialog defaults fall through as unhandled.
