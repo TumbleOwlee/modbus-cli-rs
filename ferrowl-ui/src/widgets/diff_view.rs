@@ -15,7 +15,7 @@ use crate::state::{
     Annotation, DiffEntry, DiffKind, DiffLayout, DiffMode, DiffRow, DiffViewState,
     MarkdownInputFieldStateBuilder, MarkedRange, RowPart, Side,
 };
-use crate::style::{DiffViewStyle, InputFieldStyleBuilder, SyntaxTheme};
+use crate::style::{DiffViewStyle, InputFieldStyleBuilder, MarkdownThemeBuilder, SyntaxTheme};
 use crate::traits::{IsFocus, Margins};
 use crate::widgets::{MarkdownInputFieldBuilder, Title};
 
@@ -517,6 +517,10 @@ impl DiffView {
         // `MarkdownInputField::render` opens with its own `buf.set_style(area, general)`
         // over the whole rect it is given (UI-E-143): that is the surplus-column fill, so
         // it must paint in the diff widget's own general style, not the field's default.
+        // A read-only, unfocusable block also has no meaningful active row, so its
+        // active-row highlight (`markdown_theme.highlighted_row`) is styled to the same
+        // general color: every body row, including its first, stays in general (UI-E-143
+        // holds with no exception), not just the rows past the active one.
         let field = MarkdownInputFieldBuilder::default()
             .line_numbers(false)
             .style(
@@ -524,6 +528,12 @@ impl DiffView {
                     .general(self.style.general)
                     .build()
                     .expect("InputFieldStyleBuilder fields all default"),
+            )
+            .markdown_theme(
+                MarkdownThemeBuilder::default()
+                    .highlighted_row(self.style.general)
+                    .build()
+                    .expect("MarkdownThemeBuilder fields all default"),
             )
             .build()
             .expect("MarkdownInputFieldBuilder fields all default");
@@ -1463,15 +1473,20 @@ mod tests {
             .unwrap();
         let w = DiffViewBuilder::default().style(style).build().unwrap();
         let mut b = buffer(20, 5);
-        // "hi" is the read-only field's active line (line_idx 0), which the field
-        // always highlights on its own row regardless of this stage's fix, so surplus
-        // columns are asserted on its second line "yo" instead. `total_height` 5
+        // A read-only, unfocusable block has no meaningful active row, so its highlight
+        // is suppressed (draw_annotation styles it to general): "hi" on line 0, the
+        // field's active line, is asserted the same way as its second line "yo". `5`
         // reserves a third body row beyond both source lines, a wholly surplus row.
         w.draw_annotation(&mut b, Rect::new(0, 0, 20, 5), "hi\nyo", 5, 0);
         assert_eq!(b[(0, 0)].fg, Color::Red, "top border, left corner");
         assert_eq!(b[(19, 0)].fg, Color::Red, "top border, right corner");
         assert_eq!(b[(0, 4)].fg, Color::Red, "bottom border, left corner");
         let general_bg = w.style().general().bg.expect("style sets a color");
+        assert_eq!(
+            b[(10, 1)].bg,
+            general_bg,
+            "surplus column past \"hi\" on the active row"
+        );
         assert_eq!(
             b[(10, 2)].bg,
             general_bg,
