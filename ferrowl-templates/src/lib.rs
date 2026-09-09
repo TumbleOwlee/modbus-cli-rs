@@ -64,6 +64,35 @@ mod tests {
     }
 
     #[test]
+    /// SC-R-063 — every bundled template (SC-R-036) has a name, a one-line description, a Lua
+    /// code body, and a non-empty set of script contexts it applies to.
+    fn ut_every_template_has_name_description_code_and_contexts() {
+        for template in all() {
+            assert!(!template.name.is_empty(), "template with empty name");
+            assert!(
+                !template.description.is_empty(),
+                "template '{}' has an empty description",
+                template.name
+            );
+            assert!(
+                !template.description.contains('\n'),
+                "template '{}' description is not one line",
+                template.name
+            );
+            assert!(
+                !template.code.is_empty(),
+                "template '{}' has no code body",
+                template.name
+            );
+            assert!(
+                !template.contexts.is_empty(),
+                "template '{}' applies to no context",
+                template.name
+            );
+        }
+    }
+
+    #[test]
     fn ut_by_name_finds_bundled_template() {
         assert!(by_name("power-report").is_some());
         assert!(by_name("nope").is_none());
