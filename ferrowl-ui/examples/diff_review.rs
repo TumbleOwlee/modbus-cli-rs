@@ -334,8 +334,8 @@ fn ui(f: &mut Frame, model: &mut Model) {
             .unwrap();
         f.render_stateful_widget(&diff_widget, panes.diff, &mut model.diff);
     }
-    base_widget.render_overlay(panes.base, f.buffer_mut(), &mut model.base);
-    branch_widget.render_overlay(panes.branch, f.buffer_mut(), &mut model.branch);
+    base_widget.render_overlay(f.area(), f.buffer_mut(), &mut model.base);
+    branch_widget.render_overlay(f.area(), f.buffer_mut(), &mut model.branch);
 }
 
 /// Routes one key event to whichever pane currently holds focus, cycling focus on
@@ -768,6 +768,22 @@ mod tests {
         assert!(!model.base.suggestions_open());
         handle_key(&mut model, KeyModifiers::NONE, KeyCode::Esc);
         assert!(model.done);
+    }
+
+    #[test]
+    /// An open suggestion popup is clamped to the frame, not to the field it belongs to,
+    /// so it drops below the field instead of covering the field's own titled block.
+    fn ut_open_suggestions_do_not_cover_the_input_title() {
+        let mut model = Model::new(fixture("main", "feature", "", ""));
+        set_focus(&mut model, Focus::BaseInput);
+        handle_key(&mut model, KeyModifiers::NONE, KeyCode::Char('m'));
+        assert!(model.base.suggestions_open());
+        let text = rendered_text(&mut model);
+        assert!(
+            text.contains("feature") || text.contains("main"),
+            "missing suggestion row:\n{text}"
+        );
+        assert!(text.contains("Base"), "missing base title:\n{text}");
     }
 
     fn row_count(diff: &DiffViewState) -> usize {
