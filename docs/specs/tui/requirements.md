@@ -432,6 +432,12 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **UI-R-285** — A body line inside a hunk with no characters at all is a context line whose text is empty, so it occupies both entries of one row (UI-R-209) and both sides advance their file line counter and show their number in the gutter (UI-R-217), never a meta row (UI-R-210).
 
+**UI-R-286** — The diff widget's border is a builder option, a border around its pane or panes or no border at all, defaulting to no border (UI-R-228).
+
+**UI-R-287** — In the split layout drawn without a border (UI-R-286) a separator of at least one column sits between the two panes (UI-R-211), and with a border there is no separator, the two pane borders already parting the panes.
+
+**UI-R-288** — Every cell of the separator column (UI-R-287) is painted in the widget's general background style on every display row, carrying no gutter cell, no text and no row band of either side (UI-R-278), so the seam reads as empty on added, removed and context rows alike.
+
 ## File tree widget
 
 **UI-R-234** — The file tree widget's state is built from a list of file paths and derives the directory nodes from the paths' components, so a caller supplies paths alone and never assembles a tree.

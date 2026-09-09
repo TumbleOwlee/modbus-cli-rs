@@ -131,6 +131,9 @@ Boundary behavior, error semantics, intentional or known constraints. The known-
 | **UI-E-127** | Added and removed rows on a terminal rendering no background color (UI-R-216) | they read as context rows: with the `+`/`-` marker column removed, the row style is the only kind cue and no textual fallback is drawn |
 | **UI-E-128** | Empty body line inside a hunk against a lone-space context line (UI-R-285) | both are context rows with empty text on both sides and are indistinguishable once rendered; only a line outside any hunk stays meta (UI-E-097) |
 | **UI-E-129** | Paired added and removed rows (UI-R-280) where either side holds more than 512 word tokens (UI-R-281), as a minified or base64 line does | neither row carries any word-diff span and both keep the plain full-width band of UI-R-278, exactly as an unpaired row does (UI-E-124) |
+| **UI-E-130** | Borderless split layout on an area whose width leaves an odd column once the separator is taken (UI-R-287) | the separator widens to two columns and the panes stay equal (UI-R-211); no pane is ever one column wider than the other |
+| **UI-E-131** | A full-width meta row (UI-R-210) in the borderless split layout | it spans the separator column too, since it spans the widget's full width; UI-R-288 governs the separator on every other row |
+| **UI-E-132** | Borderless split layout on an area narrower than three columns (UI-R-287) | the separator is dropped to zero columns so both panes keep at least one column; the panes abut, as they do with too little width for any seam |
 
 ## File tree widget
 
