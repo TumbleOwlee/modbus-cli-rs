@@ -340,7 +340,7 @@ mod tests {
         assert_eq!(result, Ok(None));
     }
 
-    /// With `reconnect = false`, a downstream connect failure is
+    /// BR-E-004, BR-R-010 — with `reconnect = false`, a downstream connect failure is
     /// never retried: every subsequent `forward` answers `GatewayPathUnavailable` and the
     /// `connect` closure is invoked only once.
     #[tokio::test]

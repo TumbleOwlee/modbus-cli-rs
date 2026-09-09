@@ -65,7 +65,7 @@ async fn rtu_server_open_failure_retries_while_reconnect_enabled() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-/// MB-R-075, MB-R-134 — with `reconnect` disabled, a serial-open failure fails the RTU
+/// MB-R-208, MB-R-134 — with `reconnect` disabled, a serial-open failure fails the RTU
 /// server: `spawn()` still returns `Ok(handle)`, but the joined task carries the serial error.
 /// MB-R-074 — the RTU server opens the port once at start, with no accept loop deferring it, so
 /// that first open is what fails here.
@@ -103,7 +103,7 @@ async fn rtu_server_terminate_while_backing_off_ends_task_ok() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-/// MB-R-075 — for an RTU client, a serial-open failure is a failed connection attempt; with
+/// MB-R-209 — for an RTU client, a serial-open failure is a failed connection attempt; with
 /// reconnect disabled it ends the client task with the error.
 async fn rtu_client_open_failure_reconnect_false_dies() {
     let operations = Arc::new(RwLock::new(vec![Operation {
@@ -129,7 +129,7 @@ async fn rtu_client_open_failure_reconnect_false_dies() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-/// MB-R-075 — for an RTU client, a serial-open failure with reconnect enabled is subject to the
+/// MB-R-209 — for an RTU client, a serial-open failure with reconnect enabled is subject to the
 /// reconnect rules: the task keeps retrying rather than dying, and Terminate ends it cleanly.
 async fn rtu_client_open_failure_reconnect_true_retries() {
     let operations = Arc::new(RwLock::new(vec![]));
