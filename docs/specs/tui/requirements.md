@@ -226,25 +226,25 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **UI-R-172** — The gutter width of UI-R-167 is clamped to the field's area width, never exceeding it and never wrapping, so the gutter is always drawn inside the widget's area.
 
-**UI-R-173** — The multi-line code editor's state remembers the visible height in rows of its last render, and reports one row before the first render.
+**UI-R-293** — The multi-line code editor's state remembers the visible height in rows of its last render, and reports one row before the first render.
 
-**UI-R-174** — `PageDown` and `PageUp` move the code editor's active line down or up by the remembered visible height (UI-R-173), clamped to the first and last buffer line.
+**UI-R-294** — `PageDown` and `PageUp` move the code editor's active line down or up by the remembered visible height (UI-R-293), clamped to the first and last buffer line.
 
-**UI-R-175** — `Ctrl+D` and `Ctrl+U` move the code editor's active line down or up by half the remembered visible height (UI-R-173), rounded down and never less than one line, clamped to the first and last buffer line.
+**UI-R-295** — `Ctrl+D` and `Ctrl+U` move the code editor's active line down or up by half the remembered visible height (UI-R-293), rounded down and never less than one line, clamped to the first and last buffer line.
 
-**UI-R-176** — While the code editor is disabled, `h`, `l`, `Left` and `Right` scroll the viewport one column left or right instead of moving the cursor within the line, and the cursor column follows the scroll so the keep-the-cursor-visible logic never scrolls the view back.
+**UI-R-296** — While the code editor is disabled, `h`, `l`, `Left` and `Right` scroll the viewport one column left or right instead of moving the cursor within the line, and the cursor column follows the scroll so the keep-the-cursor-visible logic never scrolls the view back.
 
-**UI-R-177** — The horizontal scroll of UI-R-176 is clamped to zero at the left and, at the right, to the last column of the widest line in the buffer.
+**UI-R-297** — The horizontal scroll of UI-R-296 is clamped to zero at the left and, at the right, to the last column of the widest line in the buffer.
 
-**UI-R-178** — While the code editor is disabled, `0` sets the horizontal scroll to the first column.
+**UI-R-298** — While the code editor is disabled, `0` sets the horizontal scroll to the first column.
 
-**UI-R-179** — While the code editor is disabled, `$` sets the horizontal scroll to the smallest offset that brings the active line's last column into view.
+**UI-R-299** — While the code editor is disabled, `$` sets the horizontal scroll to the smallest offset that brings the active line's last column into view.
 
-**UI-R-180** — A vertical move in a disabled code editor leaves the horizontal scroll unchanged, whatever the length of the line moved onto.
+**UI-R-300** — A vertical move in a disabled code editor leaves the horizontal scroll unchanged, whatever the length of the line moved onto.
 
-**UI-R-181** — The paging of UI-R-174 and UI-R-175 and the read-only horizontal scrolling of UI-R-176 through UI-R-180 are available in both the plain and the vim-modal editor profiles (UI-R-027).
+**UI-R-301** — The paging of UI-R-294 and UI-R-295 and the read-only horizontal scrolling of UI-R-296 through UI-R-300 are available in both the plain and the vim-modal editor profiles (UI-R-027).
 
-**UI-R-182** — A disabled vim-modal code editor keeps `gg`, `G`, `v`, `V` and `Esc` at their enabled meanings (UI-R-028), so a read-only field can still enter Visual mode and hold a charwise or linewise selection.
+**UI-R-302** — A disabled vim-modal code editor keeps `gg`, `G`, `v`, `V` and `Esc` at their enabled meanings (UI-R-028), so a read-only field can still enter Visual mode and hold a charwise or linewise selection.
 
 ## Markdown input field
 
@@ -362,9 +362,9 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **UI-R-230** — `j`, `k`, their count prefixes, `gg` and `G` move the active row within the widget's aligned rows, and the single vertical scroll offset keeps the active row visible, so both panes always show the same row range.
 
-**UI-R-231** — `PageDown`, `PageUp`, `Ctrl+D` and `Ctrl+U` move the diff widget's active row by as many display rows as the visible height or half of it, landing on the logical row holding the display row reached, with the remembered-height and clamping semantics of UI-R-173 through UI-R-175.
+**UI-R-231** — `PageDown`, `PageUp`, `Ctrl+D` and `Ctrl+U` move the diff widget's active row by as many display rows as the visible height or half of it, landing on the logical row holding the display row reached, with the remembered-height and clamping semantics of UI-R-293 through UI-R-295.
 
-**UI-R-232** — With wrapping off (UI-R-260), `h`, `l`, `Left`, `Right`, `0` and `$` scroll the diff widget horizontally with the semantics of UI-R-176 through UI-R-179, applying one horizontal offset to every pane at once.
+**UI-R-232** — With wrapping off (UI-R-260), `h`, `l`, `Left`, `Right`, `0` and `$` scroll the diff widget horizontally with the semantics of UI-R-296 through UI-R-299, applying one horizontal offset to every pane at once.
 
 **UI-R-233** — `]c` moves the active row to the first row of the next hunk and `[c` to the first row of the previous hunk, each clamping at the last and first hunk.
 
@@ -470,7 +470,7 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **UI-R-244** — A file node may carry a change status of added, removed or modified, drawn as a leading `+`, `-` or `~` marker and styling that row with the syntax theme's added, removed and meta styles (UI-R-162, UI-R-163); a node with no status takes the normal text style.
 
-**UI-R-245** — The file tree's viewport scrolls vertically to keep the selected row visible, and `PageDown`, `PageUp`, `Ctrl+D` and `Ctrl+U` move the selection with the remembered-height and clamping semantics of UI-R-173 through UI-R-175.
+**UI-R-245** — The file tree's viewport scrolls vertically to keep the selected row visible, and `PageDown`, `PageUp`, `Ctrl+D` and `Ctrl+U` move the selection with the remembered-height and clamping semantics of UI-R-293 through UI-R-295.
 
 **UI-R-246** — The file tree paints the focused border style while focused and the normal border otherwise (UI-R-110).
 

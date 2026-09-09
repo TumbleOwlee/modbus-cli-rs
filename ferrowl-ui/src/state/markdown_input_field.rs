@@ -17,8 +17,8 @@ pub struct MarkdownInputFieldState {
     /// registers, single-level undo, disabled flag. Built with `vim(true)`; its `language`
     /// stays `None` (markdown gets no auto-indent and no format-on-blur). `readonly_nav` is
     /// always off (see `MarkdownInputFieldStateBuilder::build`): the widget wraps its text
-    /// and paces its own paging in `handle_events`, so the composed editor's UI-R-176
-    /// through UI-R-180 read-only viewport keys must never fire underneath it.
+    /// and paces its own paging in `handle_events`, so the composed editor's UI-R-296
+    /// through UI-R-300 read-only viewport keys must never fire underneath it.
     #[getset(skip)]
     #[builder(default = "markdown_inner()")]
     inner: CodeInputFieldState,
@@ -60,8 +60,8 @@ pub struct MarkdownInputFieldState {
     pending_delete_count: Option<usize>,
 }
 
-/// Builds the composed editor state with its read-only viewport navigation (UI-R-176
-/// through UI-R-180) turned off, so the markdown widget's own paging and horizontal
+/// Builds the composed editor state with its read-only viewport navigation (UI-R-296
+/// through UI-R-300) turned off, so the markdown widget's own paging and horizontal
 /// key handling are never shadowed by the inner editor's.
 fn markdown_inner() -> CodeInputFieldState {
     let mut inner = CodeInputFieldStateBuilder::default()
@@ -803,7 +803,7 @@ mod tests {
     #[test]
     /// UI-R-125, UI-R-155 — a read-only markdown field keeps its own `h`/`l`/`0`/`$`
     /// (consumed and ignored, UI-E-072) and its own display-row paging, unshadowed by the
-    /// composed editor's UI-R-176..UI-R-180 read-only viewport scrolling, which the markdown
+    /// composed editor's UI-R-296..UI-R-300 read-only viewport scrolling, which the markdown
     /// state turns off on its inner editor.
     fn ut_read_only_markdown_field_keeps_its_own_h_l_and_paging() {
         let mut s = state_with("one\ntwo\nthree");

@@ -37,18 +37,18 @@ pub struct CodeInputFieldState {
     #[builder(default = "0")]
     h_scroll: usize,
     /// Visible height in rows of the last render; one row before the first render
-    /// (UI-R-173, UI-E-084).
+    /// (UI-R-293, UI-E-133).
     #[getset(get_copy = "pub")]
     #[builder(default = "1")]
     visible_height: usize,
     /// Content width in columns of the last render, excluding the gutter; one column
     /// before the first render, the same pre-render convention as `visible_height`.
     /// Crate-private and unlisted in `api-contract.md`: it exists only so `$`
-    /// (UI-R-179) can compute its scroll offset without depending on a render.
+    /// (UI-R-299) can compute its scroll offset without depending on a render.
     #[getset(skip)]
     #[builder(setter(skip), default = "1")]
     content_width: usize,
-    /// Gates the read-only navigation intercept of UI-R-176 through UI-R-180. On by
+    /// Gates the read-only navigation intercept of UI-R-296 through UI-R-300. On by
     /// default; a widget composing this state for its own read-only viewport (the
     /// markdown input field) turns it off so its own paging and horizontal navigation
     /// are not shadowed by this state's.
@@ -252,21 +252,21 @@ impl CodeInputFieldState {
     }
 
     /// Crate-private: the only caller composing this state for its own read-only
-    /// viewport (the markdown input field) needs to turn UI-R-176..UI-R-180 off.
+    /// viewport (the markdown input field) needs to turn UI-R-296..UI-R-300 off.
     pub(crate) fn set_readonly_nav(&mut self, on: bool) {
         self.readonly_nav = on;
     }
 
-    /// Crate-private: records the last render's content width so `$` (UI-R-179) can
+    /// Crate-private: records the last render's content width so `$` (UI-R-299) can
     /// compute its scroll offset without depending on a render.
     pub(crate) fn set_content_width(&mut self, w: usize) {
         self.content_width = w;
     }
 
     /// Moves `active_line` by `rows` (at least one), clamped to the buffer's first and
-    /// last line (UI-R-174, UI-R-175, UI-E-085). Skips the Normal-mode column clamp
+    /// last line (UI-R-294, UI-R-295, UI-E-134). Skips the Normal-mode column clamp
     /// while disabled, so a read-only field keeps its cursor column and therefore its
-    /// horizontal scroll across the move (UI-R-180).
+    /// horizontal scroll across the move (UI-R-300).
     fn page_move(&mut self, down: bool, rows: usize) {
         let rows = rows.max(1);
         self.active_line = if down {
@@ -279,7 +279,7 @@ impl CodeInputFieldState {
         }
     }
 
-    /// The last column of the widest buffer line (UI-R-177).
+    /// The last column of the widest buffer line (UI-R-297).
     fn max_h_scroll(&self) -> usize {
         self.lines
             .iter()
@@ -289,8 +289,8 @@ impl CodeInputFieldState {
             .saturating_sub(1)
     }
 
-    /// Paging (UI-R-174, UI-R-175) and, while disabled, the read-only horizontal
-    /// scrolling of UI-R-176 through UI-R-180. Gated by `readonly_nav` so a composing
+    /// Paging (UI-R-294, UI-R-295) and, while disabled, the read-only horizontal
+    /// scrolling of UI-R-296 through UI-R-300. Gated by `readonly_nav` so a composing
     /// widget can turn the whole intercept off; the flag is read nowhere else.
     fn handle_readonly_nav(
         &mut self,
@@ -1921,8 +1921,8 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-036, UI-R-176 — a disabled editor permits motion and visual yank but ignores
-    /// edits; `l` now scrolls the viewport (UI-R-176) rather than moving the cursor within
+    /// UI-R-036, UI-R-296 — a disabled editor permits motion and visual yank but ignores
+    /// edits; `l` now scrolls the viewport (UI-R-296) rather than moving the cursor within
     /// the line, so the cursor follows the scroll instead of moving on its own.
     fn disabled_field_allows_motion_and_visual_yank_but_not_edits() {
         let mut s = CodeInputFieldStateBuilder::default()
@@ -2109,14 +2109,14 @@ mod tests {
     // -- paging and read-only horizontal scrolling ----------------------
 
     #[test]
-    /// UI-R-173 — before the first render, the visible height is one row.
+    /// UI-R-293 — before the first render, the visible height is one row.
     fn ut_visible_height_defaults_to_one_row_before_first_render() {
         let s = vim_state();
         assert_eq!(s.visible_height(), 1);
     }
 
     #[test]
-    /// UI-R-174, UI-E-085 — PageDown/PageUp move by the visible height and clamp at both ends.
+    /// UI-R-294, UI-E-134 — PageDown/PageUp move by the visible height and clamp at both ends.
     fn ut_page_down_and_up_move_by_visible_height_and_clamp() {
         let mut s = vim_state();
         s.set_content("a\nb\nc\nd\ne\nf");
@@ -2133,7 +2133,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-175 — Ctrl+D/Ctrl+U move by half the visible height, rounded down, never below one.
+    /// UI-R-295 — Ctrl+D/Ctrl+U move by half the visible height, rounded down, never below one.
     fn ut_ctrl_d_and_ctrl_u_move_by_half_the_visible_height() {
         let mut s = vim_state();
         s.set_content("a\nb\nc\nd\ne\nf\ng");
@@ -2154,7 +2154,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-E-084 — paging before the first render moves the active line by one line.
+    /// UI-E-133 — paging before the first render moves the active line by one line.
     fn ut_paging_before_first_render_moves_one_line() {
         let mut s = vim_state();
         s.set_content("a\nb\nc");
@@ -2166,7 +2166,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-176, UI-R-177 — a disabled field scrolls horizontally with h/l instead of moving
+    /// UI-R-296, UI-R-297 — a disabled field scrolls horizontally with h/l instead of moving
     /// the cursor within the line, clamped at zero and at the widest line's last column.
     fn ut_disabled_h_l_scroll_the_viewport_and_clamp_at_both_ends() {
         let mut s = CodeInputFieldStateBuilder::default()
@@ -2186,7 +2186,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-178 — a disabled field's `0` sets the horizontal scroll to the first column.
+    /// UI-R-298 — a disabled field's `0` sets the horizontal scroll to the first column.
     fn ut_disabled_zero_scrolls_to_first_column() {
         let mut s = CodeInputFieldStateBuilder::default()
             .disabled(true)
@@ -2202,7 +2202,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-179 — a disabled field's `$` scrolls to the smallest offset bringing the active
+    /// UI-R-299 — a disabled field's `$` scrolls to the smallest offset bringing the active
     /// line's last column into view, whether or not the field is focused.
     fn ut_disabled_dollar_brings_last_column_into_view() {
         let mut s = CodeInputFieldStateBuilder::default()
@@ -2217,7 +2217,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-179 — `$` has no focus precondition: it scrolls the same whether or not the
+    /// UI-R-299 — `$` has no focus precondition: it scrolls the same whether or not the
     /// field is currently focused, the case the render-time cursor-follow chain cannot serve.
     fn ut_disabled_dollar_scrolls_when_the_field_is_unfocused() {
         let mut s = CodeInputFieldStateBuilder::default()
@@ -2232,7 +2232,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-180, UI-E-087 — a vertical move in a disabled field leaves the horizontal scroll
+    /// UI-R-300, UI-E-136 — a vertical move in a disabled field leaves the horizontal scroll
     /// unchanged whatever the length of the line moved onto.
     fn ut_disabled_vertical_move_keeps_horizontal_scroll_on_shorter_line() {
         let mut s = CodeInputFieldStateBuilder::default()
@@ -2250,7 +2250,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-181 — paging and read-only horizontal scrolling are available in the plain
+    /// UI-R-301 — paging and read-only horizontal scrolling are available in the plain
     /// (non-vim) editor profile as well as vim-modal.
     fn ut_paging_and_readonly_scroll_work_in_the_plain_profile() {
         let mut s = CodeInputFieldStateBuilder::default()
@@ -2268,7 +2268,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-182 — a disabled vim-modal editor still enters Visual mode and holds a selection.
+    /// UI-R-302 — a disabled vim-modal editor still enters Visual mode and holds a selection.
     fn ut_disabled_vim_field_still_enters_visual_and_holds_selection() {
         let mut s = CodeInputFieldStateBuilder::default()
             .disabled(true)
@@ -2284,7 +2284,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-E-086 — an *enabled* editor keeps h/l/0/$ as cursor motion; the read-only viewport
+    /// UI-E-135 — an *enabled* editor keeps h/l/0/$ as cursor motion; the read-only viewport
     /// scrolling exists only while the field is disabled.
     fn ut_enabled_field_keeps_cursor_motion_for_h_l_zero_dollar() {
         let mut s = vim_state();
@@ -2302,7 +2302,7 @@ mod tests {
 
     #[test]
     /// UI-R-125, UI-R-155 — with `readonly_nav` off, the read-only viewport scrolling and
-    /// paging of UI-R-174..UI-R-180 never fire, leaving the keys to whatever the composing
+    /// paging of UI-R-294..UI-R-300 never fire, leaving the keys to whatever the composing
     /// widget (the markdown field) does with them instead.
     fn ut_readonly_nav_off_leaves_h_l_and_paging_to_the_composing_widget() {
         let mut s = CodeInputFieldStateBuilder::default()

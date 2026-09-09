@@ -159,7 +159,7 @@ pub struct DiffViewState {
     #[builder(default = "Side::Old")]
     focused_side: Side,
     /// Visible height in rows of the last render; one row before the first render, the
-    /// same pre-render convention as the code editor's (UI-R-173). Written by the widget
+    /// same pre-render convention as the code editor's (UI-R-293). Written by the widget
     /// that renders this state and read by its own paging logic.
     #[getset(skip)]
     #[builder(setter(skip), default = "1")]
@@ -226,7 +226,7 @@ pub struct DiffViewState {
     annotations_shown: bool,
     /// Each annotation's own measured display-row count at its last render, indexed like
     /// `annotations`; empty before the first render, the same pre-render convention
-    /// `visible_height` uses (UI-E-084's rule), so `display_rows()` adds no annotation rows
+    /// `visible_height` uses (UI-E-133's rule), so `display_rows()` adds no annotation rows
     /// until the widget has measured them.
     #[getset(skip)]
     #[builder(setter(skip), default)]
@@ -961,7 +961,7 @@ impl DiffViewState {
             for &index in anchors.get(&logical).into_iter().flatten() {
                 // UI-R-272: the block's own height is its measured text rows plus its
                 // border rows (top and bottom); zero (no block at all) before the
-                // first render has measured it (UI-E-084's rule).
+                // first render has measured it (UI-E-133's rule).
                 let measured = self.annotation_heights.get(index).copied().unwrap_or(0);
                 let total = if measured == 0 { 0 } else { measured + 2 };
                 for sub_row in 0..total {
@@ -2133,7 +2133,7 @@ mod tests {
     #[test]
     /// UI-R-232 (movement half) — `$` brings the active row's focused-side last column
     /// into view, computed from the remembered content width so it works even unfocused
-    /// (the code editor's UI-R-179 exception, mirrored here).
+    /// (the code editor's UI-R-299 exception, mirrored here).
     fn ut_dollar_brings_the_last_column_into_view_unfocused_too() {
         // A row wider than the content width, so `$` must produce a nonzero offset: an
         // implementation with the `$` arm deleted (or a no-op) would otherwise still pass
@@ -2157,7 +2157,7 @@ mod tests {
         // h_scroll = (25 + 1) - 5 = 21.
         assert_eq!(s.h_scroll(), 21);
 
-        // Computed from the remembered content width (UI-R-179's mechanism), not a live
+        // Computed from the remembered content width (UI-R-299's mechanism), not a live
         // render: changing it directly still moves `$`'s result.
         s.set_content_width(10);
         s.handle_events(KeyModifiers::NONE, KeyCode::Char('$'));

@@ -683,7 +683,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-173 — a render records the visible height in rows of the area it drew into.
+    /// UI-R-293 — a render records the visible height in rows of the area it drew into.
     fn ut_render_records_visible_height() {
         let w = CodeInputFieldBuilder::default().build().unwrap();
         let mut st = CodeInputFieldStateBuilder::default().build().unwrap();

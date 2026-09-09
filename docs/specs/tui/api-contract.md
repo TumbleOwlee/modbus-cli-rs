@@ -261,8 +261,8 @@ Vim-modal editor (default for the Lua-script editor). Modes: `NORMAL`, `INSERT`,
 | `e` | End of current/next word | UI-R-028 |
 | `gg` | First line, first column | UI-R-028 |
 | `G` | Last line | UI-R-028 |
-| `PageDown` / `PageUp` | Page down / up by the visible height | UI-R-173, UI-R-174 |
-| `Ctrl+D` / `Ctrl+U` | Half a page down / up | UI-R-173, UI-R-175 |
+| `PageDown` / `PageUp` | Page down / up by the visible height | UI-R-293, UI-R-294 |
+| `Ctrl+D` / `Ctrl+U` | Half a page down / up | UI-R-293, UI-R-295 |
 
 ### Edits (Normal)
 
@@ -300,11 +300,11 @@ Yank/delete also copy to the system clipboard via OSC 52. A `language` setting d
 
 | Key | Action | Req |
 |---|---|---|
-| `h` / `Left` | Scroll the viewport one column left | UI-R-176, UI-R-177 |
-| `l` / `Right` | Scroll one column right | UI-R-176, UI-R-177 |
-| `0` | Scroll to the first column | UI-R-178 |
-| `$` | Scroll the active line's last column into view | UI-R-179 |
-| `gg` / `G` / `v` / `V` / `Esc` | Unchanged from the enabled editor | UI-R-182 |
+| `h` / `Left` | Scroll the viewport one column left | UI-R-296, UI-R-297 |
+| `l` / `Right` | Scroll one column right | UI-R-296, UI-R-297 |
+| `0` | Scroll to the first column | UI-R-298 |
+| `$` | Scroll the active line's last column into view | UI-R-299 |
+| `gg` / `G` / `v` / `V` / `Esc` | Unchanged from the enabled editor | UI-R-302 |
 
 ## Markdown input field — modes and commands
 
@@ -333,9 +333,9 @@ Public surface: content get and set (UI-R-181), read-only toggle (UI-R-184, UI-R
 | Highlight kinds `Added`, `Removed`, `Meta` | diff line kinds added to the fixed kind enumeration | UI-R-039 |
 | Syntax theme styles `added`, `removed`, `meta` | per-kind styles for the diff kinds, foreground-only defaults | UI-R-162, UI-R-163 |
 | Code-editor state `gutter_labels: Option<Vec<String>>` | per-line gutter text replacing the line index; builder-settable and settable after construction | UI-R-164, UI-R-165, UI-R-168 |
-| Code-editor state visible-height accessor | remembered visible height in rows of the last render | UI-R-173 |
+| Code-editor state visible-height accessor | remembered visible height in rows of the last render | UI-R-293 |
 | Code-editor state vertical-scroll-offset accessor | current vertical scroll offset | — |
-| Code-editor state horizontal-scroll accessor | current horizontal scroll column | UI-R-176 |
+| Code-editor state horizontal-scroll accessor | current horizontal scroll column | UI-R-296 |
 
 ## Command-line widget
 

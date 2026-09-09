@@ -78,10 +78,10 @@ Boundary behavior, error semantics, intentional or known constraints. The known-
 | **UI-E-079** | Mutating edit on an enabled field that has gutter labels (UI-R-164) | labels are never resynced by the widget: an inserted, split or deleted line shifts rows out from under the labels and leaves them stale; labels are intended for disabled, read-only use, and keeping them in sync is the consumer's job |
 | **UI-E-080** | Gutter-label list longer than the buffer | the surplus labels are never rendered, but still count toward the gutter width of UI-R-167 |
 | **UI-E-083** | Gutter labels wider than the field's whole area (UI-R-172) | the gutter takes the full area width and the text content is left zero columns; no minimum content width is reserved and no label is dropped, matching the app's no-minimum-size stance (UI-E-047, UI-E-055) |
-| **UI-E-084** | `PageDown`, `PageUp`, `Ctrl+D` or `Ctrl+U` before the first render (UI-R-173) | the visible height is one row, so a page and a half page both move the active line by one line |
-| **UI-E-085** | Paging (UI-R-174, UI-R-175) at the first or last buffer line | the move clamps to that line; no wrap-around, matching UI-E-076 |
-| **UI-E-086** | `h`, `l`, `Left`, `Right`, `0` or `$` on an *enabled* code editor | unchanged cursor motion (UI-R-029); the horizontal viewport scrolling of UI-R-176 through UI-R-179 exists only while the field is disabled |
-| **UI-E-087** | Vertical move onto a line shorter than the horizontal scroll offset (UI-R-180) | that row shows only its gutter and no text until the view is scrolled back; the view never snaps to the shorter line |
+| **UI-E-133** | `PageDown`, `PageUp`, `Ctrl+D` or `Ctrl+U` before the first render (UI-R-293) | the visible height is one row, so a page and a half page both move the active line by one line |
+| **UI-E-134** | Paging (UI-R-294, UI-R-295) at the first or last buffer line | the move clamps to that line; no wrap-around, matching UI-E-076 |
+| **UI-E-135** | `h`, `l`, `Left`, `Right`, `0` or `$` on an *enabled* code editor | unchanged cursor motion (UI-R-029); the horizontal viewport scrolling of UI-R-296 through UI-R-299 exists only while the field is disabled |
+| **UI-E-136** | Vertical move onto a line shorter than the horizontal scroll offset (UI-R-300) | that row shows only its gutter and no text until the view is scrolled back; the view never snaps to the shorter line |
 
 ## Syntax highlighting
 
@@ -100,8 +100,8 @@ Boundary behavior, error semantics, intentional or known constraints. The known-
 | **UI-E-089** | `h`, `l`, `0`, `$`, `w`, `b`, `e` in a read-only markdown input field | consumed and ignored; only line/display-row navigation (`j`, `k`, `gg`, `G`, `Ctrl+D`, `Ctrl+U`) and yank act (UI-R-139) |
 | **UI-E-090** | Fence opened and never closed before the end of the buffer (UI-R-177) | every following line stays fence body to the last line of the buffer |
 | **UI-E-076** | `Ctrl+D` / `Ctrl+U` near the first or last display row (UI-R-136) | movement clamps to the first/last row; no wrap-around |
-| **UI-E-089** | Measuring the empty text (UI-R-188) | one display row, the single empty source line |
-| **UI-E-090** | Measuring at a width that leaves no columns for text, gutter included (UI-R-188) | the available text width is treated as one column, so every source line wraps one character per display row |
+| **UI-E-137** | Measuring the empty text (UI-R-188) | one display row, the single empty source line |
+| **UI-E-138** | Measuring at a width that leaves no columns for text, gutter included (UI-R-188) | the available text width is treated as one column, so every source line wraps one character per display row |
 
 ## Diff widget
 
@@ -114,7 +114,7 @@ Boundary behavior, error semantics, intentional or known constraints. The known-
 | **UI-E-101** | Layout toggled (UI-R-215) while a Visual selection is active | active row and selection are unchanged: both layouts address the same aligned rows (UI-R-213) |
 | **UI-E-102** | Gutter-label list longer than the widget's row count (UI-R-218) | the surplus labels are never rendered but still count toward the gutter width, as UI-E-080 |
 | **UI-E-111** | Word longer than the available width with wrapping on (UI-R-260) | broken at a character boundary; never truncated, never overflowed, as UI-E-070 |
-| **UI-E-112** | Wrapping on in a pane too narrow for the gutter (UI-R-260) | the available text width is treated as one column, one character per display row, as UI-E-090 |
+| **UI-E-112** | Wrapping on in a pane too narrow for the gutter (UI-R-260) | the available text width is treated as one column, one character per display row, as UI-E-138 |
 | **UI-E-113** | `Ctrl+F` on a widget built without the full new-side text (UI-R-258, UI-R-259) | consumed and ignored; the display stays hunk-only |
 | **UI-E-114** | Full new-side text disagreeing with the patch's context lines (UI-R-253) | the supplied text supplies the new-side content and the patch supplies the row's classification; no error is raised and nothing is dropped |
 | **UI-E-115** | Annotation or marked range naming a side and file line range no row covers (UI-R-266, UI-R-269) | silently not rendered; the widget raises no error and drops no row |

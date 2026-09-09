@@ -398,14 +398,14 @@ mod tests {
     use super::*;
 
     #[test]
-    /// UI-E-089 — measuring the empty text is one display row, the single empty source line.
+    /// UI-E-137 — measuring the empty text is one display row, the single empty source line.
     fn ut_measure_empty_text_is_one_row() {
         let w = MarkdownInputFieldBuilder::default().build().unwrap();
         assert_eq!(w.measure("", 20), 1);
     }
 
     #[test]
-    /// UI-E-090 — at a width leaving no columns for text, gutter included, the available
+    /// UI-E-138 — at a width leaving no columns for text, gutter included, the available
     /// text width is treated as one column, so every source line wraps one character per row.
     fn ut_measure_at_zero_text_width_wraps_one_character_per_row() {
         let w = MarkdownInputFieldBuilder::default()
