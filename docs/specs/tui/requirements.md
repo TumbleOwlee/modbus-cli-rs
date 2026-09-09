@@ -460,6 +460,10 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **UI-R-309** — In the bordered split layout (UI-R-308) an annotation block occupies the same display rows in both panes, its height being the greater of the two panes' measurements (UI-R-272), so every aligned row below it (UI-R-211) still sits on one screen row in both panes.
 
+**UI-R-310** — The horizontal offset of UI-R-232 applies to a meta row (UI-R-210) exactly as it does to a content row: the meta text is drawn from its offset-th column onward, beginning in the first cell of the area the row is drawn in (UI-R-304), so a meta line wider than the area is reachable by scrolling right.
+
+**UI-R-311** — The right clamp of the diff widget's horizontal scroll (UI-R-232, UI-R-297) is the last column of the widest row text in the widget, meta rows (UI-R-210) included, so every column of the widest meta line can be brought into view.
+
 ## File tree widget
 
 **UI-R-234** — The file tree widget's state is built from a list of file paths and derives the directory nodes from the paths' components, so a caller supplies paths alone and never assembles a tree.

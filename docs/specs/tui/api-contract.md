@@ -363,7 +363,7 @@ Public surface: construction from a unified diff text plus an optional full new-
 |---|---|---|---|
 | `j` / `k`, counts, `gg`, `G` | Normal / Visual | Move the active row | UI-R-230 |
 | `PageDown` / `PageUp` / `Ctrl+D` / `Ctrl+U` | Normal / Visual | Page / half-page the active row, counted in display rows | UI-R-231 |
-| `h` / `l` / `Left` / `Right` / `0` / `$` | Normal / Visual | Horizontal scroll, applied to every pane, while wrapping is off | UI-R-232 |
+| `h` / `l` / `Left` / `Right` / `0` / `$` | Normal / Visual | Horizontal scroll, applied to every pane, while wrapping is off | UI-R-232, UI-R-310, UI-R-311 |
 | `]c` / `[c` | Normal / Visual | Move to the first row of the next / previous hunk | UI-R-233 |
 | `v` / `V` | Normal | Enter Visual | UI-R-223 |
 | `Esc` | Visual | Back to Normal | UI-R-223 |
