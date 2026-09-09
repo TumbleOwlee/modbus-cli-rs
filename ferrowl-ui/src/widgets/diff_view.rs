@@ -620,22 +620,32 @@ impl StatefulWidget for &DiffView {
                     old_area.width.saturating_sub(old_gutter).max(1) as usize,
                     new_area.width.saturating_sub(new_gutter).max(1) as usize,
                 );
-                // Without a border, extend to the outer area's own right edge: the
-                // separator column(s) between the panes and an odd unused column at
-                // odd widths both sit outside `old_area`/`new_area`, and UI-R-210 (with
-                // UI-E-131) spans the full width regardless. With a border each pane
-                // already owns its border cells, so stop at the new pane's inner edge.
-                let meta_right = if matches!(self.border, Border::Full(_)) {
+                // Annotations keep spanning both panes as one block (UI-R-270): without a
+                // border, extend to the outer area's own right edge, since the separator
+                // column(s) between the panes and an odd unused column at odd widths both
+                // sit outside `old_area`/`new_area`; with a border, stop at the new pane's
+                // inner edge, the border cells already parting the panes.
+                let annotation_right = if matches!(self.border, Border::Full(_)) {
                     new_area.x + new_area.width
                 } else {
                     area.x + area.width
                 };
-                let meta_width = meta_right.saturating_sub(old_area.x);
+                let annotation_width = annotation_right.saturating_sub(old_area.x);
+
+                // A meta row (UI-R-210, amended) is drawn inside the area it is drawn in:
+                // one pane's inner width when bordered (UI-R-304), each pane's border cells
+                // its own boundary; the full outer width when borderless (UI-E-131), since
+                // there the panes share no border to stay inside of.
+                let meta_width = if matches!(self.border, Border::Full(_)) {
+                    old_area.width
+                } else {
+                    annotation_width
+                };
                 state.set_meta_width(meta_width as usize);
 
                 let annotations = state.annotations().clone();
-                let annotation_heights =
-                    self.measure_annotations(&annotations, meta_width.saturating_sub(2).max(1));
+                let annotation_heights = self
+                    .measure_annotations(&annotations, annotation_width.saturating_sub(2).max(1));
                 state.set_annotation_heights(annotation_heights.clone());
 
                 let visible_height = old_area.height as usize;
@@ -671,6 +681,15 @@ impl StatefulWidget for &DiffView {
                                 wrap,
                                 sub_row,
                             );
+                            if matches!(self.border, Border::Full(_)) {
+                                self.draw_meta(
+                                    buf,
+                                    Rect::new(new_area.x, y_new, meta_width, 1),
+                                    text,
+                                    wrap,
+                                    sub_row,
+                                );
+                            }
                         }
                         RowPart::Pair { old_sub, new_sub } => {
                             let DiffRow::Pair { kind, old, new } = &rows[row_idx] else {
@@ -736,7 +755,7 @@ impl StatefulWidget for &DiffView {
                                     Rect::new(
                                         old_area.x,
                                         y_old,
-                                        meta_width,
+                                        annotation_width,
                                         own_remaining.min(pane_remaining),
                                     ),
                                     &annotations[index].text,
@@ -2206,6 +2225,68 @@ mod tests {
                 "column {x} of the meta row, including the separator"
             );
         }
+    }
+
+    #[test]
+    /// UI-R-210, UI-R-304 — in a bordered split layout the meta row is drawn once inside
+    /// each pane's border, spanning only that pane's inner width, so the amended "area it
+    /// is drawn in" wording pins the same rendered row.
+    fn ut_bordered_split_draws_the_meta_row_inside_each_pane() {
+        let mut st = state_with("@@ -1,1 +1,1 @@\n a\n");
+        let w = DiffViewBuilder::default()
+            .border(Border::Full(Margin::new(0, 0)))
+            .build()
+            .unwrap();
+        let mut b = buffer(40, 4);
+        StatefulWidget::render(&w, Rect::new(0, 0, 40, 4), &mut b, &mut st);
+        let chars: Vec<char> = row_text(&b, 1, 40).chars().collect();
+        let old_inner: String = chars[1..19].iter().collect();
+        let new_inner: String = chars[21..39].iter().collect();
+        assert!(
+            old_inner.contains("@@ -1,1 +1,1 @@"),
+            "old pane's inner columns carry the header: {old_inner:?}"
+        );
+        assert!(
+            new_inner.contains("@@ -1,1 +1,1 @@"),
+            "new pane's inner columns carry the header too: {new_inner:?}"
+        );
+        assert_ne!(b[(0, 1)].symbol(), " ", "old pane's left border");
+        assert_ne!(b[(19, 1)].symbol(), " ", "old pane's right border");
+        assert_ne!(b[(20, 1)].symbol(), " ", "new pane's left border");
+        assert_ne!(b[(39, 1)].symbol(), " ", "new pane's right border");
+    }
+
+    #[test]
+    /// UI-E-141 — a meta row wider than a pane's inner width in the bordered split layout
+    /// clips at that pane's inner width, independently in each pane, with no ellipsis and
+    /// no spill onto either pane's border.
+    fn ut_bordered_split_meta_row_is_clipped_at_each_pane_border() {
+        let mut st = state_with(
+            "@@ -1,1 +1,1 @@ a very long hunk header that exceeds one pane's width\n a\n",
+        );
+        let w = DiffViewBuilder::default()
+            .border(Border::Full(Margin::new(0, 0)))
+            .build()
+            .unwrap();
+        let mut b = buffer(40, 4);
+        StatefulWidget::render(&w, Rect::new(0, 0, 40, 4), &mut b, &mut st);
+        let border_glyph = b[(0, 1)].symbol().to_string();
+        assert_eq!(
+            b[(19, 1)].symbol(),
+            border_glyph,
+            "old pane's right border untouched by the clipped text"
+        );
+        assert_eq!(
+            b[(20, 1)].symbol(),
+            border_glyph,
+            "new pane's left border untouched by the clipped text"
+        );
+        assert_eq!(
+            b[(39, 1)].symbol(),
+            border_glyph,
+            "new pane's right border untouched by the clipped text"
+        );
+        assert_ne!(b[(18, 1)].symbol(), "…", "no ellipsis, text simply stops");
     }
 
     #[test]
