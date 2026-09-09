@@ -1969,7 +1969,12 @@ mod tests {
             .language(Some(ferrowl_syntax::Language::Lua))
             .build_with_diff("@@ -1,1 +1,1 @@\n-local a = 1\n+local b = 1\n")
             .unwrap();
-        let w = DiffView::default();
+        let mut w = DiffView::default();
+        w.style.set_removed_word(
+            Style::default()
+                .fg(ratatui::style::Color::Magenta)
+                .bg(ratatui::style::Color::Cyan),
+        );
         let mut b = buffer(40, 2);
         StatefulWidget::render(&w, Rect::new(0, 0, 40, 2), &mut b, &mut st);
         let plain = state_with("@@ -1,1 +1,1 @@\n-local a = 1\n+local b = 1\n");
@@ -1991,11 +1996,10 @@ mod tests {
             plain_b[(2, 1)].fg,
             "language changes the foreground"
         );
-        let style = DiffViewStyle::default();
-        assert_eq!(b[(8, 1)].bg, style.removed_word.bg.unwrap());
+        assert_eq!(b[(8, 1)].bg, w.style.removed_word.bg.unwrap());
         assert_ne!(
             b[(8, 1)].fg,
-            style.removed_word.fg.unwrap(),
+            w.style.removed_word.fg.unwrap(),
             "foreground stays the syntax theme's, not the emphasis style's own"
         );
     }
