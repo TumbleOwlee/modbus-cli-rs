@@ -741,7 +741,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-051 — `e` with no script selected is a no-op.
+    /// UI-R-199 — `e` with no script selected is a no-op.
     fn ut_e_without_selection_is_noop() {
         let mut d = ScriptDialog::new(&[], Duration::from_secs(1), ScriptContext::Modbus);
         d.handle_events(KeyModifiers::NONE, KeyCode::Tab); // -> table (empty)
@@ -942,7 +942,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-056 — Esc/q/? close the bindings help overlay.
+    /// UI-R-186 — Esc/q/? close the bindings help overlay.
     fn ut_bindings_close_keys() {
         for close_key in [KeyCode::Esc, KeyCode::Char('q'), KeyCode::Char('?')] {
             let mut d = dialog();
@@ -983,7 +983,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-053 — the open template browser takes precedence over all other dialog keys.
+    /// UI-R-201 — the open template browser takes precedence over all other dialog keys.
     fn ut_open_browser_takes_precedence_over_dialog_keys() {
         let mut d = dialog();
         focus_templates_button(&mut d);
@@ -1031,7 +1031,7 @@ mod tests {
     // --- rename ---------------------------------------------------------
 
     #[test]
-    /// UI-R-055 — Enter on a selected script opens the rename prompt and renames it.
+    /// UI-R-055, UI-R-202, UI-R-204 — Enter on a selected script opens the rename prompt and renames it.
     fn ut_enter_on_table_renames_selected_script() {
         let mut d = ScriptDialog::new(
             &[ScriptDef {
@@ -1098,7 +1098,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-055, UI-R-080, UI-R-090 — Esc cancels the rename (the prompt consumes it, so no close-confirm opens); Enter on an empty table is a no-op.
+    /// UI-R-203, UI-R-080, UI-R-090 — Esc cancels the rename (the prompt consumes it, so no close-confirm opens); Enter on an empty table is a no-op.
     fn ut_rename_esc_cancels_and_empty_table_is_noop() {
         let mut d = dialog();
         d.handle_events(KeyModifiers::NONE, KeyCode::Tab); // -> table
@@ -1132,7 +1132,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-056 — `Esc`, `q` and `?` each close the overlay.
+    /// UI-R-186 — `Esc`, `q` and `?` each close the overlay.
     fn ut_script_keys_help_closes_on_esc_q_question() {
         for close_key in [KeyCode::Esc, KeyCode::Char('q'), KeyCode::Char('?')] {
             let mut d = dialog();
@@ -1145,7 +1145,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-056 — the script-keys help overlay takes precedence over other dialog keys.
+    /// UI-R-187 — the script-keys help overlay takes precedence over other dialog keys.
     fn ut_script_keys_help_takes_precedence() {
         let mut d = dialog();
         d.handle_events(KeyModifiers::NONE, KeyCode::Tab); // -> table

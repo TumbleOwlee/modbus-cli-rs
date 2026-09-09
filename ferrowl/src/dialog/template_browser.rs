@@ -315,7 +315,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-053 — `Esc` and `q` close the overlay without picking anything.
+    /// UI-R-200 — `Esc` and `q` close the overlay without picking anything.
     fn ut_esc_and_q_close() {
         let mut browser = TemplateBrowser::new(ScriptContext::Session);
         assert_eq!(
@@ -340,7 +340,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-053 — Tab cycles focus between the template list and its preview.
+    /// Tab cycles focus between the template list and its preview.
     fn ut_tab_cycles_list_and_preview() {
         let mut browser = TemplateBrowser::new(ScriptContext::Modbus);
         assert_eq!(browser.focus, BrowserFocus::List);
@@ -351,7 +351,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-053 — routing reports NotActive when the browser is closed.
+    /// Routing reports NotActive when the browser is closed.
     fn ut_route_not_active_when_none() {
         let mut browser: Option<TemplateBrowser> = None;
         assert_eq!(
@@ -370,7 +370,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-053 — a close key clears the browser overlay.
+    /// UI-R-200 — a close key clears the browser overlay.
     fn ut_route_close_clears_overlay() {
         let mut browser = Some(TemplateBrowser::new(ScriptContext::Session));
         assert_eq!(

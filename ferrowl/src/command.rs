@@ -65,6 +65,7 @@ mod tests {
     }
 
     #[test]
+    /// UI-R-016 — tab lifecycle commands (`:quit`, `:qall`, `:new`) parse to their app-level variants.
     fn ut_app_commands() {
         assert_eq!(parse("q"), Cmd::Quit);
         assert_eq!(parse("quit"), Cmd::Quit);
@@ -76,6 +77,7 @@ mod tests {
     }
 
     #[test]
+    /// UI-R-016 — `:write`, `:load`, and `:log clear` parse with their optional path/argument.
     fn ut_optional_paths() {
         assert_eq!(parse("w"), Cmd::Write(None));
         assert_eq!(
@@ -115,11 +117,13 @@ mod tests {
     }
 
     #[test]
+    /// UI-R-016 — `:session` parses to the session-script-management command.
     fn ut_session() {
         assert_eq!(parse("session"), Cmd::Session);
     }
 
     #[test]
+    /// UI-R-016 — `:script copy` parses to the session-script-management command.
     fn ut_script_copy() {
         assert_eq!(parse("script copy 3"), Cmd::ScriptCopy(Some(3)));
         assert_eq!(parse("script copy"), Cmd::ScriptCopy(None));

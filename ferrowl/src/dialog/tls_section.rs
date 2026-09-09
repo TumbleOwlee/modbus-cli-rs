@@ -923,7 +923,7 @@ mod tests {
     }
 
     #[test]
-    /// MB-R-139 — `prefill` restores a client-role self-signed `MutualTls` identity.
+    /// MB-R-213 — `prefill` restores a client-role self-signed `MutualTls` identity.
     fn ut_prefill_client_mutual_tls_self_signed_round_trips() {
         let client = ClientTlsPolicy::Mutual {
             verification: CertVerification::RootStore {

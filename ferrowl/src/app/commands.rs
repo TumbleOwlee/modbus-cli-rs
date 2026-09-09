@@ -275,8 +275,8 @@ mod tests {
     }
 
     #[tokio::test]
-    /// CS-R-030 — `:write` saves the current instances as a session file, defaulting the target to
-    /// `session.toml` and choosing the encoding from the path extension.
+    /// CS-R-030, CS-R-069, CS-R-070 — `:write` saves the current instances as a session file,
+    /// defaulting the target to `session.toml` and choosing the encoding from the path extension.
     async fn ut_write_defaults_to_session_toml_and_encodes_by_extension() {
         let dir = reserve_temp_dir("ferrowl_cs030");
 

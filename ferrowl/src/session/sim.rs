@@ -414,7 +414,7 @@ mod tests {
     }
 
     #[test]
-    /// SC-R-035, SC-R-043 — `run_once` executes a **disabled** script on demand and starts no sim
+    /// SC-R-058, SC-R-060, SC-R-043 — `run_once` executes a **disabled** script on demand and starts no sim
     /// thread: the one-shot is independent of the sim lifecycle.
     fn ut_run_once_executes_disabled_script_without_sim() {
         let rw = MockReadWrite::default();

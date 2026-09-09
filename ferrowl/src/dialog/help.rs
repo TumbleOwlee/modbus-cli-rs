@@ -192,7 +192,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-056 — Esc/q/? close the script dialog's help overlay.
+    /// UI-R-186 — Esc/q/? close the script dialog's help overlay.
     fn ut_handle_key_close_keys() {
         let mut o = overlay();
         assert!(o.handle_key(KeyModifiers::NONE, KeyCode::Esc));
@@ -201,7 +201,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-056 — j/k scroll the help overlay.
+    /// j/k scroll the help overlay.
     fn ut_handle_key_scroll() {
         let mut o = overlay();
         o.max_scroll = 100;
@@ -219,7 +219,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-056 — g/G jump to the top/bottom of the help overlay.
+    /// g/G jump to the top/bottom of the help overlay.
     fn ut_handle_key_top_bottom() {
         let mut o = overlay();
         o.max_scroll = 20;
@@ -231,7 +231,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-056 — scrolling past the bottom of the help overlay does not overflow.
+    /// Scrolling past the bottom of the help overlay does not overflow.
     fn ut_handle_key_g_then_j_stays_at_max_no_overflow() {
         let mut o = overlay();
         o.max_scroll = 7;
@@ -244,7 +244,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-056 — the help overlay clamps its scroll to the rendered viewport height.
+    /// The help overlay clamps its scroll to the rendered viewport height.
     fn ut_render_sets_max_scroll_and_handle_key_respects_it_after() {
         // A render with a tall content and small viewport should compute a finite max_scroll;
         // subsequent `G`/`j` must not exceed it.
@@ -261,7 +261,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-056 — help overlay lines fit the popup width.
+    /// Help overlay lines fit the popup width.
     fn ut_build_lines_fit_popup_width() {
         // popup_w = 75, inner_width = 73, desc_budget = 73 - 34 = 39.
         let lines = build_lines(lua_help::sections(ScriptContext::OcppClient), 39);
@@ -272,7 +272,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-056 — a long help entry description wraps within the overlay.
+    /// A long help entry description wraps within the overlay.
     fn ut_build_lines_wraps_long_action_desc() {
         let secs = lua_help::sections(ScriptContext::OcppClient);
         let ocpp = secs.iter().find(|s| s.title == "C_OCPP").unwrap();
@@ -297,7 +297,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-056 — the help overlay consumes all other keys while open.
+    /// UI-R-187 — the help overlay consumes all other keys while open.
     fn ut_handle_key_other_keys_eaten() {
         let mut o = overlay();
         assert!(!o.handle_key(KeyModifiers::NONE, KeyCode::Char('x')));
@@ -308,7 +308,7 @@ mod tests {
     // --- route_help -----------------------------------------------------
 
     #[test]
-    /// UI-R-056 — routing reports NotActive when the help overlay is closed.
+    /// Routing reports NotActive when the help overlay is closed.
     fn ut_route_not_active_when_none() {
         let mut help: Option<HelpOverlay> = None;
         assert_eq!(
@@ -319,7 +319,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-056 — a close key routed to the help overlay clears it.
+    /// UI-R-186 — a close key routed to the help overlay clears it.
     fn ut_route_close_key_clears_overlay() {
         let mut help = Some(overlay());
         assert_eq!(
@@ -330,7 +330,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-056 — an unrelated key keeps the help overlay open and is consumed.
+    /// UI-R-187 — an unrelated key keeps the help overlay open and is consumed.
     fn ut_route_other_key_stays_open_and_consumed() {
         let mut help = Some(overlay());
         assert_eq!(
