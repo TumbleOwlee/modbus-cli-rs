@@ -513,8 +513,8 @@ mod tests {
         );
     }
 
-    /// The config-path field's filesystem completion popup (already wired
-    /// via `SuggestInput<ConfigPath, FsPathProvider>`, same as the modbus module's own
+    /// The config-path field's filesystem completion popup (already wired via
+    /// `SuggestInput<ConfigPath, FsPathProvider>`, same as the modbus module's own
     /// `SetupDialog::config_path`) must actually draw: `render` must call `render_overlay` for
     /// it, same as `module/modbus/setup_dialog.rs`'s trailing `render_overlay` calls.
     #[test]
@@ -644,7 +644,8 @@ mod tests {
     }
 
     /// UI-R-067 — the name field is focused, and so shows a cursor, as soon as the dialog opens,
-    /// same as `module/modbus/setup_dialog.rs::SetupDialog`; every other field opens unfocused.
+    /// same as `module/modbus/setup_dialog.rs::SetupDialog`. UI-R-194 — every other field opens
+    /// unfocused.
     #[test]
     fn ut_create_focuses_the_name_field_by_default() {
         let dialog = MonitorSetupDialog::create();
@@ -711,7 +712,7 @@ mod tests {
         );
     }
 
-    /// UI-R-067 — a freshly created dialog paints exactly one text cursor, in the one focused
+    /// UI-R-195 — a freshly created dialog paints exactly one text cursor, in the one focused
     /// field. The cursor rather than the border, because `name` opens empty against `NonEmpty` and
     /// so paints its error border, not its focused one.
     #[test]
@@ -791,7 +792,7 @@ mod tests {
         );
     }
 
-    /// Esc opens the close-confirm popup and Enter confirms it, same as
+    /// UI-R-023, UI-R-112 — Esc opens the close-confirm popup and Enter confirms it, same as
     /// `module/modbus/setup_dialog.rs::SetupDialog`.
     #[test]
     fn ut_esc_then_enter_sets_close_request_and_clears_after_take() {

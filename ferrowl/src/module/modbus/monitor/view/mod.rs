@@ -927,8 +927,8 @@ impl ModbusMonitorModuleView {
     }
 
     /// MB-R-148 — apply the open `EditInterpretation` overlay's Confirm: edit the interpretation
-    /// in place under its (possibly new) name. Never touches `module.table()`: this operation
-    /// does not write to the bus or otherwise touch the slave's observed-value table.
+    /// in place under its (possibly new) name. MB-R-217 — never touches `module.table()`: this
+    /// operation does not write to the bus or otherwise touch the slave's observed-value table.
     /// No-op if the overlay isn't open, the dialog is invalid, or nothing is selected.
     fn confirm_edit_interpretation(&mut self) {
         let MonitorOverlay::EditInterpretation(edit) = &self.overlay else {
@@ -948,8 +948,8 @@ impl ModbusMonitorModuleView {
         self.overlay.close();
     }
 
-    /// MB-R-148 — apply the open `EditInterpretation` overlay's confirmed Delete: remove the
-    /// interpretation outright. Never touches `module.table()`, same as `confirm_edit_interpretation`.
+    /// MB-R-216 — apply the open `EditInterpretation` overlay's confirmed Delete: remove the
+    /// interpretation outright. MB-R-217 — never touches `module.table()`, same as `confirm_edit_interpretation`.
     /// No-op if the overlay isn't open or nothing is selected.
     fn delete_interpretation(&mut self) {
         let MonitorOverlay::EditInterpretation(edit) = &self.overlay else {
@@ -1719,7 +1719,7 @@ mod tests {
         assert_eq!(v.unit_ids, vec![UnitId(3)]);
     }
 
-    /// The Units panel is a real Table/TableEntry: exactly 1 column ("Unit"), rows
+    /// UI-R-060 — the Units panel is a real Table/TableEntry: exactly 1 column ("Unit"), rows
     /// track `unit_ids`, and the highlighted row tracks `selected` (`selected` itself remains
     /// the single source of truth — the table only mirrors it for rendering).
     #[test]
@@ -1854,14 +1854,14 @@ mod tests {
         );
     }
 
-    /// A CONNECTED/RECONNECTING/DISCONNECTED status bar,
-    /// same shape as `ModbusModuleView`'s own (`module/modbus/view/mod.rs`): centered,
-    /// one line tall, `COLOR_SCHEME.success`/`warning`/`error` background, positioned below the
-    /// module's own panels (which the outer app-level compositor then draws the shared log pane
-    /// below in turn, `app/render.rs`'s `[view_area, log_area]` split — no extra coordination
-    /// needed here). `ModbusMonitorModule` has no `bound_addr` (RTU/ASCII monitor, not a TCP
-    /// server), so this drives off `connection_status()` instead and always shows the bare
-    /// label (no address to append).
+    /// MB-R-152 — a not-yet-started monitor shows DISCONNECTED, on a CONNECTED/RECONNECTING/
+    /// DISCONNECTED status bar with the same shape as `ModbusModuleView`'s own
+    /// (`module/modbus/view/mod.rs`): centered, one line tall, `COLOR_SCHEME.success`/`warning`/
+    /// `error` background, positioned below the module's own panels (which the outer app-level
+    /// compositor then draws the shared log pane below in turn, `app/render.rs`'s
+    /// `[view_area, log_area]` split — no extra coordination needed here). `ModbusMonitorModule`
+    /// has no `bound_addr` (RTU/ASCII monitor, not a TCP server), so this drives off
+    /// `connection_status()` instead and always shows the bare label (no address to append).
     #[test]
     fn ut_render_shows_disconnected_status_bar() {
         use ferrowl_ui::COLOR_SCHEME;
@@ -2113,8 +2113,11 @@ mod tests {
         );
     }
 
-    /// Exactly one Tab-cyclable panel is highlighted at a time, defaulting to
-    /// Units, and Tab/BackTab cycle Units -> Messages -> Memory -> Units (and back).
+    /// UI-R-065 — exactly one Tab-cyclable panel is highlighted at a time, defaulting to
+    /// Units, and Tab/BackTab cycle Units -> Messages -> Memory -> Units (and back). This
+    /// fixture has no interpretation for the selected unit id, so Resolved registers stays
+    /// hidden (UI-R-100) and skipped from the cycle (UI-R-065's own skip clause); a fixture
+    /// with one would insert it into the cycle too.
     #[test]
     fn ut_tab_cycles_panel_focus_units_messages_memory_and_back() {
         use ferrowl_ui::COLOR_SCHEME;
@@ -2213,7 +2216,7 @@ mod tests {
         );
     }
 
-    /// MB-R-148 — once "Add predefined" opens the named-value sub-popup, keyboard input (typed
+    /// Once "Add predefined" opens the named-value sub-popup, keyboard input (typed
     /// characters, Tab/BackTab) reaches the sub-popup's own fields, not the parent
     /// `EditInterpretationDialog`'s (mirrors the modbus module's own `RegisterDialog`
     /// sub-dialog routing via its `overlay.has_sub_dialog()` gate).
@@ -2652,9 +2655,9 @@ mod tests {
         );
     }
 
-    /// MB-R-148's edit/delete
-    /// must also keep `self.device.definitions` in sync (rename moves the key, delete removes
-    /// it), same parity requirement as `:add`.
+    /// MB-R-148 — editing an interpretation (here, a rename) must also keep
+    /// `self.device.definitions` in sync, moving the old name's entry to the new one, same
+    /// parity requirement as `:add`.
     #[tokio::test]
     async fn ut_confirm_edit_interpretation_syncs_device_definitions() {
         use crate::module::modbus::dialog::set_input;
@@ -3718,8 +3721,8 @@ mod tests {
         assert_eq!(rows[0].values()[6], "");
     }
 
-    /// Edge-cases.md's Monitor boundaries row — `ReadWriteMultipleRegisters`'s shape carries both
-    /// its own read and write address/quantity pairs; the table renders them slash-separated.
+    /// MB-E-016 — `ReadWriteMultipleRegisters`'s shape carries both its own read and write
+    /// address/quantity pairs; the table renders them slash-separated.
     #[tokio::test]
     async fn ut_messages_table_read_write_multiple_registers_renders_slash_separated_address_and_quantity()
      {
@@ -4324,7 +4327,7 @@ mod tests {
         assert_eq!(interpretations[0].1.description, "Active power draw");
     }
 
-    /// MB-R-148, UI-R-108 — the Delete flow removes the interpretation outright, gated by the dialog's own
+    /// MB-R-216, UI-R-108 — the Delete flow removes the interpretation outright, gated by the dialog's own
     /// `confirm_delete` popup (Space on Delete opens it, Enter on its DELETE button confirms).
     #[tokio::test]
     async fn ut_delete_interpretation_removes_via_confirm_delete_flow() {
@@ -4353,8 +4356,9 @@ mod tests {
         assert!(v.module.interpretations_for(UnitId(3)).is_empty());
     }
 
-    /// MB-R-148 — neither edit nor delete ever touches `module.table()` (the slave's observed-
-    /// value table): a value written there survives both operations unchanged.
+    /// MB-R-217 — neither editing (MB-R-148) nor removing (MB-R-216) ever touches
+    /// `module.table()` (the slave's observed-value table): a value written there survives both
+    /// operations unchanged.
     #[tokio::test]
     async fn ut_edit_and_delete_interpretation_never_touch_observed_table() {
         let mut v = view();
