@@ -16,7 +16,7 @@ use crate::state::{
     MarkdownInputFieldStateBuilder, MarkedRange, RowPart, Side,
 };
 use crate::style::{DiffViewStyle, SyntaxTheme};
-use crate::traits::Margins;
+use crate::traits::{IsFocus, Margins};
 use crate::widgets::{MarkdownInputFieldBuilder, Title};
 
 /// A read-only side-by-side or unified diff viewer rendered from a
@@ -513,8 +513,8 @@ impl DiffView {
         }
     }
 
-    fn pane_border_style(&self, side: Side, focused_side: Side) -> Style {
-        if side == focused_side {
+    fn pane_border_style(&self, focused: bool) -> Style {
+        if focused {
             self.style.focused
         } else {
             self.style.border
@@ -522,21 +522,15 @@ impl DiffView {
     }
 
     /// Renders `border`/`margin`/`title` around `rect` for one pane, styled by whether
-    /// `side` is the focused one (UI-R-228), and returns the inner content area. `title`
-    /// is drawn only when `show_title`, since the split layout has two panes sharing one
-    /// widget-level title and it belongs on one of them, not duplicated on both.
-    fn pane_area(
-        &self,
-        area: Rect,
-        buf: &mut Buffer,
-        side: Side,
-        focused_side: Side,
-        show_title: bool,
-    ) -> Rect {
+    /// the widget itself is focused (UI-R-306, UI-R-307), and returns the inner content
+    /// area. `title` is drawn only when `show_title`, since the split layout has two
+    /// panes sharing one widget-level title and it belongs on one of them, not
+    /// duplicated on both.
+    fn pane_area(&self, area: Rect, buf: &mut Buffer, focused: bool, show_title: bool) -> Rect {
         let Border::Full(m) = &self.border else {
             return area;
         };
-        let mut block = Block::bordered().style(self.pane_border_style(side, focused_side));
+        let mut block = Block::bordered().style(self.pane_border_style(focused));
         if show_title && let Some(t) = &self.title {
             block = block.title(t.name.as_str()).title_alignment(t.alignment);
         }
@@ -567,7 +561,7 @@ impl StatefulWidget for &DiffView {
         .split(area)[1];
 
         let rows = state.rows().to_vec();
-        let focused_side = state.focused_side();
+        let focused = state.is_focused();
         let old_labels = state.old_labels().clone();
         let new_labels = state.new_labels().clone();
         let marked_ranges = state.marked_ranges().clone();
@@ -600,8 +594,8 @@ impl StatefulWidget for &DiffView {
                     Constraint::Length(half),
                 ])
                 .split(area);
-                let old_area = self.pane_area(panes[0], buf, Side::Old, focused_side, true);
-                let new_area = self.pane_area(panes[2], buf, Side::New, focused_side, false);
+                let old_area = self.pane_area(panes[0], buf, focused, true);
+                let new_area = self.pane_area(panes[2], buf, focused, false);
 
                 if old_area.height == 0 {
                     return;
@@ -778,7 +772,7 @@ impl StatefulWidget for &DiffView {
                 }
             }
             DiffLayout::Unified => {
-                let pane = self.pane_area(area, buf, focused_side, focused_side, true);
+                let pane = self.pane_area(area, buf, focused, true);
                 if pane.height == 0 {
                     return;
                 }
@@ -938,6 +932,7 @@ mod tests {
     use super::*;
     use crate::state::DiffViewStateBuilder;
     use crate::style::DiffViewStyleBuilder;
+    use crate::traits::SetFocus;
 
     fn buffer(w: u16, h: u16) -> Buffer {
         Buffer::empty(Rect::new(0, 0, w, h))
@@ -1680,9 +1675,34 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-228 — the focused side paints the focused border style, the other the normal
-    /// border style.
-    fn ut_focused_side_paints_the_focused_border_and_the_other_the_normal_one() {
+    /// UI-R-306 — both split-pane borders paint the focused style once the widget itself
+    /// is focused, regardless of which side `focused_side` names.
+    fn ut_focused_widget_paints_both_split_pane_borders_focused() {
+        let mut st = state_with("@@ -1,1 +1,1 @@\n a\n");
+        st.set_focused_side(Side::New);
+        SetFocus::set_focused(&mut st, true);
+        let w = DiffViewBuilder::default()
+            .border(Border::Full(Margin::new(0, 0)))
+            .build()
+            .unwrap();
+        let mut b = buffer(20, 3);
+        StatefulWidget::render(&w, Rect::new(0, 0, 20, 3), &mut b, &mut st);
+        assert_eq!(
+            b[(0, 0)].fg,
+            w.style.focused.fg.expect("style sets a color"),
+            "old pane's border, despite focused_side naming New"
+        );
+        assert_eq!(
+            b[(10, 0)].fg,
+            w.style.focused.fg.expect("style sets a color"),
+            "new pane's border"
+        );
+    }
+
+    #[test]
+    /// UI-R-307 — with the widget unfocused, both split-pane borders paint the normal
+    /// style, even when `focused_side` names one of them.
+    fn ut_unfocused_widget_paints_both_borders_normal() {
         let mut st = state_with("@@ -1,1 +1,1 @@\n a\n");
         st.set_focused_side(Side::New);
         let w = DiffViewBuilder::default()
@@ -1691,21 +1711,27 @@ mod tests {
             .unwrap();
         let mut b = buffer(20, 3);
         StatefulWidget::render(&w, Rect::new(0, 0, 20, 3), &mut b, &mut st);
-        assert_eq!(b[(0, 0)].fg, w.style.border.fg.expect("style sets a color"));
+        assert_eq!(
+            b[(0, 0)].fg,
+            w.style.border.fg.expect("style sets a color"),
+            "old pane's border"
+        );
         assert_eq!(
             b[(10, 0)].fg,
-            w.style.focused.fg.expect("style sets a color")
+            w.style.border.fg.expect("style sets a color"),
+            "new pane's border, despite focused_side naming it"
         );
     }
 
     #[test]
-    /// UI-R-228 — in unified layout, with one pane, its border paints the focused style.
-    fn ut_focused_side_paints_the_focused_style_in_unified_layout() {
+    /// UI-R-306 — in unified layout, with one pane, its border paints the focused style
+    /// once the widget's focus flag is set.
+    fn ut_focused_widget_paints_the_unified_pane_border_focused() {
         let mut st = DiffViewStateBuilder::default()
             .layout(DiffLayout::Unified)
             .build_with_diff("@@ -1,1 +1,1 @@\n a\n")
             .unwrap();
-        st.set_focused_side(Side::New);
+        SetFocus::set_focused(&mut st, true);
         let w = DiffViewBuilder::default()
             .border(Border::Full(Margin::new(0, 0)))
             .build()
@@ -1716,6 +1742,21 @@ mod tests {
             b[(0, 0)].fg,
             w.style.focused.fg.expect("style sets a color")
         );
+    }
+
+    #[test]
+    /// UI-E-142 — a focus change on a borderless widget cannot repaint anything: the
+    /// rendered buffer is identical focused or not.
+    fn ut_focus_change_does_not_repaint_a_borderless_widget() {
+        let mut unfocused = state_with("@@ -1,1 +1,1 @@\n a\n");
+        let mut focused = state_with("@@ -1,1 +1,1 @@\n a\n");
+        SetFocus::set_focused(&mut focused, true);
+        let w = DiffView::default();
+        let mut b_unfocused = buffer(20, 3);
+        let mut b_focused = buffer(20, 3);
+        StatefulWidget::render(&w, Rect::new(0, 0, 20, 3), &mut b_unfocused, &mut unfocused);
+        StatefulWidget::render(&w, Rect::new(0, 0, 20, 3), &mut b_focused, &mut focused);
+        assert_eq!(b_unfocused, b_focused);
     }
 
     #[test]
@@ -2254,6 +2295,11 @@ mod tests {
         assert_ne!(b[(19, 1)].symbol(), " ", "old pane's right border");
         assert_ne!(b[(20, 1)].symbol(), " ", "new pane's left border");
         assert_ne!(b[(39, 1)].symbol(), " ", "new pane's right border");
+        let border = w.style.border.fg.expect("style sets a color");
+        assert_eq!(b[(0, 1)].fg, border, "old pane's left border style");
+        assert_eq!(b[(19, 1)].fg, border, "old pane's right border style");
+        assert_eq!(b[(20, 1)].fg, border, "new pane's left border style");
+        assert_eq!(b[(39, 1)].fg, border, "new pane's right border style");
     }
 
     #[test]
@@ -2270,20 +2316,20 @@ mod tests {
             .unwrap();
         let mut b = buffer(40, 4);
         StatefulWidget::render(&w, Rect::new(0, 0, 40, 4), &mut b, &mut st);
-        let border_glyph = b[(0, 1)].symbol().to_string();
+        assert_eq!(b[(0, 1)].symbol(), "│", "old pane's left border glyph");
         assert_eq!(
             b[(19, 1)].symbol(),
-            border_glyph,
+            "│",
             "old pane's right border untouched by the clipped text"
         );
         assert_eq!(
             b[(20, 1)].symbol(),
-            border_glyph,
+            "│",
             "new pane's left border untouched by the clipped text"
         );
         assert_eq!(
             b[(39, 1)].symbol(),
-            border_glyph,
+            "│",
             "new pane's right border untouched by the clipped text"
         );
         assert_ne!(b[(18, 1)].symbol(), "…", "no ellipsis, text simply stops");

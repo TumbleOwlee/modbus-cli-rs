@@ -7,7 +7,7 @@ use ratatui::style::{Color, Style};
 
 use super::vim::emit_osc52;
 use crate::EventResult;
-use crate::traits::HandleEvents;
+use crate::traits::{HandleEvents, IsFocus, SetFocus};
 use crate::widgets::markdown_render::word_wrap;
 
 /// A parsed body line's classification (UI-R-208).
@@ -231,6 +231,23 @@ pub struct DiffViewState {
     #[getset(skip)]
     #[builder(setter(skip), default)]
     annotation_heights: Vec<usize>,
+    /// Whether the widget itself, not either pane, holds focus (UI-R-305); mutated
+    /// through `SetFocus::set_focused` below, not a generated field setter.
+    #[getset(skip)]
+    #[builder(default = "false")]
+    focused: bool,
+}
+
+impl SetFocus for DiffViewState {
+    fn set_focused(&mut self, focus: bool) {
+        self.focused = focus;
+    }
+}
+
+impl IsFocus for DiffViewState {
+    fn is_focused(&self) -> bool {
+        self.focused
+    }
 }
 
 /// The diff widget's hunk-only or full-file display mode (UI-R-257).
@@ -2025,8 +2042,8 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-229 — `yy`/`y` copy the focused side's text of the selected rows into the
-    /// register, skipping a row whose focused side is a filler.
+    /// UI-R-228, UI-R-229 — `yy`/`y` copy the focused side's text of the selected rows
+    /// into the register, skipping a row whose focused side is a filler.
     fn ut_yank_copies_the_focused_sides_selected_text_skipping_filler_rows() {
         let mut s = nav_fixture();
         s.set_focused_side(Side::New);
@@ -2047,6 +2064,16 @@ mod tests {
         s.handle_events(KeyModifiers::NONE, KeyCode::Char('y'));
         s.handle_events(KeyModifiers::NONE, KeyCode::Char('y'));
         assert_eq!(s.register(), Some(""));
+    }
+
+    #[test]
+    /// UI-R-305 — a freshly built state reports unfocused, and `SetFocus::set_focused`
+    /// round-trips the flag through `IsFocus::is_focused`.
+    fn ut_focus_flag_defaults_to_unfocused_and_round_trips() {
+        let mut s = nav_fixture();
+        assert!(!s.is_focused());
+        s.set_focused(true);
+        assert!(s.is_focused());
     }
 
     #[test]

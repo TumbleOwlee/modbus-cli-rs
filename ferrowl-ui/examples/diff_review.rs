@@ -406,6 +406,7 @@ fn set_focus(model: &mut Model, focus: Focus) {
     model.base.set_focused(focus == Focus::BaseInput);
     model.branch.set_focused(focus == Focus::BranchInput);
     model.tree.set_focused(focus == Focus::FileBrowser);
+    model.diff.set_focused(focus == Focus::DiffViewer);
     model.focus = focus;
 }
 
