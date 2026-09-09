@@ -580,12 +580,28 @@ impl StatefulWidget for &DiffView {
             DiffLayout::Split => {
                 // `Constraint::Percentage(50)` twice rounds unevenly on an odd width
                 // (UI-R-211 requires equal panes), so split the width explicitly instead.
-                let half = area.width / 2;
-                let panes =
-                    Layout::horizontal([Constraint::Length(half), Constraint::Length(half)])
-                        .split(area);
+                // The separator absorbs whatever the two equal panes leave over, rather
+                // than one pane taking the odd column (UI-R-211, UI-E-130); under three
+                // columns there is nothing to spare and the panes abut (UI-E-132).
+                // Bordered, the two pane borders are the seam already (UI-R-287), and
+                // every row keeps the general style across the seam by construction,
+                // since every band and gutter rect below is built from `old_area`/
+                // `new_area`, never from the outer `area` (UI-R-288).
+                let (half, gap) = match self.border {
+                    Border::None if area.width >= 3 => {
+                        let half = (area.width - 1) / 2;
+                        (half, area.width - 2 * half)
+                    }
+                    _ => (area.width / 2, 0),
+                };
+                let panes = Layout::horizontal([
+                    Constraint::Length(half),
+                    Constraint::Length(gap),
+                    Constraint::Length(half),
+                ])
+                .split(area);
                 let old_area = self.pane_area(panes[0], buf, Side::Old, focused_side, true);
-                let new_area = self.pane_area(panes[1], buf, Side::New, focused_side, false);
+                let new_area = self.pane_area(panes[2], buf, Side::New, focused_side, false);
 
                 if old_area.height == 0 {
                     return;
@@ -604,9 +620,10 @@ impl StatefulWidget for &DiffView {
                     old_area.width.saturating_sub(old_gutter).max(1) as usize,
                     new_area.width.saturating_sub(new_gutter).max(1) as usize,
                 );
-                // Without a border, extend to the outer area's own right edge: an odd
-                // inner width leaves one column unused by either pane (`Length(half)`
-                // twice), and UI-R-210 spans the full width. With a border each pane
+                // Without a border, extend to the outer area's own right edge: the
+                // separator column(s) between the panes and an odd unused column at
+                // odd widths both sit outside `old_area`/`new_area`, and UI-R-210 (with
+                // UI-E-131) spans the full width regardless. With a border each pane
                 // already owns its border cells, so stop at the new pane's inner edge.
                 let meta_right = if matches!(self.border, Border::Full(_)) {
                     new_area.x + new_area.width
@@ -1004,11 +1021,11 @@ mod tests {
         let changed = row_text(&b, 1, 20);
         let context = row_text(&b, 2, 20);
         assert_eq!(&changed[1..2], " ", "old pane separator is blank");
-        assert_eq!(&changed[11..12], " ", "new pane separator is blank");
+        assert_eq!(&changed[12..13], " ", "new pane separator is blank");
         assert!(!changed.contains('-'));
         assert!(!changed.contains('+'));
         assert!(changed[2..10].starts_with("old"));
-        assert!(changed[12..].starts_with("new"));
+        assert!(changed[13..].starts_with("new"));
         assert!(
             context[2..10].starts_with("context"),
             "text starts at the same column as a changed row's"
@@ -1043,12 +1060,12 @@ mod tests {
                 (1u16, 2u16)
             };
             let old_range: std::ops::Range<u16> = if layout == DiffLayout::Split {
-                0..10
+                0..9
             } else {
                 0..20
             };
             let new_range: std::ops::Range<u16> = if layout == DiffLayout::Split {
-                10..20
+                11..20
             } else {
                 0..20
             };
@@ -1082,7 +1099,7 @@ mod tests {
         StatefulWidget::render(&w, Rect::new(0, 0, 20, 3), &mut b, &mut st);
         // Row 0 is the meta header, row 1 the pair row's first display row, row 2 its
         // wrapped continuation.
-        for x in 10..20 {
+        for x in 11..20 {
             assert_eq!(
                 b[(x, 1)].bg,
                 w.style.added.bg.unwrap(),
@@ -1137,10 +1154,11 @@ mod tests {
     }
 
     #[test]
-    /// UI-E-123 — the split layout's shorter-side padding stays in the general style:
-    /// UI-R-278/UI-R-279 paint only the display rows an entry actually occupies, so with
-    /// wrapping on, the old side's padded display rows past its own text never carry the
-    /// added/removed band.
+    /// UI-E-123, UI-R-288 — the split layout's shorter-side padding stays in the general
+    /// style: UI-R-278/UI-R-279 paint only the display rows an entry actually occupies,
+    /// so with wrapping on, the old side's padded display rows past its own text never
+    /// carry the added/removed band, and neither does the separator column between the
+    /// panes.
     fn ut_split_padding_rows_stay_in_the_general_style() {
         let mut st = DiffViewStateBuilder::default()
             .wrap(true)
@@ -1152,9 +1170,10 @@ mod tests {
         // Row 0 is the meta header, row 1 the real pair row (old side's own real text,
         // in the removed style), rows 2 and 3 the padding rows past the old side's own
         // text (the new side's "aaaa bbbb cccc" wraps to three display rows at this
-        // width, the old side's "x" to one).
+        // width, the old side's "x" to one). The old pane is 9 columns (0..9); columns
+        // 9 and 10 are the separator.
         for y in [2u16, 3u16] {
-            for x in 0..10 {
+            for x in 0..11 {
                 assert_eq!(
                     b[(x, y)].bg,
                     w.style.general.bg.unwrap(),
@@ -1554,7 +1573,7 @@ mod tests {
             w.syntax_theme.keyword.fg.expect("style sets a color")
         );
         assert_eq!(
-            b[(17, 1)].fg,
+            b[(18, 1)].fg,
             w.syntax_theme.keyword.fg.expect("style sets a color")
         );
     }
@@ -1589,7 +1608,7 @@ mod tests {
             w.style.highlighted_row.bg.expect("style sets a color")
         );
         assert_eq!(
-            b[(10, 3)].bg,
+            b[(11, 3)].bg,
             w.style.highlighted_row.bg.expect("style sets a color")
         );
         // A row drawn before the active one, never redrawn afterward, must stay in the
@@ -1625,7 +1644,7 @@ mod tests {
             w.style.selection.bg.expect("style sets a color")
         );
         assert_eq!(
-            b[(10, 1)].bg,
+            b[(11, 1)].bg,
             w.style.selection.bg.expect("style sets a color")
         );
         // Row 2 ("b") is the active row: highlighted, not selection-colored, even though
@@ -1707,11 +1726,11 @@ mod tests {
         // (the third character), the first two dropped.
         assert_eq!(&line[0..1], "1");
         assert_eq!(&line[1..2], " ");
-        assert!(line[2..20].starts_with('c'));
+        assert!(line[2..19].starts_with('c'));
         // New pane: same shift applied independently, at its own gutter columns.
-        assert_eq!(&line[20..21], "1");
-        assert_eq!(&line[21..22], " ");
-        assert!(line[22..].starts_with('z'));
+        assert_eq!(&line[21..22], "1");
+        assert_eq!(&line[22..23], " ");
+        assert!(line[23..].starts_with('z'));
     }
 
     #[test]
@@ -1753,10 +1772,10 @@ mod tests {
         // Each 3-wide pane: gutter "1" (1 col, digit) + separator (1 col) + 1 text column,
         // so "abcd" wraps one character per display row. The header ("@@1@@", 5 chars) also wraps at
         // this width, so scan for the old side's column (2) rather than fixing row indices.
-        let mut b = buffer(6, 10);
-        StatefulWidget::render(&w, Rect::new(0, 0, 6, 10), &mut b, &mut st);
+        let mut b = buffer(8, 10);
+        StatefulWidget::render(&w, Rect::new(0, 0, 8, 10), &mut b, &mut st);
         let old_column: String = (0..10)
-            .map(|y| row_text(&b, y, 6).chars().nth(2).unwrap_or(' '))
+            .map(|y| row_text(&b, y, 8).chars().nth(2).unwrap_or(' '))
             .collect();
         assert!(
             old_column.contains("abcd"),
@@ -1777,11 +1796,11 @@ mod tests {
         let mut b = buffer(20, 3);
         StatefulWidget::render(&w, Rect::new(0, 0, 20, 3), &mut b, &mut st);
         let first = row_text(&b, 1, 20);
-        assert!(first[12..20].starts_with("short"), "new side's one row");
+        assert!(first[13..20].starts_with("short"), "new side's one row");
         let continuation = row_text(&b, 2, 20);
         assert_eq!(
-            &continuation[10..20],
-            "          ",
+            &continuation[11..20],
+            "         ",
             "new side has nothing more to draw, so its padded row is blank"
         );
     }
@@ -1840,17 +1859,17 @@ mod tests {
             style.removed.bg.unwrap(),
             "past the end of the text keeps the band"
         );
-        // New pane starts at column 20.
+        // New pane starts at column 21.
         assert_eq!(
-            b[(20, 1)].bg,
+            b[(21, 1)].bg,
             style.added.bg.unwrap(),
             "gutter keeps the band"
         );
-        for x in 22..25 {
+        for x in 23..26 {
             assert_eq!(b[(x, 1)].bg, style.added_word.bg.unwrap());
         }
         assert_eq!(
-            b[(30, 1)].bg,
+            b[(31, 1)].bg,
             style.added.bg.unwrap(),
             "past the end of the text keeps the band"
         );
@@ -1933,10 +1952,10 @@ mod tests {
             style.removed.bg.unwrap(),
             "past the end of the text keeps the band"
         );
-        // New pane starts at column 20 (half of 40).
-        assert_eq!(b[(26, 1)].bg, style.added_word.bg.unwrap());
+        // New pane starts at column 21 (half of 39, past the 2-column separator).
+        assert_eq!(b[(27, 1)].bg, style.added_word.bg.unwrap());
         assert_eq!(
-            b[(22, 1)].bg,
+            b[(23, 1)].bg,
             style.added.bg.unwrap(),
             "unchanged text keeps the band"
         );
@@ -1993,7 +2012,7 @@ mod tests {
         // Row 0 is the meta header, row 1 the first pair ("a" against "x", which is
         // fully emphasised since it shares no token), row 2 the surplus removed line
         // "b" with no added counterpart.
-        for x in 0..20 {
+        for x in 0..19 {
             assert_eq!(
                 b[(x, 2)].bg,
                 style.removed.bg.unwrap(),
@@ -2017,8 +2036,8 @@ mod tests {
             .build_with_diff("@@ -1,1 +1,1 @@\n-xxxxxxxxxxxxxx\n+yyyyyyyyyyyyyy\n")
             .unwrap();
         let w = DiffView::default();
-        let mut b = buffer(24, 3);
-        StatefulWidget::render(&w, Rect::new(0, 0, 24, 3), &mut b, &mut st);
+        let mut b = buffer(25, 3);
+        StatefulWidget::render(&w, Rect::new(0, 0, 25, 3), &mut b, &mut st);
         let style = DiffViewStyle::default();
         // Row 0 is the meta header. Row 1 is the entry's first display row, row 2 its
         // wrapped continuation. Old pane text starts at column 2 ("1 " gutter).
@@ -2036,15 +2055,15 @@ mod tests {
                 "old pane row 2 (continuation) column {x} should carry the emphasis"
             );
         }
-        // New pane starts at column 14 ("1 " gutter at 12..14).
-        for x in 14..24 {
+        // New pane starts at column 13, past the 1-column separator; gutter at 13..15.
+        for x in 15..25 {
             assert_eq!(
                 b[(x, 1)].bg,
                 style.added_word.bg.unwrap(),
                 "new pane row 1 column {x} should carry the emphasis"
             );
         }
-        for x in 14..18 {
+        for x in 15..19 {
             assert_eq!(
                 b[(x, 2)].bg,
                 style.added_word.bg.unwrap(),
@@ -2053,7 +2072,7 @@ mod tests {
         }
         // Continuation gutters stay blank (UI-R-261), which the row band still covers.
         assert_eq!(b[(0, 2)].bg, style.removed.bg.unwrap());
-        assert_eq!(b[(12, 2)].bg, style.added.bg.unwrap());
+        assert_eq!(b[(13, 2)].bg, style.added.bg.unwrap());
     }
 
     #[test]
@@ -2076,6 +2095,141 @@ mod tests {
         StatefulWidget::render(&w, Rect::new(0, 0, 40, 2), &mut b, &mut st);
         // Row 0 is the meta header, row 1 the pair row.
         assert_eq!(b[(2, 1)].bg, custom.bg.unwrap());
-        assert_eq!(b[(22, 1)].bg, custom.bg.unwrap());
+        assert_eq!(b[(23, 1)].bg, custom.bg.unwrap());
+    }
+
+    #[test]
+    /// UI-R-286 — the diff widget's border defaults to no border.
+    fn ut_diff_view_defaults_to_no_border() {
+        let w = DiffViewBuilder::default().build().unwrap();
+        assert!(matches!(w.border(), Border::None));
+    }
+
+    #[test]
+    /// UI-R-287 — a borderless split layout draws a separator column between the two
+    /// panes: the new side's gutter starts past it, not directly after the old side.
+    fn ut_borderless_split_puts_a_separator_column_between_the_panes() {
+        let mut st = state_with("@@ -1,1 +1,1 @@\n context\n");
+        let w = DiffView::default();
+        let mut b = buffer(40, 2);
+        StatefulWidget::render(&w, Rect::new(0, 0, 40, 2), &mut b, &mut st);
+        assert_eq!(b[(21, 1)].symbol(), "1", "new side's gutter digit");
+        assert_eq!(b[(19, 1)].symbol(), " ", "seam carries no gutter or text");
+        assert_eq!(b[(20, 1)].symbol(), " ", "seam carries no gutter or text");
+    }
+
+    #[test]
+    /// UI-R-286, UI-R-287 — a bordered split layout draws no separator column: the two
+    /// pane borders already part the panes and abut directly.
+    fn ut_bordered_split_has_no_separator() {
+        let mut st = state_with("@@ -1,1 +1,1 @@\n a\n");
+        let w = DiffViewBuilder::default()
+            .border(Border::Full(Margin::new(0, 0)))
+            .build()
+            .unwrap();
+        let mut b = buffer(20, 3);
+        StatefulWidget::render(&w, Rect::new(0, 0, 20, 3), &mut b, &mut st);
+        assert_ne!(b[(9, 1)].symbol(), " ", "old pane's right border");
+        assert_ne!(
+            b[(10, 1)].symbol(),
+            " ",
+            "new pane's left border, directly adjacent"
+        );
+    }
+
+    #[test]
+    /// UI-R-288 — the separator column between the panes carries the general style on
+    /// every row, never an added or removed band.
+    fn ut_separator_column_stays_in_the_general_style_on_every_row() {
+        let mut st = state_with(
+            "@@ -1,1 +1,1 @@\n-old\n@@ -5,1 +6,1 @@\n context\n@@ -10,0 +11,1 @@\n+new\n",
+        );
+        let w = DiffView::default();
+        let mut b = buffer(40, 6);
+        StatefulWidget::render(&w, Rect::new(0, 0, 40, 6), &mut b, &mut st);
+        for y in [1u16, 3u16, 5u16] {
+            assert_eq!(
+                b[(20, y)].bg,
+                w.style.general.bg.unwrap(),
+                "row {y} separator column"
+            );
+        }
+    }
+
+    #[test]
+    /// UI-E-130 — on an even width the separator widens to two columns so the two panes
+    /// stay equal (UI-R-211); the old pane's band stops at column 18, not column 19.
+    fn ut_even_width_widens_the_separator_and_keeps_the_panes_equal() {
+        let mut st = state_with("@@ -1,1 +1,0 @@\n-old\n");
+        let w = DiffView::default();
+        let mut b = buffer(40, 2);
+        StatefulWidget::render(&w, Rect::new(0, 0, 40, 2), &mut b, &mut st);
+        let style = DiffViewStyle::default();
+        assert_eq!(
+            b[(18, 1)].bg,
+            style.removed.bg.unwrap(),
+            "old pane's last column"
+        );
+        assert_eq!(
+            b[(19, 1)].bg,
+            w.style.general.bg.unwrap(),
+            "separator, not the old pane's band"
+        );
+        assert_eq!(b[(20, 1)].bg, w.style.general.bg.unwrap(), "separator");
+    }
+
+    #[test]
+    /// UI-E-131 — a full-width meta row spans the separator column too, since it spans
+    /// the widget's whole width.
+    fn ut_meta_row_spans_the_separator_column() {
+        let mut st = state_with("@@ -1,1 +1,1 @@\n context\n");
+        let meta = Style::default().fg(ratatui::style::Color::Magenta);
+        let w = DiffViewBuilder::default()
+            .style(DiffViewStyleBuilder::default().meta(meta).build().unwrap())
+            .build()
+            .unwrap();
+        let mut b = buffer(40, 2);
+        StatefulWidget::render(&w, Rect::new(0, 0, 40, 2), &mut b, &mut st);
+        for x in 0..40 {
+            assert_eq!(
+                b[(x, 0)].fg,
+                meta.fg.unwrap(),
+                "column {x} of the meta row, including the separator"
+            );
+        }
+    }
+
+    #[test]
+    /// UI-E-132 — a borderless split layout narrower than three columns drops the
+    /// separator so both panes keep at least one column, and the two panes abut: each
+    /// column carries only its own pane's band, with no dropped column between them.
+    fn ut_width_under_three_columns_drops_the_separator() {
+        let mut st = state_with("@@ -1,1 +1,0 @@\n-old\n@@ -5,0 +5,1 @@\n+new\n");
+        let w = DiffView::default();
+        let mut b = buffer(2, 4);
+        StatefulWidget::render(&w, Rect::new(0, 0, 2, 4), &mut b, &mut st);
+        let style = DiffViewStyle::default();
+        // Row 1: unpaired removed line, old pane only, new pane filler. Row 3: unpaired
+        // added line, new pane only, old pane filler.
+        assert_eq!(
+            b[(0, 1)].bg,
+            style.removed.bg.unwrap(),
+            "old pane keeps its column"
+        );
+        assert_eq!(
+            b[(1, 1)].bg,
+            w.style.general.bg.unwrap(),
+            "new pane's filler, directly adjacent, no dropped column"
+        );
+        assert_eq!(
+            b[(0, 3)].bg,
+            w.style.general.bg.unwrap(),
+            "old pane's filler, directly adjacent, no dropped column"
+        );
+        assert_eq!(
+            b[(1, 3)].bg,
+            style.added.bg.unwrap(),
+            "new pane keeps its column"
+        );
     }
 }
