@@ -357,7 +357,16 @@ Event handling: `Enter` in `Normal` mode with non-blank text returns a confirmed
 
 ## Diff widget
 
-Public surface: construction from a unified diff text plus an optional full new-side text (UI-R-207, UI-R-253); layout option (`Split` default, `Unified`) and a runtime toggle key (UI-R-214, UI-R-215); syntax language for both sides, default none (UI-R-220, UI-R-221); per-side gutter labels, settable at build time and after (UI-R-218); a focused-side setter and query (UI-R-228); a selected-row query (UI-R-226); a per-row query returning that row's diff kind and old/new line numbers (UI-R-227); display-mode option, default hunk-only (UI-R-257); line-wrap option, default off (UI-R-260); marked ranges, settable at build time and after (UI-R-266); annotations, settable at build time and after (UI-R-269); added, removed and meta row styles, defaulting to white on the scheme's success color darkened toward black, white on its error color darkened toward black and the theme's meta style (UI-R-276); added-word and removed-word emphasis styles, builder-settable, defaulting to a background lighter than the added and removed row backgrounds (UI-R-282); a border around the pane or panes or no border at all, builder-settable, defaulting to no border (UI-R-286).
+Public surface: construction from a unified diff text plus an optional full new-side text (UI-R-207, UI-R-253); layout option (`Split` default, `Unified`) and a runtime toggle key (UI-R-214, UI-R-215); syntax language for both sides, default none (UI-R-220, UI-R-221); per-side gutter labels, settable at build time and after (UI-R-218); a focused-side setter and query (UI-R-228); a selected-row query (UI-R-226); a per-row query returning that row's diff kind and old/new line numbers (UI-R-227); display-mode option, default hunk-only (UI-R-257); line-wrap option, default off (UI-R-260); marked ranges, settable at build time and after (UI-R-266); annotations, settable at build time and after (UI-R-269); added, removed and meta row styles, defaulting to white on the scheme's `diff_added` color, white on its `diff_removed` color and the theme's meta style (UI-R-276, UI-R-289); added-word and removed-word emphasis styles, builder-settable, defaulting to the scheme's `diff_added_word` and `diff_removed_word` backgrounds (UI-R-282, UI-R-289); a border around the pane or panes or no border at all, builder-settable, defaulting to no border (UI-R-286).
+
+## Color scheme
+
+| Field | Description | Req |
+|---|---|---|
+| `diff_added` | per-scheme diff background constant | UI-R-289, UI-R-290, UI-R-291, UI-R-292 |
+| `diff_removed` | per-scheme diff background constant | UI-R-289, UI-R-290, UI-R-291, UI-R-292 |
+| `diff_added_word` | per-scheme diff background constant | UI-R-289, UI-R-290, UI-R-291, UI-R-292 |
+| `diff_removed_word` | per-scheme diff background constant | UI-R-289, UI-R-290, UI-R-291, UI-R-292 |
 
 | Key | Mode | Action | Req |
 |---|---|---|---|

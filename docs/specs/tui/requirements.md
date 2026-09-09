@@ -414,7 +414,7 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **UI-R-275** — `Ctrl+A` toggles every annotation between shown and hidden at once, hidden annotations contributing no display rows.
 
-**UI-R-276** — The diff widget's added, removed and meta row styles are builder-settable and default to white on the color scheme's success color darkened toward black, white on its error color darkened toward black, and the theme's meta style respectively (UI-R-219).
+**UI-R-276** — The diff widget's added, removed and meta row styles are builder-settable and default to white on the color scheme's `diff_added` color, white on its `diff_removed` color, and the theme's meta style respectively (UI-R-219, UI-R-289).
 
 **UI-R-278** — The added and removed row styles (UI-R-219, UI-R-276) paint every cell of that entry's row across the full width of its pane — gutter cell, text cells and the blank cells past the end of the text alike — in either layout (UI-R-211, UI-R-213), so the row reads as one uninterrupted band.
 
@@ -424,7 +424,7 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **UI-R-281** — For each pair of UI-R-280 the widget diffs the two texts over word tokens — one token being a run of word characters (letter, digit or `_`) and one being a run of any other characters — and the tokens present on only one side form that side's word-diff spans.
 
-**UI-R-282** — The diff widget carries an added-word and a removed-word emphasis style beside its row styles (UI-R-276), builder-settable, defaulting to a background lighter than the added and the removed row style's background respectively.
+**UI-R-282** — The diff widget carries an added-word and a removed-word emphasis style beside its row styles (UI-R-276), builder-settable, defaulting to a background of the color scheme's `diff_added_word` color and of its `diff_removed_word` color respectively, setting no foreground (UI-R-284, UI-R-289).
 
 **UI-R-283** — A row's word-diff spans (UI-R-281) are painted in the added-word emphasis style on an added row and in the removed-word emphasis style on a removed row (UI-R-282), every other cell of the row keeping the full-width band of UI-R-278.
 
@@ -437,6 +437,14 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 **UI-R-287** — In the split layout drawn without a border (UI-R-286) a separator of at least one column sits between the two panes (UI-R-211), and with a border there is no separator, the two pane borders already parting the panes.
 
 **UI-R-288** — Every cell of the separator column (UI-R-287) is painted in the widget's general background style on every display row, carrying no gutter cell, no text and no row band of either side (UI-R-278), so the seam reads as empty on added, removed and context rows alike.
+
+**UI-R-289** — The color scheme (UI-R-050) carries four background colors `diff_added`, `diff_removed`, `diff_added_word` and `diff_removed_word`, one value of each written out per feature-selected scheme.
+
+**UI-R-290** — In every color scheme `diff_added_word` is lighter than `diff_added` and `diff_removed_word` is lighter than `diff_removed` (UI-R-289) — lighter meaning every RGB component is greater than or equal to its counterpart and at least one is strictly greater — so word-diff emphasis (UI-R-283) stays visible against the row band it sits in.
+
+**UI-R-291** — In every color scheme `diff_added` is darker than the scheme's success color and `diff_removed` is darker than its error color (UI-R-289) — darker meaning every RGB component is less than or equal to its counterpart and at least one is strictly less — keeping both row bands dark enough for the white foreground of UI-R-276.
+
+**UI-R-292** — Each of the four diff colors of UI-R-289 is a literal value of its scheme, computed from no other color of the scheme at build or at run time.
 
 ## File tree widget
 
