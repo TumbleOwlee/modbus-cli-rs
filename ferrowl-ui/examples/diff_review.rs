@@ -19,9 +19,9 @@ use ratatui::{
 };
 use std::{io::Stdout, process::Command, time::Duration};
 
-/// Suggests local git branches by prefix, from a fixed snapshot taken once at startup
-/// (UI-R-248): local branches don't change mid-session, so re-querying on every
-/// keystroke would only add a git subprocess spawn per key with no observable benefit.
+/// Suggests local git branches by prefix, from a fixed snapshot taken once at startup:
+/// local branches don't change mid-session, so re-querying on every keystroke would
+/// only add a git subprocess spawn per key with no observable benefit.
 #[derive(Debug, Clone)]
 struct BranchProvider(Vec<String>);
 
@@ -39,7 +39,7 @@ impl SuggestionProvider for BranchProvider {
     }
 }
 
-/// Which of the example's four panes currently has keyboard focus (UI-R-249).
+/// Which of the example's four panes currently has keyboard focus.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Focus {
     BaseInput,
@@ -69,7 +69,7 @@ impl Focus {
 }
 
 /// Rects for the example's four panes: two inputs on top, a browser and a diff
-/// viewer split beneath them (UI-R-247).
+/// viewer split beneath them.
 struct Panes {
     base: Rect,
     branch: Rect,
@@ -101,8 +101,8 @@ fn parse_branches(out: &str) -> Vec<String> {
 }
 
 /// Parses `git diff --name-status --no-renames` output into paths with their change
-/// status (UI-R-244, UI-R-250). An unrecognized status letter is treated as unchanged
-/// (`None`) rather than guessed at.
+/// status. An unrecognized status letter is treated as unchanged (`None`) rather than
+/// guessed at.
 fn parse_name_status(out: &str) -> Vec<(String, Option<FileStatus>)> {
     out.lines()
         .filter_map(|line| {
@@ -197,8 +197,8 @@ impl Model {
     }
 
     /// Rebuilds both the browser's paths and the shown diff from the current base and
-    /// branch inputs (UI-R-251). A blank input or matching refs (UI-E-108) short-circuit
-    /// without touching the git seam, since the result is guaranteed empty either way.
+    /// branch inputs. A blank input or matching refs short-circuit without touching the
+    /// git seam, since the result is guaranteed empty either way.
     fn reload(&mut self) {
         self.error = None;
         let base = self.base.input().clone();
@@ -231,9 +231,9 @@ impl Model {
     }
 
     /// Shows one file's diff between the current base and branch, with the whole file's
-    /// changes marked in place when its full new-side text is available (UI-R-251,
-    /// UI-R-277). A file deleted on the branch has no new-side text to fetch; `git show`
-    /// fails and the view falls back to hunk-only (UI-E-119, UI-R-259).
+    /// changes marked in place when its full new-side text is available. A file deleted
+    /// on the branch has no new-side text to fetch; `git show` fails and the view falls
+    /// back to hunk-only (UI-R-259).
     fn show_file(&mut self, path: &str) {
         let base = self.base.input().clone();
         let branch = self.branch.input().clone();
@@ -301,7 +301,7 @@ fn ui(f: &mut Frame, model: &mut Model) {
 }
 
 /// Routes one key event to whichever pane currently holds focus, cycling focus on
-/// `Tab`/`Shift+Tab` (UI-R-249) and reloading whenever a ref input's text changed.
+/// `Tab`/`Shift+Tab` and reloading whenever a ref input's text changed.
 fn handle_key(model: &mut Model, modifiers: KeyModifiers, code: KeyCode) {
     match (modifiers, code) {
         (KeyModifiers::NONE, KeyCode::Tab) => {
@@ -315,8 +315,8 @@ fn handle_key(model: &mut Model, modifiers: KeyModifiers, code: KeyCode) {
         _ => {}
     }
 
-    // `q` quits only while an input pane is not focused (UI-R-249): with an input
-    // focused, `q` must stay ordinary typed text for branch names containing it.
+    // `q` quits only while an input pane is not focused: with an input focused, `q`
+    // must stay ordinary typed text for branch names containing it.
     let input_focused = model.focus == Focus::BaseInput || model.focus == Focus::BranchInput;
     if !input_focused && modifiers == KeyModifiers::NONE && code == KeyCode::Char('q') {
         model.done = true;
@@ -387,7 +387,7 @@ mod tests {
 
     /// Like `fixture`, plus a table of `(path, full new-side text)` pairs that `git show
     /// <branch>:<path>` resolves to; any path not listed fails, standing in for a file
-    /// deleted on the branch (UI-E-119).
+    /// deleted on the branch.
     fn fixture_with_show(
         base: &str,
         branch: &str,
@@ -429,8 +429,8 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-247 — the top row holds two inputs side by side, above a browser and a diff
-    /// pane split left/right.
+    /// The top row holds two inputs side by side, above a browser and a diff pane split
+    /// left/right.
     fn ut_panes_put_two_inputs_above_a_browser_and_a_diff_pane() {
         let p = panes(Rect::new(0, 0, 100, 40));
         assert_eq!(p.base.y, p.branch.y);
@@ -441,8 +441,8 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-248 — the branch suggestion list comes from the git seam's branch output and
-    /// filters candidates by prefix.
+    /// The branch suggestion list comes from the git seam's branch output and filters
+    /// candidates by prefix.
     fn ut_branch_list_comes_from_git_output_and_filters_by_prefix() {
         let provider = BranchProvider(parse_branches("main\nfeature/a\nfeature/b\n"));
         let suggestions = provider.suggest("feature/");
@@ -456,8 +456,8 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-249 — `Tab` cycles base, branch, browser, diff forward with wrap; `Shift+Tab`
-    /// cycles the same order in reverse with wrap.
+    /// `Tab` cycles base, branch, browser, diff forward with wrap; `Shift+Tab` cycles the
+    /// same order in reverse with wrap.
     fn ut_tab_cycles_the_four_panes_forward_and_shift_tab_backward_with_wrap() {
         let mut model = Model::new(fixture("main", "main", "", ""));
         set_focus(&mut model, Focus::BaseInput);
@@ -479,8 +479,8 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-251 — activating a file shows that file's diff, and changing a ref rebuilds
-    /// both the browser's paths and the shown diff.
+    /// Activating a file shows that file's diff, and changing a ref rebuilds both the
+    /// browser's paths and the shown diff.
     fn ut_activating_a_file_shows_its_diff_and_changing_a_ref_rebuilds_both() {
         let mut model = Model::new(fixture(
             "main",
@@ -517,8 +517,8 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-248 — before any file is activated, the diff pane shows the real diff between
-    /// the selected base and branch.
+    /// Before any file is activated, the diff pane shows the real diff between the
+    /// selected base and branch.
     fn ut_diff_pane_shows_the_whole_ref_diff_before_any_file_is_activated() {
         let mut model = Model::new(fixture(
             "main",
@@ -535,8 +535,8 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-244, UI-R-250 — `git diff --name-status` output maps to paths and change
-    /// statuses, an unrecognized status letter mapping to `None`.
+    /// `git diff --name-status` output maps to paths and change statuses, an
+    /// unrecognized status letter mapping to `None`.
     fn ut_name_status_output_maps_to_paths_and_change_statuses() {
         let parsed = parse_name_status(
             "A\tsrc/new.rs\nD\tsrc/old.rs\nM\tsrc/changed.rs\nR100\tsrc/moved.rs\n",
@@ -553,8 +553,8 @@ mod tests {
     }
 
     #[test]
-    /// UI-E-107 — when the git seam fails, the branch lists and browser stay empty and the
-    /// example records the failure as text instead of exiting or panicking.
+    /// When the git seam fails, the branch lists and browser stay empty and the example
+    /// records the failure as text instead of exiting or panicking.
     fn ut_git_failure_leaves_the_branch_lists_empty_and_shows_the_error() {
         let git: GitFn = Box::new(|_: &[&str]| Err("not a git repository".to_string()));
         let model = Model::new(git);
@@ -564,8 +564,8 @@ mod tests {
     }
 
     #[test]
-    /// UI-E-108 — base and branch set to the same ref yield no paths and an empty diff,
-    /// with no error recorded.
+    /// Base and branch set to the same ref yield no paths and an empty diff, with no
+    /// error recorded.
     fn ut_same_ref_yields_no_paths_and_an_empty_diff_view_without_an_error() {
         let mut model = Model::new(fixture(
             "main",
@@ -582,8 +582,8 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-277 — activating a file fetches its full new-side text through the git seam
-    /// and builds the viewer with it, so the rows cover lines outside the changed hunk.
+    /// Activating a file fetches its full new-side text through the git seam and builds
+    /// the viewer with it, so the rows cover lines outside the changed hunk.
     fn ut_activated_file_is_shown_from_its_full_new_side_text() {
         let mut model = Model::new(fixture_with_show(
             "main",
@@ -603,8 +603,8 @@ mod tests {
     }
 
     #[test]
-    /// UI-E-119 — a file deleted on the selected branch has no new-side text; `git show`
-    /// fails and the example falls back to the hunk-only view (UI-R-259) without an error.
+    /// A file deleted on the selected branch has no new-side text; `git show` fails and
+    /// the example falls back to the hunk-only view (UI-R-259) without an error.
     fn ut_file_missing_on_the_branch_falls_back_to_hunk_only_without_an_error() {
         let mut model = Model::new(fixture_with_show(
             "main",

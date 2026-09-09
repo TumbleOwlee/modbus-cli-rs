@@ -691,4 +691,18 @@ mod tests {
         StatefulWidget::render(&w, Rect::new(0, 0, 20, 5), &mut b, &mut st);
         assert_eq!(st.visible_height(), 5);
     }
+
+    #[test]
+    /// UI-R-303 — zero before the first render, and a render scrolled to bring the
+    /// active line into view records that scroll on the state.
+    fn ut_vertical_scroll_offset_defaults_to_zero_and_follows_a_render() {
+        let w = CodeInputFieldBuilder::default().build().unwrap();
+        let mut st = CodeInputFieldStateBuilder::default().build().unwrap();
+        assert_eq!(st.scroll_offset(), 0);
+        st.set_content("0\n1\n2\n3\n4\n5\n6\n7\n8\n9");
+        st.set_active_line(9);
+        let mut b = buffer(20, 5);
+        StatefulWidget::render(&w, Rect::new(0, 0, 20, 5), &mut b, &mut st);
+        assert_eq!(st.scroll_offset(), 5);
+    }
 }

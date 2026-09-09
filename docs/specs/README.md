@@ -46,7 +46,7 @@ Anything not listed below, and no `-E` entry outside kind 4, must carry a citing
 | `NF-R-041`, `NF-R-055`, `NF-R-056` — the testing conventions, CI steps, lefthook | `AGENTS.md` conventions, lefthook reminder |
 | `NF-R-045` — dev-only fixture crate, `publish = false`, versioned in lockstep | workspace manifest, dev-dependency edges |
 | `UI-R-001` — alt-screen + raw-mode entry, terminal restore on normal/error/panic exit | raw-mode calls need a controlling tty, absent under `cargo test`; `App` renders through the `DrawSurface` seam, exercised by `ut_app_draws_onto_mock_screen` |
-| `UI-R-289` — four per-scheme diff background colors on the scheme | `struct ColorScheme` and the three `#[cfg(feature = …)] const COLOR_SCHEME` initializers in `ferrowl-ui/src/lib.rs`; a missing field or scheme fails to compile |
+| `UI-R-289` — four per-scheme diff background colors on the scheme | `struct ColorScheme` and the three `#[cfg(feature = …)] const COLOR_SCHEME` initializers; a missing field or scheme fails to compile |
 | `UI-R-292` — the four diff colors are literals, computed from nothing | same initializers: literal `Color::Rgb` values, no call and no `const fn` among them |
 
 **Kind 2 — cross-cutting restatements**

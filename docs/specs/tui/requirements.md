@@ -246,6 +246,8 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **UI-R-302** — A disabled vim-modal code editor keeps `gg`, `G`, `v`, `V` and `Esc` at their enabled meanings (UI-R-028), so a read-only field can still enter Visual mode and hold a charwise or linewise selection.
 
+**UI-R-303** — The multi-line code editor's state reports its current vertical scroll offset, the zero-based buffer line index drawn at the top of the viewport by its last render, and reports zero before the first render.
+
 ## Markdown input field
 
 **UI-R-181** — The markdown input field is a multi-line widget composing the vim-modal code-editor state (UI-R-027 through UI-R-036): buffer, `Normal`/`Insert`/`Visual` modes, motions and operators, registers, single-level undo and the disabled flag, which the markdown widget surfaces as read-only.
@@ -475,20 +477,6 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 **UI-R-246** — The file tree paints the focused border style while focused and the normal border otherwise (UI-R-110).
 
 **UI-R-252** — The file tree draws its selected row in the theme's highlighted-row style across the widget's full width, as the diff widget draws its active row (UI-R-224), the row's change-status styling (UI-R-244) supplying the foreground.
-
-## Diff-review example
-
-**UI-R-247** — The TUI crate ships a runnable diff-review example whose layout is a top row of two selection inputs, labelled as base and branch, above a file browser on the left and a diff widget on the right.
-
-**UI-R-248** — The example's two selection inputs offer the local repository's git branches, and the example shows the real diff between the selected base and branch.
-
-**UI-R-249** — `Tab` cycles focus through the example's four panes — base input, branch input, file browser, diff viewer — in that order and wrapping, and `Shift+Tab` cycles in reverse.
-
-**UI-R-250** — The example's file browser holds the paths changed between the selected base and branch, each carrying its change status (UI-R-244).
-
-**UI-R-251** — Activating a file in the example's browser (UI-R-242) shows that file's diff in the diff widget, and changing either selection rebuilds both the browser's paths and the shown diff.
-
-**UI-R-277** — The diff-review example supplies the selected file's full new-side text from the selected branch (UI-R-207), so its viewer shows the whole file with the changes marked in place.
 
 ## Syntax highlighting
 

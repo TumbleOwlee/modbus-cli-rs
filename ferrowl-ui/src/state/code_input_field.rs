@@ -30,6 +30,8 @@ pub struct CodeInputFieldState {
     #[getset(get_copy = "pub")]
     #[builder(default = "0")]
     cursor_col: usize,
+    /// Zero-based buffer line drawn at the top of the viewport by the last render;
+    /// zero before the first render (UI-R-303).
     #[getset(get_copy = "pub")]
     #[builder(default = "0")]
     scroll_offset: usize,
