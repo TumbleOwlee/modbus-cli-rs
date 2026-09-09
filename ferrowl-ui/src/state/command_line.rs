@@ -9,7 +9,7 @@ use crate::traits::{HandleEvents, SetFocus};
 /// [`handle_key`](CommandLineState::handle_key).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CommandLineOutcome {
-    /// `Enter` closed the line; carries the trimmed input text (UI-R-191, UI-E-091).
+    /// `Enter` closed the line; carries the trimmed input text (UI-R-191, UI-E-139).
     Submit(String),
     /// `Esc` closed the line (UI-R-192).
     Cancel,
@@ -62,7 +62,7 @@ impl CommandLineState {
     }
 
     /// UI-R-189, UI-R-190 — opens the line, clears and focuses the input, and leaves
-    /// `error`/`notice` untouched (UI-R-195, UI-E-092).
+    /// `error`/`notice` untouched (UI-R-195, UI-E-140).
     pub fn open(&mut self) {
         self.open = true;
         self.input.set_input(String::new());
@@ -76,7 +76,7 @@ impl CommandLineState {
     }
 
     /// `None` while closed (UI-R-191..193 apply only "while the command line is open").
-    /// UI-R-191, UI-E-091, UI-R-192, UI-R-193, UI-R-195, UI-R-198.
+    /// UI-R-191, UI-E-139, UI-R-192, UI-R-193, UI-R-195, UI-R-198.
     pub fn handle_key(
         &mut self,
         modifiers: KeyModifiers,
@@ -141,7 +141,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-E-091 — Enter on an empty input submits the empty string and closes.
+    /// UI-E-139 — Enter on an empty input submits the empty string and closes.
     fn ut_enter_on_empty_input_submits_the_empty_string_and_closes() {
         let mut s = CommandLineState::default();
         s.open();
@@ -172,7 +172,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-195, UI-E-092 — error and notice persist until the consumer clears them; opening
+    /// UI-R-195, UI-E-140 — error and notice persist until the consumer clears them; opening
     /// and closing the line does not touch either.
     fn ut_error_and_notice_persist_until_the_consumer_clears_them() {
         let mut s = CommandLineState::default();
