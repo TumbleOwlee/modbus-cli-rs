@@ -164,8 +164,9 @@ impl MarkdownInputField {
 /// output of wrapping that same line's chars: word-wrap only ever drops a run of spaces
 /// exactly at a row break (UI-R-131), never reorders or alters other characters, so a row's
 /// text is otherwise a verbatim slice of `original` — walking both in lockstep and skipping
-/// `original` past a dropped run finds the row/column pair (UI-E-088). Clamps to the last
-/// row/column so a cursor at the exact end of the line is always drawn (UI-E-088).
+/// `original` past a dropped run finds the row/column pair (UI-E-088). A `cursor_col` one
+/// past the line's last character maps to the free cell on the last row (UI-R-312,
+/// UI-R-313); whether that cell falls inside the field is left to the caller (UI-E-146).
 fn locate_wrapped_position(
     original: &[char],
     rows: &[Vec<(String, Style)>],
@@ -184,10 +185,9 @@ fn locate_wrapped_position(
         let row_end = row_start + row_chars.len();
         let is_last_row = row_idx == rows.len() - 1;
         if cursor_col < row_end || (is_last_row && cursor_col >= row_start) {
-            let last_cell = row_chars.len().saturating_sub(1);
             return (
                 row_idx,
-                (cursor_col.saturating_sub(row_start)).min(last_cell),
+                (cursor_col.saturating_sub(row_start)).min(row_chars.len()),
             );
         }
         orig_idx = row_end;
@@ -378,6 +378,7 @@ impl StatefulWidget for &MarkdownInputField {
                 && line_idx == active
                 && let Some((cursor_row, col_in_row)) = cursor_position
                 && cursor_row == sub_row
+                && col_in_row < content_width
             {
                 buf[(content_x + col_in_row as u16, y)].set_style(self.style.cursor);
             }

@@ -316,6 +316,10 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **UI-R-138** — Read-only, the display row range of the cursor's source line is drawn in the theme's highlighted-row style, so line navigation is visible without a text cursor.
 
+**UI-R-312** — Focused and editable, the markdown input field paints its text cursor on the cell holding the character at the cursor's source column, on the display row that character falls on when its source line wraps (UI-R-130 through UI-R-133), with the gutter of UI-R-140 offsetting the cell when enabled.
+
+**UI-R-313** — A cursor column one past the last character of its source line — the `Insert`-mode end-of-line position of UI-R-029 — is painted on the first free cell after the last character on that line's last display row, never pulled back onto the last character.
+
 **UI-R-139** — Read-only, `j`, `k`, their count prefixes, `yy` (with its count prefix), `gg`, `G`, `Ctrl+D` and `Ctrl+U` remain available, so a reader can navigate lines and display rows and yank them.
 
 **UI-R-140** — An optional line-number gutter, off by default and selected on the widget builder, prints the source line number on the first display row of each source line and leaves continuation rows blank.

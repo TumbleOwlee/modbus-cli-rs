@@ -102,6 +102,7 @@ Boundary behavior, error semantics, intentional or known constraints. The known-
 | **UI-E-076** | `Ctrl+D` / `Ctrl+U` near the first or last display row (UI-R-136) | movement clamps to the first/last row; no wrap-around |
 | **UI-E-137** | Measuring the empty text (UI-R-188) | one display row, the single empty source line |
 | **UI-E-138** | Measuring at a width that leaves no columns for text, gutter included (UI-R-188) | the available text width is treated as one column, so every source line wraps one character per display row |
+| **UI-E-146** | Cursor one past the last character (UI-R-313) of a line whose last display row exactly fills the available text width | the free cell falls outside the field, so no text cursor is painted that frame; the field never widens, scrolls horizontally (UI-R-130) or opens an extra display row for it |
 
 ## Diff widget
 
