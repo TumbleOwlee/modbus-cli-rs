@@ -185,24 +185,112 @@ fn it_scrolls_the_viewport_as_typing_wraps_past_the_visible_row() {
 }
 
 #[test]
-/// UI-E-088 — the cursor cell never indexes past a full-width row: a line exactly as wide
-/// as the content area, with the cursor after its last character, still renders instead of
-/// panicking outside the buffer.
-fn it_does_not_panic_when_the_cursor_sits_at_the_end_of_a_full_width_row() {
+/// UI-E-146 — a line whose last display row exactly fills the available text width leaves
+/// no free cell for the `Insert`-mode end-of-line cursor: nothing is painted, the row's
+/// text still renders in full, and the render does not panic.
+fn it_no_cursor_is_painted_when_the_last_display_row_exactly_fills_the_width() {
     let w = MarkdownInputFieldBuilder::default().build().unwrap();
     let mut s = state_with("");
     s.handle_events(KeyModifiers::NONE, KeyCode::Char('i'));
     for c in "hello worl".chars() {
         s.handle_events(KeyModifiers::NONE, KeyCode::Char(c));
     }
+    let mut b = buffer(10, 2);
+    StatefulWidget::render(&w, Rect::new(0, 0, 10, 2), &mut b, &mut s);
+    assert_eq!(row_text(&b, 0, 10), "hello worl");
+    for x in 0..10 {
+        assert_ne!(
+            b[(x, 0)].bg,
+            w.style().cursor.bg.unwrap(),
+            "no cell of a row that exactly fills the width may carry the cursor style"
+        );
+    }
+    assert_eq!(
+        row_text(&b, 1, 10).trim_end(),
+        "",
+        "no extra display row is opened for the free cell that does not fit"
+    );
+}
+
+#[test]
+/// UI-R-313 — a cursor column one past the last character of its source line is painted on
+/// the first free cell after the last character, not pulled back onto the last character.
+fn it_insert_end_of_line_cursor_sits_on_the_free_cell_after_the_last_character() {
+    let w = MarkdownInputFieldBuilder::default().build().unwrap();
+    let mut s = state_with("");
+    s.handle_events(KeyModifiers::NONE, KeyCode::Char('i'));
+    for c in "hi".chars() {
+        s.handle_events(KeyModifiers::NONE, KeyCode::Char(c));
+    }
     let mut b = buffer(10, 1);
     StatefulWidget::render(&w, Rect::new(0, 0, 10, 1), &mut b, &mut s);
-    assert_eq!(row_text(&b, 0, 10), "hello worl");
     assert_eq!(
-        b[(9, 0)].bg,
+        b[(2, 0)].bg,
         w.style().cursor.bg.unwrap(),
-        "the cursor cell itself, not just the text, must sit on the last column"
+        "the free cell after the last character must carry the cursor style"
     );
+    assert_ne!(
+        b[(1, 0)].bg,
+        w.style().cursor.bg.unwrap(),
+        "the last character's own cell must not carry the cursor style"
+    );
+}
+
+#[test]
+/// UI-R-312, UI-R-313 — on a wrapped line, the `Insert`-mode end-of-line cursor is painted
+/// on the free cell after the last character of the line's last display row, not on the
+/// first display row.
+fn it_insert_end_of_line_cursor_on_a_wrapped_line_uses_the_last_display_row() {
+    let w = MarkdownInputFieldBuilder::default().build().unwrap();
+    let mut s = state_with("");
+    s.handle_events(KeyModifiers::NONE, KeyCode::Char('i'));
+    for c in "hello wo".chars() {
+        s.handle_events(KeyModifiers::NONE, KeyCode::Char(c));
+    }
+    let mut b = buffer(6, 3);
+    StatefulWidget::render(&w, Rect::new(0, 0, 6, 3), &mut b, &mut s);
+    assert_eq!(row_text(&b, 0, 6).trim_end(), "hello");
+    assert_eq!(row_text(&b, 1, 6).trim_end(), "wo");
+    assert_eq!(
+        b[(2, 1)].bg,
+        w.style().cursor.bg.unwrap(),
+        "the free cell after the last display row's text must carry the cursor style"
+    );
+    for x in 0..6 {
+        assert_ne!(
+            b[(x, 0)].bg,
+            w.style().cursor.bg.unwrap(),
+            "the first display row must not carry the cursor style"
+        );
+    }
+}
+
+#[test]
+/// UI-R-312 — the cursor cell follows the character at the cursor's source column, offset
+/// by the gutter when enabled.
+fn it_cursor_cell_follows_the_source_column_and_the_gutter_offsets_it() {
+    let w = MarkdownInputFieldBuilder::default()
+        .line_numbers(true)
+        .build()
+        .unwrap();
+    let mut s = state_with("hello");
+    s.handle_events(KeyModifiers::NONE, KeyCode::Char('0'));
+    s.handle_events(KeyModifiers::NONE, KeyCode::Char('l'));
+    s.handle_events(KeyModifiers::NONE, KeyCode::Char('l'));
+    let mut b = buffer(10, 1);
+    StatefulWidget::render(&w, Rect::new(0, 0, 10, 1), &mut b, &mut s);
+    assert_eq!(
+        b[(4, 0)].bg,
+        w.style().cursor.bg.unwrap(),
+        "gutter width (2) plus source column (2) must locate the cursor cell"
+    );
+    assert_ne!(
+        b[(2, 0)].bg,
+        w.style().cursor.bg.unwrap(),
+        "column 0 of the text must not carry the cursor style"
+    );
+    assert_ne!(b[(0, 0)].bg, w.style().cursor.bg.unwrap());
+    assert_ne!(b[(1, 0)].bg, w.style().cursor.bg.unwrap());
 }
 
 #[test]
