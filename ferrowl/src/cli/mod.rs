@@ -906,7 +906,40 @@ mod tests {
     }
 
     #[test]
-    /// CL-R-053 — a --session file's instances resolve, split into modbus and ocpp.
+    /// CL-R-054 — session instances resolve before --module instances.
+    fn ut_session_instances_resolve_before_module_instances() {
+        use ferrowl_util::convert::{Converter, FileType};
+        let session = config::Session {
+            version: None,
+            modules: vec![
+                serde_json::to_value(create_module_spec_by_device(
+                    "from_session".into(),
+                    "s.toml".into(),
+                ))
+                .unwrap(),
+            ],
+            scripts: vec![],
+            interval: 1.0,
+        };
+        let dir = reserve_temp_dir("ferrowl_cli");
+        let path = dir.join("session.toml");
+        let path = path.to_str().unwrap().to_string();
+        Converter::save(&session, &path, FileType::Toml).unwrap();
+
+        let args = CliArgs {
+            command: None,
+            modules: vec!["name=from_module,device=d.toml,port=1".into()],
+            sessions: vec![path],
+            devices: vec![],
+            demo: false,
+        };
+        let specs = args.module_specs().unwrap();
+        let names: Vec<&str> = specs.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, ["from_session", "from_module"]);
+    }
+
+    #[test]
+    /// CL-R-003, CL-R-053 — a --session file's instances resolve, split into modbus and ocpp.
     fn ut_session_splits_modbus_and_ocpp() {
         use ferrowl_util::convert::{Converter, FileType};
         let mut modbus =

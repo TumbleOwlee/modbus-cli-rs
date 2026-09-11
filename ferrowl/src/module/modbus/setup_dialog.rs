@@ -1874,6 +1874,51 @@ mod tests {
     }
 
     #[test]
+    /// MB-R-215 — toggling the client-role Self-Signed switch back Off restores the previously
+    /// entered client cert/key paths (nothing was cleared, only excluded while On).
+    fn ut_resolve_client_toggle_self_signed_back_off_restores_cert_key() {
+        let dir = reserve_temp_dir("ferrowl_modbus_setup");
+        let cert = dir.join("c.crt");
+        let key = dir.join("c.key");
+        std::fs::write(&cert, b"").unwrap();
+        std::fs::write(&key, b"").unwrap();
+        let cert = cert.to_str().unwrap().to_string();
+        let key = key.to_str().unwrap().to_string();
+
+        let mut dialog = SetupDialog::create(Timing {
+            timeout_ms: 0,
+            delay_ms: 0,
+            interval_ms: 0,
+            reconnect: true,
+        });
+        set_input(&mut dialog.name, "dev");
+        dialog.role.state.set_selection(1); // Role::Server=0, Role::Client=1
+        dialog
+            .tls_level
+            .state
+            .set_selection(TlsLevel::MutualTls.index());
+        set_suggest_input(&mut dialog.tls.client_cert_file, &cert);
+        set_suggest_input(&mut dialog.tls.client_key_file, &key);
+        dialog.tls.self_signed.state.set_selection(1); // On
+        dialog.tls.self_signed.state.set_selection(0); // Off again
+
+        let outcome = dialog.resolve().unwrap();
+        let cfg = outcome.values.tls.unwrap();
+        assert_eq!(
+            cfg.client,
+            ferrowl_util::tls::ClientTlsPolicy::Mutual {
+                verification: ferrowl_util::tls::CertVerification::RootStore {
+                    extra_ca_files: vec![],
+                },
+                identity: ferrowl_util::tls::CertSource::Files {
+                    cert_file: cert,
+                    key_file: key,
+                }
+            }
+        );
+    }
+
+    #[test]
     /// UI-R-022 — the focus cycle visits the reconnect field for every role, since server-side
     /// reconnect (MB-R-130–134) makes it applicable regardless of role.
     fn ut_focus_next_reaches_reconnect_for_server_role() {

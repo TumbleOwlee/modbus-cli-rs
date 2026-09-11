@@ -428,7 +428,7 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **UI-R-064** — The resolved-registers table (UI-R-060, MB-R-145) renders columns Name, Description, Address, Kind, Format, Length, Resolution, Value, Raw Value: the modbus module's register table's set (`ferrowl::module::modbus::table::TableHeader`) less Slave ID and Access.
 
-**UI-R-108** — Enter on a selected resolved-registers table row (UI-R-064) opens an edit dialog prefilled from that interpretation, offering Confirm (MB-R-148 edit) and Delete (MB-R-148 remove), mirroring the modbus edit-register dialog.
+**UI-R-108** — Enter on a selected resolved-registers table row (UI-R-064) opens an edit dialog prefilled from that interpretation, offering Confirm (MB-R-148 edit) and Delete (MB-R-216 remove), mirroring the modbus edit-register dialog.
 
 **UI-R-065** — Tab/Shift+Tab on a monitor content view cycles focus across panels: Units, Messages, Memory layout, Resolved registers, back to Units, skipping Resolved registers whenever hidden (UI-R-100). Each panel keeps its own selection/scroll position; Up/Down/Left/Right and Enter act on the focused panel.
 

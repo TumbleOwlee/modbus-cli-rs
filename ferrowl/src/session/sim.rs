@@ -439,6 +439,169 @@ mod tests {
     }
 
     #[test]
+    /// SC-R-054 — `run_once` loads only the script being run, not another script of the same
+    /// name in the owner's list: the passed code wins even when the list holds a same-named
+    /// script with different code.
+    fn ut_run_once_loads_only_the_passed_script_not_the_owners_list_entry() {
+        let rw = MockReadWrite::default();
+        let directory = directory_with_mock(rw.clone());
+        let mut sim = SessionSim::new(directory, log());
+        // A long cycle interval keeps the enabled decoy's sim thread to a single write, so it
+        // cannot race the assertion below.
+        sim.set_interval(Duration::from_secs(60));
+        sim.set_scripts(vec![ScriptDef {
+            name: "s".into(),
+            code: r#"C_Module:Get("m"):Register():Set("x", 99)"#.into(),
+            enabled: true,
+        }]);
+        assert!(
+            wait_for(Duration::from_millis(500), || {
+                matches!(rw.store.lock().unwrap().get("x"), Some(ValueType::Int(99)))
+            }),
+            "positive control: the enabled decoy in the owner's list must actually run once"
+        );
+
+        sim.run_once(
+            "s".to_string(),
+            r#"C_Module:Get("m"):Register():Set("x", 5)"#.to_string(),
+        );
+
+        assert!(wait_for(Duration::from_secs(2), || {
+            matches!(rw.store.lock().unwrap().get("x"), Some(ValueType::Int(5)))
+        }));
+    }
+
+    #[test]
+    /// SC-R-055 — an on-demand run calls the loaded script exactly once: an incrementing script
+    /// settles at 1, never climbing further.
+    fn ut_run_once_calls_the_script_exactly_once() {
+        let rw = MockReadWrite::default();
+        rw.store
+            .lock()
+            .unwrap()
+            .insert("x".to_string(), ValueType::Int(0));
+        let directory = directory_with_mock(rw.clone());
+        let sim = SessionSim::new(directory, log());
+
+        sim.run_once(
+            "s".to_string(),
+            r#"C_Module:Get("m"):Register():Set("x", (C_Module:Get("m"):Register():Get("x") or 0) + 1)"#
+                .to_string(),
+        );
+
+        assert!(wait_for(Duration::from_secs(2), || {
+            matches!(rw.store.lock().unwrap().get("x"), Some(ValueType::Int(1)))
+        }));
+        std::thread::sleep(Duration::from_millis(200));
+        assert!(
+            matches!(rw.store.lock().unwrap().get("x"), Some(ValueType::Int(1))),
+            "a second, unwanted call would have pushed the count past 1"
+        );
+    }
+
+    #[test]
+    /// SC-R-052 — an on-demand run executes on its own short-lived thread: `run_once` returns to
+    /// its caller long before a script slow enough to measure has finished running.
+    fn ut_run_once_runs_off_the_calling_thread() {
+        let rw = MockReadWrite::default();
+        let directory = directory_with_mock(rw.clone());
+        let sim = SessionSim::new(directory, log());
+
+        let start = std::time::Instant::now();
+        sim.run_once(
+            "s".to_string(),
+            // A busy Lua loop, slow enough to measure, that only finishes by writing "done".
+            r#"
+                local n = 0
+                for i = 1, 30000000 do n = n + 1 end
+                C_Module:Get("m"):Register():Set("x", "done")
+            "#
+            .to_string(),
+        );
+        let call_elapsed = start.elapsed();
+
+        assert!(
+            wait_for(Duration::from_secs(5), || {
+                matches!(rw.store.lock().unwrap().get("x"), Some(ValueType::String(s)) if s == "done")
+            }),
+            "the busy script never finished"
+        );
+        let total_elapsed = start.elapsed();
+
+        assert!(
+            call_elapsed < total_elapsed / 2,
+            "run_once ({call_elapsed:?}) must return long before the script it kicked off \
+             finishes ({total_elapsed:?}), proving it runs on its own thread"
+        );
+    }
+
+    #[test]
+    /// SC-R-053 — an on-demand run's context registers the same `C_*` modules the owner's sim
+    /// thread would (here, `C_Time`, available to a sim thread via the identical `TimeModule`
+    /// registration).
+    fn ut_run_once_registers_same_c_star_modules_as_sim_thread() {
+        let rw = MockReadWrite::default();
+        let directory = directory_with_mock(rw.clone());
+        let l = log();
+        let sim = SessionSim::new(directory, l.clone());
+
+        sim.run_once(
+            "s".to_string(),
+            r#"C_Module:Get("m"):Register():Set("x", C_Time:GetMs())"#.to_string(),
+        );
+
+        assert!(
+            wait_for(Duration::from_secs(2), || {
+                matches!(
+                    rw.store.lock().unwrap().get("x"),
+                    Some(ValueType::Float(_)) | Some(ValueType::Int(_))
+                )
+            }),
+            "log: {:?}",
+            l.blocking_read()
+                .peek_n(LOG_SIZE)
+                .into_iter()
+                .map(|(_, _, l)| l)
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    /// SC-R-059 — an on-demand run's context shares no Lua state with a sim thread's context: a
+    /// Lua global set by the sim thread is invisible to a `run_once` call against the same
+    /// directory.
+    fn ut_run_once_shares_no_lua_state_with_sim_thread() {
+        let rw = MockReadWrite::default();
+        let directory = directory_with_mock(rw.clone());
+        let log = log();
+        let mut sim = SessionSim::new(directory, log);
+        sim.set_interval(Duration::from_millis(20));
+        sim.set_scripts(vec![script(
+            "sim_script",
+            r#"shared_global = 42; C_Module:Get("m"):Register():Set("sim_ran", true)"#,
+        )]);
+        assert!(
+            wait_for(Duration::from_millis(500), || {
+                matches!(
+                    rw.store.lock().unwrap().get("sim_ran"),
+                    Some(ValueType::Bool(true))
+                )
+            }),
+            "positive control: the sim thread must have actually run and set shared_global \
+             before the no-shared-state assertion means anything"
+        );
+
+        sim.run_once(
+            "s".to_string(),
+            r#"C_Module:Get("m"):Register():Set("x", shared_global or -1)"#.to_string(),
+        );
+
+        assert!(wait_for(Duration::from_secs(2), || {
+            matches!(rw.store.lock().unwrap().get("x"), Some(ValueType::Int(-1)))
+        }));
+    }
+
+    #[test]
     /// SC-R-014 — the session sim runs its script about once per cycle interval.
     fn ut_interval_honored_roughly() {
         let rw = MockReadWrite::default();

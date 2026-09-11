@@ -983,6 +983,43 @@ mod tests {
         );
     }
 
+    // Guards `ut_self_signed_pair_never_written_to_disk`, the only test in this file that
+    // changes the process cwd, so a parallel test run cannot race it.
+    static CWD_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    /// OC-R-170 — a CSMS's cached self-signed pair is never written to disk: building and
+    /// reusing it from a cache, with the process cwd pointed at an empty scratch directory (so
+    /// any implicit relative-path write would land there and be caught), leaves that directory
+    /// untouched.
+    #[test]
+    fn ut_self_signed_pair_never_written_to_disk() {
+        let _guard = CWD_LOCK.lock().unwrap();
+        let original_cwd = std::env::current_dir().unwrap();
+        let dir = reserve_temp_dir("ferrowl_ocpp_oc170");
+        std::env::set_current_dir(dir.path()).unwrap();
+
+        let result = std::panic::catch_unwind(|| {
+            let before: Vec<_> = std::fs::read_dir(".").unwrap().collect();
+            assert!(before.is_empty(), "scratch dir starts empty");
+
+            let cache = new_self_signed_cache();
+            let policy = ServerTlsPolicy::Tls {
+                identity: CertSource::SelfSigned {},
+            };
+            build_server_config(&policy, "localhost", &cache).expect("builds");
+            build_server_config(&policy, "localhost", &cache).expect("builds (cache hit)");
+
+            let after: Vec<_> = std::fs::read_dir(".").unwrap().collect();
+            assert!(
+                after.is_empty(),
+                "generating and reusing a self-signed pair must not write any file to cwd"
+            );
+        });
+
+        std::env::set_current_dir(&original_cwd).unwrap();
+        result.unwrap();
+    }
+
     /// OC-R-172 — `build_server_config` returns `Some` for a `Tls` policy and `None` only for the
     /// `ServerTlsPolicy::None` variant: a server configured for TLS can never silently fall
     /// through to a plain (non-TLS) bind.

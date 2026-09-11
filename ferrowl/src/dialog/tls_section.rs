@@ -770,6 +770,19 @@ mod tests {
     }
 
     #[test]
+    /// MB-R-139 — the client-role Self-Signed toggle row is shown only at `MutualTls`, hidden at
+    /// `Tls` and `Off`.
+    fn ut_client_self_signed_row_shown_only_at_mutual_tls() {
+        let mut section = TlsSection::new();
+        section.sync(ClientOrServer::Client, EffectiveTlsLevel::Off);
+        assert!(!section.show_self_signed_row());
+        section.sync(ClientOrServer::Client, EffectiveTlsLevel::Tls);
+        assert!(!section.show_self_signed_row());
+        section.sync(ClientOrServer::Client, EffectiveTlsLevel::MutualTls);
+        assert!(section.show_self_signed_row());
+    }
+
+    #[test]
     /// MB-R-104..112 — a server TLS section at `Tls` with Self-Signed toggled On extracts
     /// `self_signed: true`, regardless of whatever the (mTLS-only) client-CA list holds.
     /// Resolving this flag into `ServerTlsPolicy::Tls { identity: CertSource::SelfSigned {} }`

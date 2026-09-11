@@ -29,7 +29,7 @@ use ratatui::backend::TestBackend;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 
-use super::{App, LogRing};
+use super::{App, Level, LogRing};
 use crate::config::script::ScriptDef;
 use crate::module::modbus::SerialPathRegistry;
 use crate::module::type_descriptor::{ModuleViewFactory, SetupView};
@@ -111,6 +111,7 @@ const MOCK_CMDS: &[CommandDescriptor] = &[CommandDescriptor {
 #[derive(Clone)]
 pub(super) struct MockHandle {
     refreshes: Arc<AtomicUsize>,
+    renders: Arc<AtomicUsize>,
     commands: Arc<Mutex<Vec<String>>>,
     /// MB-R-150 — the registry `App::rebuild_registry` most recently attached via
     /// `set_serial_paths`, if any.
@@ -122,6 +123,11 @@ impl MockHandle {
     /// How many times `App` called `refresh` on this view.
     pub(super) fn refreshes(&self) -> usize {
         self.refreshes.load(Ordering::Relaxed)
+    }
+
+    /// How many times `App` called `render` on this view.
+    pub(super) fn renders(&self) -> usize {
+        self.renders.load(Ordering::Relaxed)
     }
 
     /// Every command string `App` forwarded to this view, in order.
@@ -151,9 +157,11 @@ pub(super) struct MockView {
     replacement: Option<Box<dyn ModuleView>>,
     host_kind: Option<&'static str>,
     refreshes: Arc<AtomicUsize>,
+    renders: Arc<AtomicUsize>,
     commands: Arc<Mutex<Vec<String>>>,
     serial_paths: Arc<Mutex<Option<SerialPathRegistry>>>,
     keys: Arc<Mutex<Vec<(KeyModifiers, KeyCode)>>>,
+    command_result: Option<CommandResult>,
 }
 
 impl MockView {
@@ -162,11 +170,13 @@ impl MockView {
     /// the returned view and `.boxed()` it for [`build_app`].
     pub(super) fn pair(name: &str) -> (MockView, MockHandle) {
         let refreshes = Arc::new(AtomicUsize::new(0));
+        let renders = Arc::new(AtomicUsize::new(0));
         let commands = Arc::new(Mutex::new(Vec::new()));
         let serial_paths = Arc::new(Mutex::new(None));
         let keys = Arc::new(Mutex::new(Vec::new()));
         let handle = MockHandle {
             refreshes: refreshes.clone(),
+            renders: renders.clone(),
             commands: commands.clone(),
             serial_paths: serial_paths.clone(),
             keys: keys.clone(),
@@ -180,11 +190,26 @@ impl MockView {
             replacement: None,
             host_kind: None,
             refreshes,
+            renders,
             commands,
             serial_paths,
             keys,
+            command_result: None,
         };
         (view, handle)
+    }
+
+    /// Make the next `handle_command` call return `Handled(Some((level, message)))` instead of
+    /// the default `Handled(None)`.
+    pub(super) fn with_command_message(mut self, level: Level, message: &str) -> Self {
+        self.command_result = Some(CommandResult::Handled(Some((level, message.to_string()))));
+        self
+    }
+
+    /// Make the next `handle_command` call return `Unhandled`.
+    pub(super) fn with_command_unhandled(mut self) -> Self {
+        self.command_result = Some(CommandResult::Unhandled);
+        self
     }
 
     /// Give this view a session spec so `:write` serializes something for its tab.
@@ -228,7 +253,9 @@ impl ModuleView for MockView {
         self.name.clone()
     }
 
-    fn render(&mut self, _frame: &mut Frame, _area: Rect) {}
+    fn render(&mut self, _frame: &mut Frame, _area: Rect) {
+        self.renders.fetch_add(1, Ordering::Relaxed);
+    }
 
     fn render_overlay(&mut self, _frame: &mut Frame, _area: Rect) {}
 
@@ -251,9 +278,10 @@ impl ModuleView for MockView {
     fn handle_command<'a>(&'a mut self, cmd: &'a str) -> CommandFuture<'a> {
         let commands = self.commands.clone();
         let cmd = cmd.to_string();
+        let result = self.command_result.take();
         Box::pin(async move {
             commands.lock().unwrap().push(cmd);
-            CommandResult::Handled(None)
+            result.unwrap_or(CommandResult::Handled(None))
         })
     }
 
@@ -292,13 +320,41 @@ impl ModuleView for MockView {
 /// the name-collision branch without a real module setup dialog.
 pub(super) struct MockSetup {
     name: String,
+    valid: bool,
+    handle_slot: Option<Arc<Mutex<Option<MockHandle>>>>,
 }
 
 impl MockSetup {
     pub(super) fn new(name: &str) -> Self {
         Self {
             name: name.to_string(),
+            valid: true,
+            handle_slot: None,
         }
+    }
+
+    /// A dialog that never validates: `confirm()` always returns `None`.
+    pub(super) fn invalid(name: &str) -> Self {
+        Self {
+            name: name.to_string(),
+            valid: false,
+            handle_slot: None,
+        }
+    }
+
+    /// Like [`MockSetup::new`], but also hands back the [`MockHandle`] of the view its
+    /// `confirm()` will build, populated once `App` actually invokes the factory — so a test can
+    /// inspect the commands `App` sent the freshly created tab's view (e.g. that `start` ran).
+    pub(super) fn new_with_handle(name: &str) -> (Self, Arc<Mutex<Option<MockHandle>>>) {
+        let slot: Arc<Mutex<Option<MockHandle>>> = Arc::new(Mutex::new(None));
+        (
+            Self {
+                name: name.to_string(),
+                valid: true,
+                handle_slot: Some(slot.clone()),
+            },
+            slot,
+        )
     }
 }
 
@@ -310,10 +366,20 @@ impl SetupView for MockSetup {
     fn focus_next(&mut self) {}
     fn focus_previous(&mut self) {}
     fn confirm(&self) -> Option<(String, ModuleViewFactory)> {
+        if !self.valid {
+            return None;
+        }
         let name = self.name.clone();
+        let handle_slot = self.handle_slot.clone();
         Some((
             self.name.clone(),
-            Box::new(move || MockView::pair(&name).0.boxed()),
+            Box::new(move || {
+                let (view, handle) = MockView::pair(&name);
+                if let Some(slot) = &handle_slot {
+                    *slot.lock().unwrap() = Some(handle);
+                }
+                view.boxed()
+            }),
         ))
     }
 }
