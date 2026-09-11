@@ -295,6 +295,18 @@ mod tests {
     }
 
     #[test]
+    /// SC-R-061 — an enabled script with an empty code body is still handed to a sim thread;
+    /// selection filters on the enabled flag alone, not on the code body (SC-E-040).
+    fn ut_enabled_empty_code_script_still_starts_sim_thread() {
+        let rw = MockReadWrite::default();
+        let directory = directory_with_mock(rw);
+        let log = log();
+        let mut sim = SessionSim::new(directory, log);
+        sim.set_scripts(vec![script("s", "")]);
+        assert!(sim.handle.is_some());
+    }
+
+    #[test]
     /// SC-R-024 — toggling a session script's enabled flag starts then stops the sim thread.
     fn ut_toggle_scripts_starts_and_stops() {
         let rw = MockReadWrite::default();

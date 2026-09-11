@@ -54,6 +54,7 @@ Boundary behavior, error semantics, intentional or known constraints. The known-
 | **SC-E-029** | Cycle interval non-finite/≤0 in config | falls back to 1.0 s |
 | **SC-E-030** | Per-module interval below 0.05 s | floored to 0.05 s; session-level interval has no floor |
 | **SC-E-031** | `C_Time:Get`/`GetMs` right after a restart | counts from ~0 again (origin = context build time) |
+| **SC-E-040** | Script enabled with an empty code body | handed to a sim thread like any other enabled script (SC-R-061); the thread runs and its cycles execute nothing |
 
 ---
 

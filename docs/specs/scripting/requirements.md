@@ -110,7 +110,7 @@ IDs stable, append-only (`SC-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **SC-R-022** — A script is defined by a name, a code body (default empty), and an enabled flag (default enabled).
 
-**SC-R-061** — Only enabled scripts with non-empty code (SC-R-022) are handed to a sim thread.
+**SC-R-061** — Every enabled script (SC-R-022) is handed to a sim thread; the code body is not a selection criterion.
 
 **SC-R-062** — A script's persisted shape (SC-R-022) is `config-session/`'s envelope.
 
