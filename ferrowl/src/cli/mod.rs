@@ -906,7 +906,40 @@ mod tests {
     }
 
     #[test]
-    /// CL-R-003 — a --session file's instances resolve, split into modbus and ocpp.
+    /// CL-R-054 — session instances resolve before --module instances.
+    fn ut_session_instances_resolve_before_module_instances() {
+        use ferrowl_util::convert::{Converter, FileType};
+        let session = config::Session {
+            version: None,
+            modules: vec![
+                serde_json::to_value(create_module_spec_by_device(
+                    "from_session".into(),
+                    "s.toml".into(),
+                ))
+                .unwrap(),
+            ],
+            scripts: vec![],
+            interval: 1.0,
+        };
+        let dir = reserve_temp_dir("ferrowl_cli");
+        let path = dir.join("session.toml");
+        let path = path.to_str().unwrap().to_string();
+        Converter::save(&session, &path, FileType::Toml).unwrap();
+
+        let args = CliArgs {
+            command: None,
+            modules: vec!["name=from_module,device=d.toml,port=1".into()],
+            sessions: vec![path],
+            devices: vec![],
+            demo: false,
+        };
+        let specs = args.module_specs().unwrap();
+        let names: Vec<&str> = specs.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, ["from_session", "from_module"]);
+    }
+
+    #[test]
+    /// CL-R-003, CL-R-053 — a --session file's instances resolve, split into modbus and ocpp.
     fn ut_session_splits_modbus_and_ocpp() {
         use ferrowl_util::convert::{Converter, FileType};
         let mut modbus =
@@ -957,7 +990,7 @@ mod tests {
     }
 
     #[test]
-    /// CL-R-003 — a --session file that fails to load surfaces an error during resolution.
+    /// A --session file that fails to load surfaces an error during resolution.
     fn ut_module_specs_session_load_error() {
         let args = CliArgs {
             command: None,
@@ -1629,7 +1662,7 @@ mod tests {
     }
 
     #[test]
-    /// BR-R-022 — `tls.identity.source=ephemeral` on a downstream (`Client`) descriptor is
+    /// BR-R-028 — `tls.identity.source=ephemeral` on a downstream (`Client`) descriptor is
     /// rejected: "nothing configured, fall back and log" is a server-side behavior.
     fn ut_bridge_descriptor_rejects_ephemeral_downstream() {
         assert!(
@@ -1643,7 +1676,7 @@ mod tests {
     }
 
     #[test]
-    /// BR-R-021 — a bare upstream `tls.mode=tls` (no `tls.identity.source`) accepts the
+    /// BR-R-021, BR-R-030 — a bare upstream `tls.mode=tls` (no `tls.identity.source`) accepts the
     /// defaulted `ephemeral` identity.
     fn ut_bridge_descriptor_upstream_bare_tls_mode_defaults_to_ephemeral_identity() {
         let spec = parse_bridge_descriptor("port=0,tls.mode=tls", ClientOrServer::Server).unwrap();
@@ -1661,7 +1694,7 @@ mod tests {
     }
 
     #[test]
-    /// BR-R-021 — a bare downstream `tls.mode=tls` (no `tls.verification.verify`) accepts the
+    /// BR-R-021, BR-R-030 — a bare downstream `tls.mode=tls` (no `tls.verification.verify`) accepts the
     /// defaulted `root-store` verification with an empty `extra_ca_files`.
     fn ut_bridge_descriptor_downstream_bare_tls_mode_defaults_to_root_store_verification() {
         let spec = parse_bridge_descriptor("port=0,tls.mode=tls", ClientOrServer::Client).unwrap();
@@ -1681,7 +1714,7 @@ mod tests {
     }
 
     #[test]
-    /// BR-R-022 — an upstream `tls.mode=mutual` with no `tls.verification.verify` defaults the
+    /// BR-R-029 — an upstream `tls.mode=mutual` with no `tls.verification.verify` defaults the
     /// verification to `root-store`, which is a setup failure on a server exactly as if it had
     /// been written explicitly.
     fn ut_bridge_descriptor_rejects_upstream_mutual_with_defaulted_root_store() {
@@ -1695,7 +1728,7 @@ mod tests {
     }
 
     #[test]
-    /// BR-R-022 — a downstream `tls.mode=mutual` with no `tls.identity.source` defaults the
+    /// BR-R-029 — a downstream `tls.mode=mutual` with no `tls.identity.source` defaults the
     /// identity to `ephemeral`, which is a setup failure on a client exactly as if it had been
     /// written explicitly.
     fn ut_bridge_descriptor_rejects_downstream_mutual_with_defaulted_ephemeral() {

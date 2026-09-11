@@ -155,9 +155,37 @@ mod tests {
     }
 
     #[tokio::test]
-    /// UI-R-025 — confirming a creation dialog whose name collides with an existing tab is refused
+    /// UI-R-196 — confirming the new-module type selector swaps in the chosen type's setup dialog.
+    async fn ut_confirm_type_selector_swaps_in_setup_dialog() {
+        let mut app = app_with(&[]);
+        app.enter_new();
+        assert!(matches!(app.overlay, Some(Overlay::TypeSelect(_))));
+
+        app.confirm_overlay().await;
+        assert!(
+            matches!(app.overlay, Some(Overlay::Creation(_))),
+            "confirming the type selector must swap in the setup dialog"
+        );
+    }
+
+    #[tokio::test]
+    /// UI-R-198 — a new-module dialog failing validation stays open: confirming it creates no tab.
+    async fn ut_confirm_invalid_setup_dialog_stays_open() {
+        let mut app = app_with(&[]);
+        app.overlay = Some(Overlay::Creation(Box::new(MockSetup::invalid("bad"))));
+        app.confirm_overlay().await;
+
+        assert_eq!(app.tabs.len(), 0, "an invalid dialog must not create a tab");
+        assert!(
+            app.overlay.is_some(),
+            "an invalid dialog stays open on confirm"
+        );
+    }
+
+    #[tokio::test]
+    /// UI-R-025, UI-R-197 — confirming a creation dialog whose name collides with an existing tab is refused
     /// with a warning in the active tab's log and leaves the dialog open, never overwriting or
-    /// duplicating the name; a non-colliding name creates the tab and closes the dialog.
+    /// duplicating the name; a non-colliding name creates and starts the tab and closes the dialog.
     async fn ut_creating_a_colliding_tab_name_is_refused_with_the_dialog_left_open() {
         let mut app = app_with(&["a"]);
 
@@ -179,10 +207,16 @@ mod tests {
             "a warning must be logged into the active tab"
         );
 
-        // A distinct name is accepted: the tab is created and the dialog closes.
-        app.overlay = Some(Overlay::Creation(Box::new(MockSetup::new("b"))));
+        // A distinct name is accepted: the tab is created, started, and the dialog closes.
+        let (setup, handle_slot) = MockSetup::new_with_handle("b");
+        app.overlay = Some(Overlay::Creation(Box::new(setup)));
         app.confirm_overlay().await;
         assert_eq!(app.tabs.len(), 2, "a unique name creates the tab");
         assert!(app.overlay.is_none(), "the dialog closes after creation");
+        assert_eq!(
+            handle_slot.lock().unwrap().as_ref().unwrap().commands(),
+            vec!["start".to_string()],
+            "a valid confirm must start the newly created tab's view"
+        );
     }
 }

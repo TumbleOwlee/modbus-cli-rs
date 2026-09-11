@@ -132,7 +132,7 @@ pub struct EditInterpretationDialog {
     pub delete_value_button: Widget<ButtonState, Button>,
     #[focus]
     pub confirm_button: Widget<ButtonState, Button>,
-    /// Deletes the interpretation outright (MB-R-148), guarded by `confirm_delete` — only
+    /// Deletes the interpretation outright (MB-R-216), guarded by `confirm_delete` — only
     /// focusable when `deletable` (mirrors `EditInputDialog`'s `delete_register_button`).
     #[focus(when = { self.deletable })]
     pub delete_button: Widget<ButtonState, Button>,
@@ -145,7 +145,7 @@ pub struct EditInterpretationDialog {
     /// `EditInputDialog::deletable`.
     #[builder(default)]
     pub deletable: bool,
-    /// Guards `delete_button` (MB-R-148) — reuses `ConfirmDeleteDialog` verbatim, already
+    /// Guards `delete_button` (MB-R-216) — reuses `ConfirmDeleteDialog` verbatim, already
     /// generic sub-dialog plumbing, not `EditInputDialog`-specific.
     #[builder(default)]
     pub confirm_delete: Option<ConfirmDeleteDialog>,
@@ -461,7 +461,7 @@ impl EditInterpretationDialog {
         }
     }
 
-    /// Open the delete-confirmation popup (MB-R-148), named after the dialog's current label
+    /// Open the delete-confirmation popup (MB-R-216), named after the dialog's current label
     /// input (mirrors `SubDialogs::open_confirm_delete`'s `register_label`).
     pub fn open_confirm_delete(&mut self) {
         let name = self.label.state.input().to_string();
@@ -800,7 +800,7 @@ pub(crate) enum SubPopupOutcome {
     Consumed,
 }
 
-/// MB-R-148 — route one key through whichever sub-popup of `dialog` is open, if any: the
+/// MB-R-216 — route one key through whichever sub-popup of `dialog` is open, if any: the
 /// confirm-delete guard first, then the "Add predefined" named-value popup, which takes *every*
 /// key (not just Esc/Enter) while it is open, then the UI-R-112/UI-R-113 close-confirm gate, and
 /// finally `Esc` itself, which opens that close-confirm popup rather than falling through to the
@@ -892,10 +892,10 @@ mod tests {
     use super::*;
     use crate::module::modbus::dialog::{kind_index, set_input};
 
-    /// The crux of the add/edit unification: `EditInterpretationDialog::new()` (used by `:add`,
-    /// UI-R-061) is not deletable, while `from_interpretation` (used by the MB-R-148 edit-on-a-
-    /// row dialog, UI-R-064) is — mirroring `EditInputDialog::new()`/`from_register`'s own
-    /// `deletable` split.
+    /// MB-R-216 — the crux of the add/edit unification: `EditInterpretationDialog::new()` (used
+    /// by `:add`, UI-R-061) is not deletable, so removal is unreachable from it, while
+    /// `from_interpretation` (used by the edit-on-a-row dialog, UI-R-064) is — mirroring
+    /// `EditInputDialog::new()`/`from_register`'s own `deletable` split.
     #[test]
     fn ut_new_is_not_deletable_and_from_interpretation_is() {
         assert!(!EditInterpretationDialog::new().deletable);
@@ -1195,8 +1195,8 @@ mod tests {
         assert_eq!(applied.slave_id, 0);
     }
 
-    /// MB-R-148 — pressing Space on the focused Delete button opens the confirmation popup, not
-    /// an immediate delete.
+    /// Pressing Space on the focused Delete button opens the confirmation popup, not an
+    /// immediate delete.
     #[test]
     fn ut_delete_button_space_opens_confirm_delete_not_immediate_delete() {
         let mut dialog = EditInterpretationDialog::from_interpretation("power", &sample_def());

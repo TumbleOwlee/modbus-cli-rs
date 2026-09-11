@@ -253,7 +253,7 @@ mod tests {
     }
 
     #[test]
-    /// CS-R-058 — the first occurrence of a duplicated instance name is left unchanged.
+    /// CS-R-058, CS-E-024 — the first occurrence of a duplicated instance name is left unchanged.
     fn ut_dedupe_names_first_occurrence_unchanged() {
         assert_eq!(
             dedupe_names(&["a".to_string(), "b".to_string()]),
@@ -262,7 +262,7 @@ mod tests {
     }
 
     #[test]
-    /// CS-R-058 — later duplicate names are suffixed ` (2)`, ` (3)`, … in creation order.
+    /// CS-R-058, CS-E-024 — later duplicate names are suffixed ` (2)`, ` (3)`, … in creation order.
     fn ut_dedupe_names_suffixes_repeats_in_order() {
         let names = vec!["a".to_string(), "a".to_string(), "a".to_string()];
         assert_eq!(
@@ -272,7 +272,7 @@ mod tests {
     }
 
     #[test]
-    /// CS-R-058 — name de-duplication skips a suffix already taken by an earlier name.
+    /// CS-R-058, CS-E-024 — name de-duplication skips a suffix already taken by an earlier name.
     fn ut_dedupe_names_skips_candidate_colliding_with_earlier_name() {
         // "a (2)" is already taken by an earlier distinct name, so the second "a" must skip to
         // "a (3)".

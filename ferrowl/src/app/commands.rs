@@ -173,6 +173,72 @@ impl<S: DrawSurface> App<S> {
 mod tests {
     use super::*;
 
+    async fn active_log_lines(app: &App<crate::app::testkit::MockScreen>) -> Vec<(Level, String)> {
+        app.tabs[app.active]
+            .log
+            .read()
+            .await
+            .peek_n(crate::app::LOG_SIZE)
+            .into_iter()
+            .map(|(_, level, line)| (level, line))
+            .collect()
+    }
+
+    #[tokio::test]
+    /// UI-R-191 — a command the active tab's view handles has any `(level, message)` it returns
+    /// appended to that tab's log.
+    async fn ut_handled_command_message_appended_to_tab_log() {
+        use crate::app::testkit::{MockView, build_app};
+        let (v, _h) = MockView::pair("m");
+        let v = v.with_command_message(Level::Error, "boom");
+        let mut app = build_app(vec![v.boxed()]);
+        app.run_command("frobnicate").await;
+        let lines = active_log_lines(&app).await;
+        assert!(
+            lines
+                .iter()
+                .any(|(level, msg)| *level == Level::Error && msg == "boom"),
+            "the view's returned (level, message) must land in the tab log: {lines:?}"
+        );
+    }
+
+    #[tokio::test]
+    /// UI-R-192 — a command the active tab's view leaves unhandled makes the application log
+    /// `Unknown command ':<input>'` at Warning.
+    async fn ut_unhandled_command_logs_unknown_command_warning() {
+        use crate::app::testkit::{MockView, build_app};
+        let (v, _h) = MockView::pair("m");
+        let v = v.with_command_unhandled();
+        let mut app = build_app(vec![v.boxed()]);
+        app.run_command("bogus").await;
+        let lines = active_log_lines(&app).await;
+        assert!(
+            lines
+                .iter()
+                .any(|(level, msg)| *level == Level::Warning && msg == "Unknown command ':bogus'"),
+            "an unhandled command must log Unknown command at Warning: {lines:?}"
+        );
+    }
+
+    #[tokio::test]
+    /// UI-R-193 — the level of a command result message is chosen by the producer, never
+    /// re-derived from message text: a message that reads like an error, tagged Info by its
+    /// producer, is logged at Info.
+    async fn ut_command_message_level_is_the_producers_not_derived_from_text() {
+        use crate::app::testkit::{MockView, build_app};
+        let (v, _h) = MockView::pair("m");
+        let v = v.with_command_message(Level::Info, "fatal error: boom");
+        let mut app = build_app(vec![v.boxed()]);
+        app.run_command("frobnicate").await;
+        let lines = active_log_lines(&app).await;
+        assert!(
+            lines
+                .iter()
+                .any(|(level, msg)| *level == Level::Info && msg == "fatal error: boom"),
+            "the producer's chosen level must be used verbatim, not re-derived from wording: {lines:?}"
+        );
+    }
+
     #[test]
     /// UI-R-017 — `:script copy <tab-index>` validates its index (usage error, out-of-range, self-copy).
     fn ut_validate_copy_index() {
@@ -275,8 +341,8 @@ mod tests {
     }
 
     #[tokio::test]
-    /// CS-R-030 — `:write` saves the current instances as a session file, defaulting the target to
-    /// `session.toml` and choosing the encoding from the path extension.
+    /// CS-R-030, CS-R-069, CS-R-070 — `:write` saves the current instances as a session file,
+    /// defaulting the target to `session.toml` and choosing the encoding from the path extension.
     async fn ut_write_defaults_to_session_toml_and_encodes_by_extension() {
         let dir = reserve_temp_dir("ferrowl_cs030");
 

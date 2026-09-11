@@ -849,7 +849,7 @@ mod tests {
     }
 
     #[tokio::test]
-    /// CL-R-031 — with --exit-on-error set, an error line makes the run exit 3.
+    /// CL-R-031, BR-E-011 — with --exit-on-error set, an error line makes the run exit 3.
     async fn ut_run_exit_on_error_returns_three() {
         use ferrowl_util::convert::{Converter, FileType};
         let session = config::Session {
@@ -877,7 +877,7 @@ mod tests {
     }
 
     #[tokio::test]
-    /// CL-R-031 — with --exit-on-error set, an Error line drained from a *module's* log (not the
+    /// CL-R-031, BR-E-011 — with --exit-on-error set, an Error line drained from a *module's* log (not the
     /// session sim's) makes the run exit 3.
     async fn ut_run_module_error_with_exit_on_error_returns_three() {
         let dir = reserve_temp_dir("ferrowl_cl");

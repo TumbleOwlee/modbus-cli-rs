@@ -1177,7 +1177,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-046 — the first value fill is not counted as a change (no highlight).
+    /// UI-R-185 — the first value fill is not counted as a change (no highlight).
     fn ut_decode_definition_first_fill_is_not_a_change() {
         let def = fixed_def();
         let memory = Memory::<Key<SlaveKey>>::default();
@@ -1190,7 +1190,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-046 — a changed value stamps its change time to drive the highlight window.
+    /// UI-R-185 — a changed value stamps its change time to drive the highlight window.
     fn ut_decode_definition_value_change_stamps_changed_at() {
         let mut memory = Memory::<Key<SlaveKey>>::default();
         let key = Key {
@@ -1751,7 +1751,7 @@ mod tests {
     }
 
     #[tokio::test]
-    /// UI-R-024 — applying a server-role setup preserves the existing reconnect setting.
+    /// Applying a server-role setup preserves the existing reconnect setting.
     async fn ut_apply_setup_server_role_preserves_existing_reconnect() {
         // Reconnect is hidden/unset (None) for Server-role dialog saves; applying it must not
         // clobber whatever the device config already had for a setting the user never saw.

@@ -719,7 +719,7 @@ mod tests {
     }
 
     #[test]
-    /// OC-R-035, OC-R-115 — `build_connector` under `Mutual` with a `SelfSigned` identity builds
+    /// OC-R-035, OC-R-115, OC-R-167 — `build_connector` under `Mutual` with a `SelfSigned` identity builds
     /// a client config whose resolver has certs to offer, and the same cached DER is returned
     /// on a second call sharing the cache.
     fn ut_build_connector_mutual_self_signed_presents_cached_pair() {
@@ -754,7 +754,7 @@ mod tests {
     }
 
     #[test]
-    /// OC-R-035 — a `Mutual` policy with a `Files` identity fails to build when the cert/key
+    /// OC-R-166 — a `Mutual` policy with a `Files` identity fails to build when the cert/key
     /// pair is missing on disk, and builds (presenting that identity) once both are present;
     /// covers the load path `ut_build_connector_mutual_self_signed_presents_cached_pair`'s
     /// `SelfSigned` identity doesn't exercise.
@@ -831,7 +831,7 @@ mod tests {
     }
 
     #[test]
-    /// OC-R-035 — `build_connector` rejects a `Mutual` policy with an `Ephemeral` client
+    /// OC-R-168 — `build_connector` rejects a `Mutual` policy with an `Ephemeral` client
     /// identity, mapping `PolicyError::EphemeralClientIdentity` onto the matching typed
     /// `TlsError` variant (never the retired `Configuration(String)` tier).
     fn ut_build_connector_rejects_ephemeral_identity() {
@@ -922,6 +922,8 @@ mod tests {
     #[test]
     /// OC-R-041 — a self-signed CSMS builds a usable server TLS config in memory.
     /// OC-R-037 — the CSMS server certificate may come from an ephemeral in-memory self-signed pair.
+    /// OC-R-171 — a `CertSource::SelfSigned` server identity binds the same way `Ephemeral` does,
+    /// without flagging the fallback that logging keys off.
     fn ut_build_server_config_self_signed() {
         let cache = new_self_signed_cache();
         let policy = ServerTlsPolicy::Tls {
@@ -951,6 +953,97 @@ mod tests {
         build_server_config(&policy, "localhost", &cache).expect("builds");
         let chain2 = cache.lock().as_ref().expect("still cached").0.clone();
         assert_eq!(chain1, chain2, "cache hit reuses the same certificate");
+    }
+
+    /// OC-R-169 — a fresh `SelfSignedCache` — what a torn-down and freshly constructed module
+    /// instance is built with (`ferrowl_ocpp::new_self_signed_cache()` is called once per
+    /// instance at construction, e.g. `ferrowl/src/module/ocpp/server/backend.rs`) — starts
+    /// empty, so `resolve_self_signed`'s cache-hit path can never serve it a previous instance's
+    /// pair: the only way it gets one is by generating its own.
+    #[test]
+    fn ut_self_signed_cache_is_independent_per_instance() {
+        let policy = ServerTlsPolicy::Tls {
+            identity: CertSource::SelfSigned {},
+        };
+        let cache_a = new_self_signed_cache();
+        build_server_config(&policy, "localhost", &cache_a).expect("builds");
+        assert!(
+            cache_a.lock().is_some(),
+            "cache_a should be populated by its own build"
+        );
+
+        // A second, freshly constructed instance's cache: must start empty, not carry over
+        // cache_a's already-cached pair — the only way `resolve_self_signed` would find it a
+        // pair without generating one.
+        let cache_b = new_self_signed_cache();
+        assert!(
+            cache_b.lock().is_none(),
+            "a freshly constructed instance's cache must start empty, never inheriting a \
+             torn-down instance's cached pair"
+        );
+    }
+
+    // Guards `ut_self_signed_pair_never_written_to_disk`, the only test in this file that
+    // changes the process cwd, so a parallel test run cannot race it. This lock only
+    // serializes against other lock-takers: any future test elsewhere in this binary that
+    // reads/writes a relative path without taking it can still race the cwd change here.
+    static CWD_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    /// OC-R-170 — a CSMS's cached self-signed pair is never written to disk: building and
+    /// reusing it from a cache, with the process cwd pointed at an empty scratch directory (so
+    /// any implicit relative-path write would land there and be caught), leaves that directory
+    /// untouched.
+    #[test]
+    fn ut_self_signed_pair_never_written_to_disk() {
+        let _guard = CWD_LOCK.lock().unwrap();
+        let original_cwd = std::env::current_dir().unwrap();
+        let dir = reserve_temp_dir("ferrowl_ocpp_oc170");
+        std::env::set_current_dir(dir.path()).unwrap();
+
+        let result = std::panic::catch_unwind(|| {
+            let before: Vec<_> = std::fs::read_dir(".").unwrap().collect();
+            assert!(before.is_empty(), "scratch dir starts empty");
+
+            let cache = new_self_signed_cache();
+            let policy = ServerTlsPolicy::Tls {
+                identity: CertSource::SelfSigned {},
+            };
+            build_server_config(&policy, "localhost", &cache).expect("builds");
+            build_server_config(&policy, "localhost", &cache).expect("builds (cache hit)");
+
+            let after: Vec<_> = std::fs::read_dir(".").unwrap().collect();
+            assert!(
+                after.is_empty(),
+                "generating and reusing a self-signed pair must not write any file to cwd"
+            );
+            // The scratch-cwd probe only catches an implicit relative-path write; a hard-coded
+            // absolute-path write elsewhere would pass this assertion undetected.
+        });
+
+        std::env::set_current_dir(&original_cwd).unwrap();
+        result.unwrap();
+    }
+
+    /// OC-R-172 — `build_server_config` returns `Some` for a `Tls` policy and `None` only for the
+    /// `ServerTlsPolicy::None` variant: a server configured for TLS can never silently fall
+    /// through to a plain (non-TLS) bind.
+    #[test]
+    fn ut_build_server_config_none_is_the_only_plain_tcp_path() {
+        let cache = new_self_signed_cache();
+        assert!(
+            build_server_config(&ServerTlsPolicy::None {}, "localhost", &cache)
+                .expect("builds")
+                .is_none()
+        );
+
+        let tls = ServerTlsPolicy::Tls {
+            identity: CertSource::SelfSigned {},
+        };
+        assert!(
+            build_server_config(&tls, "localhost", &cache)
+                .expect("builds")
+                .is_some()
+        );
     }
 
     /// OC-R-132 (cache regen) — resolving `CertSource::Files` clears the cache, so a later reversion to
@@ -1145,8 +1238,8 @@ mod tests {
     }
 
     #[test]
-    /// Deserializing a `HeaderDef` with a reserved name fails — the `try_from` gate applies on
-    /// load, not just via `HeaderDef::new`.
+    /// OC-R-153 — deserializing a `HeaderDef` with a reserved name fails — the `try_from` gate
+    /// applies on load, not just via `HeaderDef::new`.
     fn ut_header_def_deserialize_rejects_invalid() {
         let value = serde_json::json!({"name": "Authorization", "value": "x"});
         assert!(serde_json::from_value::<HeaderDef>(value).is_err());

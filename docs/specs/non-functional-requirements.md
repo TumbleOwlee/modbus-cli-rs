@@ -66,7 +66,13 @@ IDs stable, append-only (`NF-R-nnn`). See [`README.md`](./README.md).
 
 **NF-R-056** — `lefthook` enforces `cargo fmt --check` and `cargo clippy -D warnings` pre-commit.
 
-**NF-R-043** — A test that needs a TCP or UDP port obtains it from a guard that **holds the binding** until the code under test takes it over: `reserve_tcp_port() -> TcpPortGuard` and `reserve_udp_port() -> UdpPortGuard` bind `127.0.0.1:0`, keep the socket open, and expose `port() -> u16`, `into_listener() -> std::net::TcpListener` / `into_socket() -> std::net::UdpSocket` for a server that can adopt an already-bound socket, and `release() -> u16` for a server that can only bind by port number.
+**NF-R-043** — A test that needs a TCP or UDP port obtains it from `reserve_tcp_port() -> TcpPortGuard` or `reserve_udp_port() -> UdpPortGuard`, which bind `127.0.0.1:0` and **hold the binding** open until the code under test takes it over.
+
+**NF-R-064** — A port guard (NF-R-043) exposes `port() -> u16`, the port of the binding it holds.
+
+**NF-R-065** — A port guard (NF-R-043) exposes `into_listener() -> std::net::TcpListener` (TCP) / `into_socket() -> std::net::UdpSocket` (UDP), handing the already-bound socket to a server that can adopt one.
+
+**NF-R-066** — A port guard (NF-R-043) exposes `release() -> u16`, yielding the port for a server that can only bind by port number.
 
 **NF-R-057** — The port guard's `release()` (NF-R-043) is the sole sanctioned path that reopens a time-of-check/time-of-use window; every call site uses `into_listener()`/`into_socket()` where the server accepts a bound socket, and `release()` only where it does not.
 

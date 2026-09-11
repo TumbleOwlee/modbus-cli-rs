@@ -1,4 +1,4 @@
-//! `ModbusMonitorModule` (MB-R-076, MB-R-140–145): a monitor's construction/start/stop
+//! `ModbusMonitorModule` (MB-R-076, MB-R-211, MB-R-140–145): a monitor's construction/start/stop
 //! lifecycle. Unlike [`super::super::module::ModbusModule`] there is no `Instance<T>`, no
 //! operations list, no virtual store, and no Lua sim surface — a monitor owns exactly one log
 //! and one observed-value table, receive-only.
@@ -241,7 +241,7 @@ impl ModbusMonitorModule {
         true
     }
 
-    /// MB-R-148 — remove an interpretation from `unit`'s cached list by name (no-op if absent).
+    /// MB-R-216 — remove an interpretation from `unit`'s cached list by name (no-op if absent).
     pub fn remove_interpretation(&mut self, unit: UnitId, name: &str) {
         if let Some(list) = self.interpretations.get_mut(&unit) {
             list.retain(|(n, _)| n != name);
@@ -423,7 +423,7 @@ mod tests {
     }
 
     /// MB-R-076/145 — a monitor module buckets its interpretations by their own `slave_id` at
-    /// construction, and starts with an empty observed-value table, no register set.
+    /// construction. MB-R-211 — it starts with an empty observed-value table, no register set.
     #[test]
     fn ut_monitor_module_new_buckets_interpretations_by_slave_id() {
         let mut device = device_with_defs();
@@ -496,8 +496,8 @@ mod tests {
         assert!(!replaced);
     }
 
-    /// MB-R-148 — removing an interpretation deletes it outright, without touching any value
-    /// already written into the observed table.
+    /// MB-R-216 — removing an interpretation deletes it outright.
+    /// MB-R-217 — removal never touches any value already written into the observed table.
     #[test]
     fn ut_remove_interpretation_deletes_without_touching_table() {
         let mut module = ModbusMonitorModule::new(&spec(bad_rtu_endpoint()), &device_with_defs());
@@ -524,8 +524,8 @@ mod tests {
         );
     }
 
-    /// Per-unit-id isolation: editing/removing on one unit id never touches another's set, even
-    /// when both hold an interpretation of the same name.
+    /// MB-R-148, MB-R-216 — per-unit-id isolation: editing/removing on one unit id never touches
+    /// another's set, even when both hold an interpretation of the same name.
     #[test]
     fn ut_edit_and_remove_scoped_to_their_own_unit_id() {
         let mut module = ModbusMonitorModule::new(&spec(bad_rtu_endpoint()), &device_with_defs());
@@ -827,8 +827,9 @@ mod tests {
         assert_eq!(unrelated_registry.conflict("B", &path), None);
     }
 
-    /// network_log_level's monitor-specific Warning branch: a discarded malformed-frame line
-    /// classifies as Warning, matching the decode/match state machine's log wording.
+    /// MB-R-194 — network_log_level's monitor-specific Warning branch: a discarded
+    /// malformed-frame line classifies as Warning, matching the decode/match state machine's
+    /// log wording.
     #[test]
     fn ut_network_log_level_classifies_malformed_frame_as_warning() {
         let line = "Discarding malformed frame (checksum mismatch): 01 02 03";

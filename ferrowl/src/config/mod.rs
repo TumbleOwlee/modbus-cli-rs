@@ -413,7 +413,7 @@ mod tests {
         }
     }
 
-    /// CS-R-052 — a stray key beside `registers` (outside any `tls`/`security` subtree) still
+    /// CS-R-052, CS-R-072 — a stray key beside `registers` (outside any `tls`/`security` subtree) still
     /// loads silently, even though a retired-field scan now exists for TLS.
     #[test]
     fn ut_unknown_field_outside_tls_still_ignored() {

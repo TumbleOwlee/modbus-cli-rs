@@ -382,7 +382,7 @@ mod tests {
         assert_eq!(client.validate(), Err(PolicyError::EmptyCaFiles));
     }
 
-    /// MB-R-110, MB-R-167, MB-R-176, OC-R-035 — `CertSource::Ephemeral` is rejected as a client's mTLS identity
+    /// MB-R-110, MB-R-167, MB-R-176, OC-R-168 — `CertSource::Ephemeral` is rejected as a client's mTLS identity
     /// (Modbus and CS alike).
     #[test]
     fn ut_client_policy_rejects_ephemeral_identity() {

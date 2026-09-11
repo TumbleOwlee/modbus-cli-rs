@@ -115,6 +115,8 @@ mod tests {
         assert_eq!(table.read_words(&k, 0, 3), Some(vec![1, 9, 3]));
     }
 
+    /// MB-R-198 — a range with any unobserved address renders as not-yet-observed, never
+    /// decoding the observed part of a partially-unobserved range as a value.
     #[test]
     fn ut_observed_table_read_words_none_when_partial_range_unobserved() {
         let mut table = ObservedTable::default();

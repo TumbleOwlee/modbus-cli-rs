@@ -692,7 +692,7 @@ mod tests {
         );
     }
 
-    /// CS-R-055, OC-R-156 — `username`/`password` remain defined members of `security` and are unaffected
+    /// CS-R-071, OC-R-156 — `username`/`password` remain defined members of `security` and are unaffected
     /// by the strictness that governs the rest of the table.
     #[test]
     fn ut_security_table_accepts_username_password_beside_tls() {

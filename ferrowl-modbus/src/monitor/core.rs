@@ -1348,9 +1348,9 @@ mod tests {
         assert!(pushed[0].shape.is_none());
     }
 
-    /// Edge case (edge-cases.md's Monitor boundaries table) — `ReadWriteMultipleRegisters`
-    /// carries both its own read and write address/quantity pairs; captured `values` come from
-    /// the *read* response only, never the request's own written values.
+    /// MB-E-016 — `ReadWriteMultipleRegisters` carries both its own read and write
+    /// address/quantity pairs; captured `values` come from the *read* response only, never the
+    /// request's own written values.
     #[tokio::test]
     async fn ut_read_write_multiple_registers_shape_has_both_addresses_and_read_values_only() {
         let log = RecordingLog::default();

@@ -51,3 +51,5 @@ mlua = { workspace = true }
 [dev-dependencies]
 # Held-port and per-run temp-dir guards for tests (NF-R-043/044).
 ferrowl-test-support = { path = "../ferrowl-test-support" }
+# A real client, for a test that reads a served module's store over the wire (MB-R-210).
+rust-modbus = { workspace = true }

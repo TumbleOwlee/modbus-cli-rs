@@ -142,7 +142,17 @@ Boundary behavior, error semantics, intentional constraints. The known-limitatio
 
 ### Only six transports
 
-**MB-E-078** — `RtuOverTcp` reuses the TCP config verbatim; only wire framing differs. `Udp` reuses the TCP config minus `tls` (no handshake, no DTLS); `Udp` does not inherit the RTU-family broadcast slave id 0 handling (MB-R-101–MB-R-103), so on `Udp`, slave id 0 is ordinary. `Ascii` reuses the RTU config verbatim; only framing differs — LRC checksum and `:`/CR LF delimiters instead of CRC and silence-delimited binary. `AsciiOverTcp` reuses the TCP config verbatim, same framing swap as `RtuOverTcp`. Both `Ascii` and `AsciiOverTcp` inherit the RTU-family broadcast handling (MB-R-101–MB-R-103), unlike `Udp`.
+**MB-E-078** — `RtuOverTcp` reuses the TCP config verbatim; only wire framing differs.
+
+**MB-E-084** — `Udp` reuses the TCP config minus `tls` (no handshake, no DTLS).
+
+**MB-E-085** — `Udp` does not inherit the RTU-family broadcast slave id 0 handling (MB-R-101–MB-R-103), so on `Udp` slave id 0 is an ordinary slave id.
+
+**MB-E-086** — `Ascii` reuses the RTU config verbatim; only framing differs — LRC checksum and `:`/CR LF delimiters instead of CRC and silence-delimited binary.
+
+**MB-E-087** — `AsciiOverTcp` reuses the TCP config verbatim, with the same framing swap `Ascii` makes to RTU (MB-E-086, MB-E-078).
+
+**MB-E-088** — Both `Ascii` and `AsciiOverTcp` inherit the RTU-family broadcast slave id 0 handling (MB-R-101–MB-R-103), unlike `Udp` (MB-E-085).
 
 ### Display resolution is one-way
 

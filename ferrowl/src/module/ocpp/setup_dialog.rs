@@ -1019,7 +1019,7 @@ mod tests {
     // is valid, config-file-only) hands that section back unchanged: the security UI is hidden for
     // ws, and a hidden section must never clobber the file.
     #[test]
-    /// UI-R-024 — a ws setup resolves preserving the prefilled security.
+    /// A ws setup resolves preserving the prefilled security.
     fn ut_resolve_ws_preserves_prefilled_security() {
         let security = OcppSecurityConfig {
             username: Some("cp001".into()),
@@ -1447,7 +1447,7 @@ mod tests {
     }
 
     #[test]
-    /// OC-R-112, UI-R-024 — a server TLS setup with both `cert_file`/`key_file` blank and
+    /// OC-R-112 — a server TLS setup with both `cert_file`/`key_file` blank and
     /// `self_signed` off refuses to resolve, keeping the dialog open.
     fn ut_server_tls_missing_cert_is_rejected() {
         let mut d = dialog_with(1);
@@ -1470,7 +1470,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-024 — a server TLS setup with a nonexistent cert file fails validation.
+    /// A server TLS setup with a nonexistent cert file fails validation.
     fn ut_server_tls_nonexistent_cert_is_rejected() {
         let mut d = dialog_with(1);
         d.tls_level.state.set_selection(TlsLevel::Tls.index());
@@ -1481,7 +1481,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-024 — a server TLS setup with valid files passes validation.
+    /// A server TLS setup with valid files passes validation.
     fn ut_server_tls_valid_files_pass() {
         let dir = reserve_temp_dir("ferrowl_ocpp_setup");
         let cert = tmp_file(&dir, "cert.crt");
@@ -1494,7 +1494,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-024 — a mutual-TLS server missing its client CA fails validation.
+    /// A mutual-TLS server missing its client CA fails validation.
     fn ut_server_mutual_tls_missing_client_ca_is_rejected() {
         let dir = reserve_temp_dir("ferrowl_ocpp_setup");
         let cert = tmp_file(&dir, "cert2.crt");
@@ -1654,7 +1654,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-024 — a mutual-TLS client missing its cert/key fails validation.
+    /// OC-R-112 — a mutual-TLS client missing its cert/key fails validation.
     fn ut_client_mutual_tls_missing_cert_key_is_rejected() {
         let mut d = dialog_with(0); // Client
         d.tls_level.state.set_selection(TlsLevel::MutualTls.index());
@@ -1670,7 +1670,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-024 — a client CA list entry, when set, must exist to pass validation.
+    /// A client CA list entry, when set, must exist to pass validation.
     fn ut_client_ca_files_entry_when_set_must_exist() {
         let mut d = dialog_with(0);
         d.tls_level.state.set_selection(TlsLevel::Tls.index());
@@ -1680,14 +1680,14 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-024 — a client with the selector Off passes validation.
+    /// A client with the selector Off passes validation.
     fn ut_client_selector_off_is_allowed() {
         let d = dialog_with(0); // Client, selector defaults to Off
         assert!(d.resolve().is_ok());
     }
 
     #[test]
-    /// UI-R-024 — a ws setup never requires security material.
+    /// A ws setup never requires security material.
     fn ut_ws_never_requires_security() {
         let mut d = OcppSetupDialog::new(); // Ws, Client by default
         set_input(&mut d.name, "cs-1");
@@ -1698,7 +1698,7 @@ mod tests {
     // --- edit -> resolve round trip ------------------------------------------------------------
 
     #[test]
-    /// UI-R-024 — Edit mode round-trips a mutual-TLS server config through the dialog.
+    /// Edit mode round-trips a mutual-TLS server config through the dialog.
     fn ut_edit_resolve_roundtrip_mutual_tls_server() {
         let dir = reserve_temp_dir("ferrowl_ocpp_setup");
         let cert = tmp_file(&dir, "rt_cert.crt");
@@ -1736,7 +1736,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-024 — Edit mode round-trips a skip-verify client config through the dialog.
+    /// Edit mode round-trips a skip-verify client config through the dialog.
     fn ut_edit_resolve_roundtrip_client_skip_verify() {
         let spec = OcppSpec {
             name: "cp-1".into(),
@@ -2174,7 +2174,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-024 — the TLS + Basic Auth row carries no Self-Signed/Skip-Verify toggle:
+    /// The TLS + Basic Auth row carries no Self-Signed/Skip-Verify toggle:
     /// those never appear on the same line as TLS/Basic Auth/Username/Password.
     fn ut_tls_level_row_has_no_side_toggle() {
         let mut d = dialog_with(1); // Server
@@ -2193,7 +2193,7 @@ mod tests {
         );
     }
 
-    /// UI-R-024 — an empty client-CA list shows no placeholder entry, and the DEL button is not
+    /// An empty client-CA list shows no placeholder entry, and the DEL button is not
     /// rendered at all, so ADD gets the row's full width, exercised through the outer dialog's
     /// own render (unlike the Modbus dialog, this render path does not itself recover focus off
     /// a now-hidden DEL button — that guard exists only in Modbus's render(); OCPP's own DEL
@@ -2216,7 +2216,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-024 — the client-CA row's DEL button hugs the dialog's right inner edge with no
+    /// The client-CA row's DEL button hugs the dialog's right inner edge with no
     /// trailing dead space, matching every other full-width row (mirrors the Modbus dialog).
     fn ut_ca_delete_button_hugs_right_edge() {
         let mut d = dialog_with(1); // Server

@@ -390,7 +390,7 @@ mod tests {
     // --- TlsLevel::from_config -----------------------------------------------------------
 
     #[test]
-    /// UI-R-024 — the TLS fields load `Off` from a no-TLS config for both roles.
+    /// The TLS fields load `Off` from a no-TLS config for both roles.
     fn ut_from_config_none_both_roles() {
         let cfg = OcppSecurityConfig::default();
         assert_eq!(TlsLevel::from_config(&cfg, OcppRole::Client), TlsLevel::Off);
@@ -398,7 +398,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-024 — a client TLS config loads into the CA-file field.
+    /// A client TLS config loads into the CA-file field.
     fn ut_from_config_tls_client_is_ca_file() {
         let cfg = OcppSecurityConfig {
             tls: OcppTlsConfig {
@@ -415,7 +415,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-024 — a server TLS config loads into the cert and key fields.
+    /// A server TLS config loads into the cert and key fields.
     fn ut_from_config_tls_server_is_cert_and_key() {
         let cfg = OcppSecurityConfig {
             tls: OcppTlsConfig {
@@ -488,7 +488,7 @@ mod tests {
     }
 
     #[test]
-    /// OC-R-116, UI-R-024 — a mutual-TLS client config loads into the client-cert fields.
+    /// OC-R-116 — a mutual-TLS client config loads into the client-cert fields.
     fn ut_from_config_mutual_tls_client_is_client_cert() {
         let cfg = OcppSecurityConfig {
             tls: OcppTlsConfig {
@@ -512,7 +512,7 @@ mod tests {
     }
 
     #[test]
-    /// OC-R-113, UI-R-024 — a mutual-TLS server config loads at the MutualTls level.
+    /// OC-R-113 — a mutual-TLS server config loads at the MutualTls level.
     fn ut_from_config_mutual_tls_server() {
         let cfg = OcppSecurityConfig {
             tls: OcppTlsConfig {
@@ -623,7 +623,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-024 — a mutual-TLS client build keeps the client cert/key (and any trust-anchor CA
+    /// A mutual-TLS client build keeps the client cert/key (and any trust-anchor CA
     /// file text set alongside it — the two are independent axes, both legal under mTLS).
     fn ut_build_config_mutual_tls_client_keeps_client_cert_key() {
         let cfg = TlsLevel::MutualTls
@@ -647,7 +647,7 @@ mod tests {
     }
 
     #[test]
-    /// OC-R-125 — Root Store On resolves the client verification to `CertVerification::
+    /// OC-R-173 — Root Store On resolves the client verification to `CertVerification::
     /// RootStore` with the list as `extra_ca_files`, empty or not.
     fn ut_cs_root_store_on_resolves_root_store_with_list() {
         let list = ["ca1.pem".to_string()];
@@ -672,6 +672,24 @@ mod tests {
         i.root_store = false;
         let err = TlsLevel::Tls.build_config(OcppRole::Client, i).unwrap_err();
         assert!(err.contains("Root Store is Off"));
+    }
+
+    #[test]
+    /// OC-R-174 — Root Store Off with a non-empty CA list resolves the client verification to
+    /// `CertVerification::CaFiles` with the list as `ca_files`.
+    fn ut_cs_root_store_off_resolves_ca_files_with_list() {
+        let list = ["ca1.pem".to_string()];
+        let mut i = inputs("", "", "", "", "", "", &list);
+        i.root_store = false;
+        let cfg = TlsLevel::Tls.build_config(OcppRole::Client, i).unwrap();
+        assert_eq!(
+            cfg.tls.client,
+            ClientTlsPolicy::Tls {
+                verification: CertVerification::CaFiles {
+                    ca_files: vec!["ca1.pem".to_string()],
+                },
+            }
+        );
     }
 
     #[test]
@@ -744,7 +762,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-024 — a client's CA file, when set, must exist; skip-verify alone needs no file.
+    /// A client's CA file, when set, must exist; skip-verify alone needs no file.
     fn ut_validate_security_client_ca_file_must_exist_when_set() {
         let cfg = OcppSecurityConfig {
             tls: OcppTlsConfig {
@@ -762,7 +780,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-024 — a client at mTLS requires existing client cert and key files.
+    /// A client at mTLS requires existing client cert and key files.
     fn ut_validate_security_client_mutual_tls_requires_client_cert_key_files() {
         let cfg = OcppSecurityConfig {
             tls: OcppTlsConfig {

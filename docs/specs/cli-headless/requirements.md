@@ -12,7 +12,11 @@ Per [`../README.md`](../README.md)'s ownership rules, this area does **not** own
 
 **CL-R-002** — The top-level command accepts a repeatable `--module` option whose value is a `key=val,...` module descriptor ([`api-contract.md`](./api-contract.md)). Each occurrence contributes one Modbus module instance, in command-line order.
 
-**CL-R-003** — The top-level command accepts a repeatable `--session` option naming a session file. Each file's instances are resolved and contribute to the started set. Session instances resolve before `--module` instances.
+**CL-R-003** — The top-level command accepts a repeatable `--session` option naming a session file.
+
+**CL-R-053** — Each session file named by `--session` (CL-R-003) has its instances resolved, and every one of them contributes to the started set.
+
+**CL-R-054** — Session instances (CL-R-003) resolve before `--module` instances.
 
 **CL-R-004** — The top-level command accepts a repeatable `--device` option naming a device-config file.
 

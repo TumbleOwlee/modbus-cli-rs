@@ -23,7 +23,9 @@ Boundary and error behavior of the envelope, plus known limitations. Protocol-sp
 
 ## Duplicate instance names
 
-Two instances resolving to the same `name` do not collide: the first keeps it; each later duplicate gets ` (2)`, ` (3)`, … in creation order, skipping taken suffixes. De-duplication spans **both** module types (a modbus `evse` and an ocpp `evse` become `evse` and `evse (2)`). The renamed tab logs a warning.
+- **CS-E-024** — **Duplicate `name`** — two instances resolving to the same `name` do not collide: the first keeps it, and each later duplicate gets ` (2)`, ` (3)`, … in creation order, skipping suffixes already taken.
+- **CS-E-025** — **De-duplication spans module types** — name de-duplication (CS-E-024) treats both module types as one namespace: a modbus `evse` and an ocpp `evse` become `evse` and `evse (2)`.
+- **CS-E-026** — **Rename is logged** — a tab renamed by de-duplication (CS-E-024) logs a warning.
 
 ## Save targets
 

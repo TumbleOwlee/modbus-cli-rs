@@ -696,7 +696,7 @@ mod tests {
     // with the edited endpoint and security. Hence the wss + Basic Auth edit below: the rebind
     // must not leave a plain unauthenticated listener bound.
     #[tokio::test]
-    /// OC-R-138, UI-R-024 — applying an edit updates the module spec and stops its listener; the listener rebinds on the next tick without an explicit `:start`.
+    /// OC-R-138 — applying an edit updates the module spec and stops its listener; the listener rebinds on the next tick without an explicit `:start`.
     async fn ut_edit_apply_updates_spec_and_stops_listener() {
         let mut v = server_view();
         let mut edited = v.spec.clone();

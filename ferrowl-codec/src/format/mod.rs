@@ -514,9 +514,9 @@ mod tests {
     }
 
     #[test]
-    /// MB-R-154 — a format's display text is its name plus a parenthesized qualifier:
+    /// MB-R-154, MB-R-218 — a format's display text is its name plus a parenthesized qualifier:
     /// byte order for numeric formats (both `Big`/`Little`), alignment for `Ascii`
-    /// (both `Left`/`Right`).
+    /// (both `Left`/`Right`); `Ascii` itself renders as `ASCII`.
     fn ut_format_display_all_variants() {
         assert_eq!(
             Format::Ascii(Alignment::Left, Width(2)).to_string(),
@@ -625,6 +625,19 @@ mod tests {
             Format::f64(e, WordOrder::Normal, res()).to_string(),
             "F64 (Little Endian)"
         );
+    }
+
+    #[test]
+    /// MB-R-219 — a format's display text never shows register order, resolution, or bit-field
+    /// selector, even when they are non-default.
+    fn ut_format_display_never_shows_order_resolution_bitfield() {
+        let scaled = Format::u16(
+            Endian::Big,
+            WordOrder::Reversed,
+            Resolution(0.5),
+            BitField { mask: 0x0FF0 },
+        );
+        assert_eq!(scaled.to_string(), "U16 (Big Endian)");
     }
 
     #[test]

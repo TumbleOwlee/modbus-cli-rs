@@ -818,6 +818,7 @@ dependencies = [
  "mlua",
  "parking_lot",
  "ratatui",
+ "rust-modbus",
  "serde",
  "serde_json",
  "thiserror 2.0.20",

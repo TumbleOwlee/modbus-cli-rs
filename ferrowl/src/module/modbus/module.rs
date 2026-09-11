@@ -641,7 +641,7 @@ mod tests {
     }
 
     #[test]
-    /// MB-R-076 — a module instance is a TCP server owning one store, register set, and log; register-cache edits rebuild it (MB-R-088).
+    /// MB-R-088 — a TCP server module's register-cache edits (add/rename/remove) rebuild its register set.
     fn ut_module_new_tcp_server_and_sync_accessors() {
         use super::ModbusModule;
         use crate::config::{Endpoint, ModuleSpec, Role};
@@ -681,6 +681,60 @@ mod tests {
                 .set_log_base(Some("/no/such/ferrowl/dir/base.log"))
                 .is_err()
         );
+    }
+
+    #[tokio::test]
+    /// MB-R-210 — a module instance owns one shared register store and one log: two accessor
+    /// calls return handles to the same store/log (not fresh copies), and the store `memory()`
+    /// hands back is literally what the running network instance serves from — a raw write
+    /// through `memory()` is visible to a real client's read over the wire.
+    async fn ut_module_owns_one_shared_store_and_log() {
+        use super::ModbusModule;
+        use ferrowl_modbus::{Address, Key, SlaveKey};
+        use ferrowl_store::Range;
+
+        let (device, _dir) = device_with_defs();
+        let mut module = ModbusModule::new(&test_spec("mb210", 0), &device);
+        assert!(std::sync::Arc::ptr_eq(&module.memory(), &module.memory()));
+        assert!(std::sync::Arc::ptr_eq(&module.log(), &module.log()));
+
+        module.start().await.expect("start");
+        let mut addr = None;
+        for _ in 0..50 {
+            addr = module.bound_addr();
+            if addr.is_some() {
+                break;
+            }
+            tokio::time::sleep(tokio::time::Duration::from_millis(20)).await;
+        }
+        let addr = addr.expect("listener must have bound within 1s");
+
+        module.memory().write().write_unchecked(
+            Key {
+                id: SlaveKey {
+                    slave_id: UnitId(1),
+                    kind: Kind::HoldingRegister,
+                },
+            },
+            &Range::new(0, 1),
+            &[99u16],
+        );
+
+        let mut client =
+            rust_modbus::Client::<_, rust_modbus::Tcp>::new(rust_modbus::FrameTransport::new(
+                tokio::net::TcpStream::connect(addr).await.expect("connect"),
+            ));
+        let registers = client
+            .read_holding_registers(UnitId(1), Address(0), rust_modbus::Quantity(1))
+            .await
+            .expect("a real client must read the value written through memory()");
+        assert_eq!(
+            registers[0],
+            rust_modbus::RegisterValue(99),
+            "the network instance must serve from the exact store memory() returns"
+        );
+
+        module.stop().await.expect("stop");
     }
 
     #[tokio::test]
@@ -820,7 +874,7 @@ mod tests {
     }
 
     #[test]
-    /// MB-R-076 — a module instance can be an RTU client, building its register set from the device config.
+    /// An RTU client module instance builds its register set from the device config.
     fn ut_module_new_rtu_client() {
         use super::ModbusModule;
         use crate::config::{Endpoint, ModuleSpec, Role};

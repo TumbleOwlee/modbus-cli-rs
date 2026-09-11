@@ -70,7 +70,11 @@ Per [`../README.md`](../README.md)'s ownership rule, this area owns only the *en
 
 ## Save / load & round-trip
 
-**CS-R-030** — The running TUI saves the current module instances as a session file on `:write`. No path given → `session.toml`. Encoding from the target extension per CS-R-002.
+**CS-R-030** — The running TUI saves the current module instances as a session file on `:write`.
+
+**CS-R-069** — `:write` with no path given (CS-R-030) writes `session.toml`.
+
+**CS-R-070** — A session file written by `:write` (CS-R-030) is encoded from the target path's extension per CS-R-002.
 
 **CS-R-031** — A save persists **configuration only**: module instance specs, session scripts, session interval, freshly stamped `version`.
 
@@ -124,6 +128,10 @@ Per [`../README.md`](../README.md)'s ownership rule, this area owns only the *en
 
 **CS-R-054** — Loading a device config self-heals a legacy per-register `update` snippet on **every** load, not only via `migrate`, folding it into the global `scripts` list and clearing the per-register field, so a subsequent save writes only the global list.
 
-**CS-R-055** — Strict field checking applies throughout a TLS subtree (the `tls` container, each `server`/`client` policy block, each policy's `identity`/`verification` payload) and to the OCPP `security` table enclosing one, so a field the enclosing variant or table does not define fails the load rather than being ignored under CS-R-052; `username` and `password` remain defined members of `security`. The sole exception to CS-R-052, because silently ignoring a retired TLS field can weaken an endpoint's security posture.
+**CS-R-055** — Strict field checking applies throughout a TLS subtree (the `tls` container, each `server`/`client` policy block, each policy's `identity`/`verification` payload) and to the OCPP `security` table enclosing one, so a field the enclosing variant or table does not define fails the load rather than being ignored under CS-R-052.
+
+**CS-R-071** — `username` and `password` remain defined members of the OCPP `security` table, so neither is rejected by CS-R-055's strict checking.
+
+**CS-R-072** — CS-R-055 is the sole exception to CS-R-052: no table outside a TLS subtree and its enclosing OCPP `security` table is strict-checked, the exception being made because silently ignoring a retired TLS field can weaken an endpoint's security posture.
 
 **CS-R-068** — A table in the strictly checked TLS subtree or OCPP `security` table (CS-R-055) naming a pre-merge field (`require_client_cert`, `client_ca_files`, `client_ca_file`, `client_cert_skip_verify`, `insecure_skip_verify`, `client_cert_file`, `client_key_file`, `client_self_signed`, `ca_file`, or a bare `self_signed`/`cert_file`/`key_file` outside an `identity` block) fails the load with an error naming the retired fields found and pointing at the current block shape. No value migrated.

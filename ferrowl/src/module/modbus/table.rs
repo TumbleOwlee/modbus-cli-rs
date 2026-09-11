@@ -326,14 +326,14 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-046 — an unchanged register row carries no change-highlight cell style.
+    /// UI-R-185 — an unchanged register row carries no change-highlight cell style.
     fn ut_no_change_has_no_cell_styles() {
         let d = definition();
         assert!(d.cell_styles().iter().all(Option::is_none));
     }
 
     #[test]
-    /// UI-R-046 — a recently-changed register value highlights its row for a brief window.
+    /// UI-R-185 — a recently-changed register value highlights its row for a brief window.
     fn ut_recent_change_highlights_full_row() {
         let mut d = definition();
         d.changed_at = Some(Instant::now());
@@ -341,12 +341,18 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-046 — the change highlight expires after its window.
+    /// UI-R-185 — the change highlight expires after its window.
     fn ut_highlight_expires_after_window() {
         let mut d = definition();
         d.changed_at = Instant::now().checked_sub(CHANGE_HIGHLIGHT + Duration::from_secs(1));
         assert!(d.changed_at.is_some(), "back-dating must succeed");
         assert!(d.cell_styles().iter().all(Option::is_none));
+    }
+
+    #[test]
+    /// UI-R-185 — the change-highlight window is 2 seconds.
+    fn ut_change_highlight_window_is_two_seconds() {
+        assert_eq!(CHANGE_HIGHLIGHT, Duration::from_secs(2));
     }
 
     fn named(name: &str, slave: u8) -> Definition {

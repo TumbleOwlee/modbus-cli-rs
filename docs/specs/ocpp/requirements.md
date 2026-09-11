@@ -102,7 +102,13 @@ IDs stable, append-only (`OC-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **OC-R-034** — A CS's trust anchors are exactly those its `verification` names: `CertVerification::RootStore` = webpki root store plus every `extra_ca_files` entry; `CertVerification::CaFiles` = exactly the named `ca_files`; `CertVerification::Skip` = no anchor (OC-R-036).
 
-**OC-R-035** — A CS presents a client certificate when, and only when, its policy is `ClientTlsPolicy::Mutual`; `Tls` and `None` present none. `CertSource::Files` presents the PEM pair at `cert_file`/`key_file`; `CertSource::SelfSigned` presents OC-R-115's cached ephemeral pair. `CertSource::Ephemeral` is rejected at construction as a client identity (MB-R-176).
+**OC-R-035** — A CS presents a client certificate when, and only when, its policy is `ClientTlsPolicy::Mutual`; `Tls` and `None` present none.
+
+**OC-R-166** — A CS presenting a client certificate (OC-R-035) with `CertSource::Files` presents the PEM pair at `cert_file`/`key_file`.
+
+**OC-R-167** — A CS presenting a client certificate (OC-R-035) with `CertSource::SelfSigned` presents OC-R-115's cached ephemeral pair.
+
+**OC-R-168** — `CertSource::Ephemeral` as a CS client identity (OC-R-035) is rejected at construction (MB-R-176).
 
 **OC-R-036** — A CS with `CertVerification::Skip` accepts any server certificate without authenticating it (signature check performed, chain/identity check skipped).
 
@@ -112,7 +118,11 @@ IDs stable, append-only (`OC-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **OC-R-037** — A CSMS TLS server certificate comes from the PEM files of `CertSource::Files` or an ephemeral self-signed certificate (`SelfSigned` or `Ephemeral`).
 
-**OC-R-131** — A CSMS's self-signed pair (OC-R-037) is generated once and cached for the module instance's life, reused across every bind, reconnect-driven rebind, `:restart`/`:reload`, and config edit leaving the identity self-signed. A torn-down and freshly constructed instance discards the cache. Never written to disk.
+**OC-R-131** — A CSMS's self-signed pair (OC-R-037) is generated once and cached for the module instance's life, reused across every bind, reconnect-driven rebind, `:restart`/`:reload`, and config edit leaving the identity self-signed.
+
+**OC-R-169** — A torn-down and freshly constructed CSMS instance discards the cached self-signed pair (OC-R-131) and generates a new one.
+
+**OC-R-170** — A CSMS's cached self-signed pair (OC-R-131) is never written to disk.
 
 **OC-R-132** — A CSMS's cached self-signed pair (OC-R-131) is regenerated only when the identity changes to `SelfSigned`/`Ephemeral` from `Files`, or the TLS mode transitions from `None` to `Tls`/`Mutual` while the identity is already self-signed.
 
@@ -132,7 +142,11 @@ IDs stable, append-only (`OC-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **OC-R-097** — The scheme is authoritative for a client's transport the same way: a `ws://` CS endpoint connects in plaintext and ignores any TLS material.
 
-**OC-R-095** — A `wss://` **server** endpoint whose `identity` is `CertSource::Ephemeral` binds with an ephemeral self-signed certificate and reports the fallback in the module log. `CertSource::SelfSigned` binds the same way without logging a fallback. A `wss://` server never silently binds plain TCP.
+**OC-R-095** — A `wss://` **server** endpoint whose `identity` is `CertSource::Ephemeral` binds with an ephemeral self-signed certificate and reports the fallback in the module log.
+
+**OC-R-171** — A `wss://` server endpoint whose `identity` is `CertSource::SelfSigned` binds with a self-signed certificate as OC-R-095 does, without logging a fallback.
+
+**OC-R-172** — A `wss://` server endpoint (OC-R-095) never silently binds plain TCP.
 
 **OC-R-096** — A `wss://` server's TLS material follows its `identity`: `SelfSigned` presents an ephemeral self-signed certificate; `Files` presents the named certificate + key; `Ephemeral` presents OC-R-095's logged fallback. Self-signed pair cadence per OC-R-037.
 
@@ -192,7 +206,11 @@ IDs stable, append-only (`OC-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **OC-R-148** — The CS (client) role Self Signed toggle (OC-R-116) leaves the hidden Client Cert/Key inputs' stored text unmodified, so Off restores and re-requires the paths.
 
-**OC-R-125** — The dialog's client (CS) role offers, whenever Skip-Verify is Off and the TLS selector (OC-R-127) is TLS or mTLS, a Root Store toggle (default On) plus the shared CA list widget (OC-R-113) holding zero or more server-CA paths, replacing the single `ca_file` input. Root Store On → `CertVerification::RootStore` with the list as `extra_ca_files`, empty or not; Off → `CertVerification::CaFiles` with the list as `ca_files`.
+**OC-R-125** — The dialog's client (CS) role offers, whenever Skip-Verify is Off and the TLS selector (OC-R-127) is TLS or mTLS, a Root Store toggle (default On) plus the shared CA list widget (OC-R-113) holding zero or more server-CA paths, replacing the single `ca_file` input.
+
+**OC-R-173** — With the client-role Root Store toggle On (OC-R-125), the config resolves to `CertVerification::RootStore` with the CA list as `extra_ca_files`, empty or not.
+
+**OC-R-174** — With the client-role Root Store toggle Off (OC-R-125), the config resolves to `CertVerification::CaFiles` with the CA list as `ca_files`.
 
 **OC-R-154** — With the client-role Root Store toggle (OC-R-125) Off, an empty shared CA list is a validation error refusing to close the dialog (OC-R-150).
 

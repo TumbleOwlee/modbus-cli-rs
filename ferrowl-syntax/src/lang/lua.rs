@@ -279,7 +279,10 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-038 — a Lua long string is highlighted across line boundaries via carry-over state.
+    /// UI-R-038 — a Lua long string is highlighted as that construct on every line from the one
+    /// carrying the opening delimiter through the one carrying the closing delimiter, via
+    /// carry-over state, rather than restarting as ordinary code partway through the closing
+    /// line.
     fn ut_long_string_carries_across_lines() {
         let (spans1, state1) =
             top_highlight_line(Language::Lua, "local s = [==[", LineState::default());
@@ -291,12 +294,18 @@ mod tests {
         // The whole line should be swallowed as string, not tokenized as an identifier.
         assert_eq!(spans2, vec![(0, 12, SyntaxKind::String)]);
 
-        let (_spans3, state3) = top_highlight_line(Language::Lua, "]==]", state2);
+        let (spans3, state3) = top_highlight_line(Language::Lua, "]==]", state2);
         assert_eq!(state3.0, LuaCarry::None);
+        // The closing-delimiter line itself is highlighted as String through the closer, not
+        // left untokenized once the carry state is consumed.
+        assert_eq!(spans3, vec![(0, 4, SyntaxKind::String)]);
     }
 
     #[test]
-    /// UI-R-038 — a Lua long comment is highlighted across line boundaries via carry-over state.
+    /// UI-R-038 — a Lua long comment is highlighted as that construct on every line from the one
+    /// carrying the opening delimiter through the one carrying the closing delimiter, via
+    /// carry-over state, rather than restarting as ordinary code partway through the closing
+    /// line.
     fn ut_long_comment_carries_across_lines() {
         let (_spans1, state1) =
             top_highlight_line(Language::Lua, "--[[ start", LineState::default());
@@ -306,8 +315,12 @@ mod tests {
         assert_eq!(state2.0, LuaCarry::LongComment(0));
         assert_eq!(spans2, vec![(0, 11, SyntaxKind::Comment)]);
 
-        let (_spans3, state3) = top_highlight_line(Language::Lua, "]] print(1)", state2);
+        let (spans3, state3) = top_highlight_line(Language::Lua, "]] print(1)", state2);
         assert_eq!(state3.0, LuaCarry::None);
+        // Only the closing delimiter itself is Comment; what follows on that same line is
+        // ordinary code, tokenized normally once the construct has actually closed.
+        assert_eq!(spans3[0], (0, 2, SyntaxKind::Comment));
+        assert!(spans3.iter().skip(1).all(|s| s.2 != SyntaxKind::Comment));
     }
 
     #[test]

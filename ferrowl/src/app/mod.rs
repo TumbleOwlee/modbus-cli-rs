@@ -786,6 +786,37 @@ mod tests {
     }
 
     #[test]
+    /// UI-R-189 — each tab pairs one module content view with its own log pane: two tabs' log
+    /// panes are distinct, not shared.
+    fn ut_tab_pairs_view_with_its_own_log_pane() {
+        use super::testkit::{MockView, build_app};
+        let app = build_app(
+            ["a", "b"]
+                .iter()
+                .map(|n| MockView::pair(n).0.boxed())
+                .collect(),
+        );
+        assert!(!std::sync::Arc::ptr_eq(&app.tabs[0].log, &app.tabs[1].log));
+    }
+
+    #[test]
+    /// UI-R-190 — exactly one tab is active and rendered; the others are not.
+    fn ut_only_active_tab_is_rendered() {
+        use super::testkit::{MockView, build_app};
+        let (a, ha) = MockView::pair("a");
+        let (b, hb) = MockView::pair("b");
+        let mut app = build_app(vec![a.boxed(), b.boxed()]);
+        app.active = 1;
+        app.draw().unwrap();
+        assert_eq!(ha.renders(), 0, "inactive tab's view must not render");
+        assert_eq!(
+            hb.renders(),
+            1,
+            "the active tab's view renders exactly once"
+        );
+    }
+
+    #[test]
     /// UI-R-020 — while the command line is focused, the help popup lists both the app-level
     /// commands and the active view's advertised module commands.
     fn ut_command_help_lists_app_and_active_view_commands() {

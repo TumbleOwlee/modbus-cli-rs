@@ -758,7 +758,7 @@ mod tests {
     }
 
     /// MB-R-122 — an Ascii client instance surfaces a serial-open failure from `start`
-    /// exactly like an RTU client instance (MB-R-075/124), ending the task (reconnect off).
+    /// exactly like an RTU client instance (MB-R-209/124), ending the task (reconnect off).
     #[tokio::test]
     async fn ascii_client_open_failure_ends_task() {
         let mut instance = Instance::with_ascii_client(config::ClientConfig {

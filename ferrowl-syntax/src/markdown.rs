@@ -612,7 +612,8 @@ mod tests {
     }
 
     #[test]
-    /// Constructs the block model does not recognize report no inline spans on the inline path.
+    /// UI-E-091 — tables, raw HTML, footnotes, reference links, and autolinks render as plain
+    /// text: the inline path reports no spans for them.
     fn ut_unsupported_inline_constructs_report_no_spans() {
         let cases = [
             "| a | b |",

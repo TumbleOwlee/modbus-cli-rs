@@ -39,7 +39,7 @@ mod tests {
     ];
 
     #[test]
-    /// SC-R-036 — `templates(ctx)` returns exactly the templates declaring `ctx`.
+    /// SC-R-063 — `templates(ctx)` returns exactly the templates declaring `ctx`.
     fn ut_templates_filtered_by_context() {
         for ctx in CONTEXTS {
             for template in templates(ctx) {
@@ -62,7 +62,6 @@ mod tests {
     }
 
     #[test]
-    /// SC-R-036 — every script context has at least one template, so the browser is never empty.
     fn ut_every_context_has_a_template() {
         for ctx in CONTEXTS {
             assert!(!templates(ctx).is_empty(), "{ctx:?} has no template");

@@ -528,7 +528,7 @@ mod tests {
     }
 
     #[test]
-    /// SC-R-035 — a one-shot run executes the script against the module's registers without a sim.
+    /// SC-R-058 — a one-shot run executes the script against the module's registers without a sim.
     fn ut_run_script_once_writes_register() {
         let memory = evse_memory();
         let log = script_log();
@@ -560,7 +560,7 @@ mod tests {
     }
 
     #[test]
-    /// SC-R-049 — a failing one-shot logs under `[run]`, never `[sim]`: headless `--exit-on-error`
+    /// SC-R-049, SC-R-056 — a failing one-shot logs under `[run]`, never `[sim]`: headless `--exit-on-error`
     /// keys its exit code off `[sim]` (CL-R-031) and must not see an interactive test run.
     fn ut_run_script_once_error_logged_with_run_prefix() {
         let log = script_log();

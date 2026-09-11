@@ -138,7 +138,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-024 — a ws setup preserves the loaded security config on resolve.
+    /// A ws setup preserves the loaded security config on resolve.
     fn ut_ws_preserves_loaded_security() {
         let mut loaded = OcppDeviceConfig {
             security: OcppSecurityConfig {
@@ -168,7 +168,7 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-024 — a wss setup resolves the dialog's security config over the loaded one.
+    /// A wss setup resolves the dialog's security config over the loaded one.
     fn ut_wss_overwrites_loaded_security_with_dialog() {
         let mut loaded = OcppDeviceConfig {
             security: OcppSecurityConfig {

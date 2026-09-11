@@ -50,7 +50,7 @@ fn bad_config(reconnect: bool) -> rtu::Config {
 /// MB-R-124, MB-R-130 — with `reconnect` enabled (the default), a serial-open
 /// failure does not fail an Ascii server's start: `spawn()` returns `Ok(handle)`, and the task
 /// keeps retrying the open on the shared backoff policy instead of ending, exactly as MB-R-075
-/// for RTU.
+/// for RTU (reconnect enabled).
 async fn ascii_server_open_failure_retries_while_reconnect_enabled() {
     let (_tx, rx) = mpsc::channel::<ServerCommand>(1);
     let (handle, _open) =
@@ -69,7 +69,7 @@ async fn ascii_server_open_failure_retries_while_reconnect_enabled() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 /// MB-R-124, MB-R-134 — with `reconnect` disabled, a serial-open failure fails the Ascii
 /// server: `spawn()` still returns `Ok(handle)`, but the joined task carries the serial error,
-/// exactly as MB-R-075 for RTU. MB-R-123 — the Ascii server opens the port once at start, with
+/// exactly as MB-R-208 for RTU. MB-R-123 — the Ascii server opens the port once at start, with
 /// no accept loop deferring it, so that first open is what fails here.
 async fn ascii_server_open_failure_reconnect_false_ends_task() {
     let (_tx, rx) = mpsc::channel::<ServerCommand>(1);
@@ -106,7 +106,7 @@ async fn ascii_server_terminate_while_backing_off_ends_task_ok() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 /// MB-R-124 — for an Ascii client, a serial-open failure is a failed connection attempt; with
-/// reconnect disabled it ends the client task with the error, exactly as MB-R-075 for RTU.
+/// reconnect disabled it ends the client task with the error, exactly as MB-R-209 for RTU.
 async fn ascii_client_open_failure_reconnect_false_dies() {
     let operations = Arc::new(RwLock::new(vec![Operation {
         slave_id: UnitId(1),
@@ -133,7 +133,7 @@ async fn ascii_client_open_failure_reconnect_false_dies() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 /// MB-R-124 — for an Ascii client, a serial-open failure with reconnect enabled is subject to
 /// the reconnect rules: the task keeps retrying rather than dying, and Terminate ends it
-/// cleanly, exactly as MB-R-075 for RTU.
+/// cleanly, exactly as MB-R-209 for RTU.
 async fn ascii_client_open_failure_reconnect_true_retries() {
     let operations = Arc::new(RwLock::new(vec![]));
     let (tx, rx) = mpsc::channel::<Command>(16);

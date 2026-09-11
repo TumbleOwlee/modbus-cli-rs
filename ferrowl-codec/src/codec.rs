@@ -500,7 +500,7 @@ mod tests {
     }
 
     #[test]
-    /// MB-R-022 — a signed format accepts a `-0x` literal as the negation of the hex bit pattern.
+    /// MB-R-206 — a signed format accepts a `-0x` literal as the negation of the hex bit pattern.
     fn ut_encode_i8_neg_hex() {
         // "-0x01" → -1i8
         assert_eq!(reg(i8_be()).encode("-0x01").unwrap(), vec![-1i8 as u16]);
@@ -617,7 +617,7 @@ mod tests {
     }
 
     #[test]
-    /// MB-R-022 — a signed format accepts a `-0x` literal as the negation of the hex bit pattern.
+    /// MB-R-206 — a signed format accepts a `-0x` literal as the negation of the hex bit pattern.
     fn ut_encode_i32_neg_hex() {
         // "-0x01" → -1i32
         let r = reg(i32_be());
@@ -673,7 +673,7 @@ mod tests {
     }
 
     #[test]
-    /// MB-R-022 — a `0x` literal on a float format is taken as its IEEE 754 bit pattern.
+    /// MB-R-207 — a `0x` literal on a float format is taken as its IEEE 754 bit pattern.
     fn ut_encode_f32_hex() {
         let bits = 1.5f32.to_bits();
         let hex_str = format!("0x{bits:08X}");
@@ -746,7 +746,7 @@ mod tests {
     // --- Resolution scaling ---
 
     #[test]
-    /// MB-R-021 — the display resolution scales the shown value but not the words on the wire.
+    /// MB-R-021, MB-R-212 — the display resolution scales the shown value but not the words on the wire.
     fn ut_decode_u16_with_resolution() {
         let r = reg(Format::u16(
             Endian::Big,
@@ -990,7 +990,7 @@ mod tests {
     }
 
     #[test]
-    /// MB-R-022 — a `0x` literal on an F64 format is taken as its IEEE 754 bit pattern.
+    /// MB-R-207 — a `0x` literal on an F64 format is taken as its IEEE 754 bit pattern.
     fn ut_encode_f64_hex() {
         let bits = 2.5f64.to_bits();
         let hex_str = format!("0x{bits:016X}");
@@ -1153,17 +1153,18 @@ mod tests {
     }
 
     #[test]
-    /// MB-R-021 — the typed encode path applies the bit-field but not the resolution, matching the wire words.
+    /// MB-R-212 — the typed encode path applies the bit-field but not the resolution, matching the wire words.
     fn ut_encode_value_bitfield_and_resolution() {
         // Bit-field placement applies identically via the typed path.
         let format = u16_be_mask(0x0FF0);
         let words = encode_value(&format, &Value::u16(0xAB, res())).unwrap();
         assert_eq!(words, vec![0x0AB0u16]);
 
-        // Resolution is not applied by encode_value, same as the string path.
+        // Resolution is not applied by encode_value: the raw value 2048 reaches the wire
+        // unscaled, not divided by the 0.5 resolution.
         let format = Format::u16(Endian::Big, WordOrder::Normal, Resolution(0.5), bf());
         let words = encode_value(&format, &Value::u16(2048, Resolution(0.5))).unwrap();
-        assert_eq!(words, encode(&format, "2048").unwrap());
+        assert_eq!(words, vec![2048u16]);
     }
 
     #[test]
