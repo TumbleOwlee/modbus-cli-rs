@@ -59,6 +59,7 @@ Anything not listed below, and no `-E` entry outside kind 4, must carry a citing
 | `NF-R-022` — a Lua error never crashes its host | `SC-R-032` |
 | `NF-R-030`, `NF-R-048`, `NF-R-049` — OCPP TLS / Basic Auth, Modbus TCP TLS, RTU none | OCPP security tests (`OC-R-029`–`041`), `MB-R-104`–`MB-R-111` |
 | `NF-R-031`, `NF-R-050`, `NF-R-051` — Lua sandbox, wall-clock cap, no memory ceiling | `SC-R-006`/`SC-R-007`/`SC-R-040`, `SC-R-047`, `SC-R-048` |
+| `NF-R-067`, `NF-R-068` — non-blocking command dispatch and stop-aborts-attempt | `UI-R-314`/`UI-R-315`, `MB-R-220`/`MB-R-221`, `OC-R-175`/`OC-R-176`/`OC-R-177` |
 
 **Kind 3 — structural/shape (collectively exercised)**
 

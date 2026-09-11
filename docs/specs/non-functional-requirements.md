@@ -20,6 +20,8 @@ IDs stable, append-only (`NF-R-nnn`). See [`README.md`](./README.md).
 
 **NF-R-046** — A Lua sim has no execution ceiling; this is a known limitation ([`scripting/edge-cases.md`](./scripting/edge-cases.md)).
 
+**NF-R-067** — No module lifecycle `:` command blocks the TUI's input and redraw loop; it completes asynchronously, and a stop-bearing command's outcome reports into the module's message log rather than its immediate result, the one bounded exception being the tab-close settle of UI-R-316 ([`tui/`](./tui/), UI-R-314, UI-R-315).
+
 ## Reliability
 
 **NF-R-020** — A Modbus client auto-reconnects with exponential backoff bounded to 1s–30s ([`modbus/`](./modbus/)).
@@ -29,6 +31,8 @@ IDs stable, append-only (`NF-R-nnn`). See [`README.md`](./README.md).
 **NF-R-047** — An OCPP CSMS applies the same bounded exponential-backoff policy (MB-R-051) to a failed listener bind (OC-R-139).
 
 **NF-R-022** — A Lua script error never crashes its host module (SC-R-032).
+
+**NF-R-068** — Stopping a module abandons an in-flight connection attempt, listener bind, or serial-port open rather than waiting for it to succeed or time out (MB-R-220, MB-R-221, OC-R-175, OC-R-176, OC-R-177; a synchronous serial open is honored at the first surrounding await, MB-E-091).
 
 ## Security posture
 

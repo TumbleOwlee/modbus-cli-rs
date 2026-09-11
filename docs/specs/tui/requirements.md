@@ -104,6 +104,12 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **UI-R-198** — The command-line widget parses nothing: the submit outcome of UI-R-191 carries the raw trimmed string and the widget derives no command from it.
 
+**UI-R-314** — Dispatching a module lifecycle `:` command (start, stop, restart, reload) never blocks the application's input and redraw loop: the command signals the module and returns, the loop continuing to consume key events and render frames while the operation runs to completion.
+
+**UI-R-315** — The outcome of a stop-bearing lifecycle command (stop, restart, reload) dispatched per UI-R-314 is appended to that module's message log when the stop completes, a failure at Error level (MB-R-098, OC-R-102), never discarded and never carried as the command's immediate `(level, message)` result. `:start` is outside this rule: spawning only schedules the task, so it has no deferred outcome and keeps its immediate result.
+
+**UI-R-316** — Closing a tab other than the last (UI-R-019) waits at most 1 s for that tab's module stop to complete; on expiry the close proceeds regardless, the stop having already been signalled (UI-R-314).
+
 ## Dialogs & overlays mechanism
 
 **UI-R-021** — A dialog/overlay is a modal layer rendered over the content and log panes, consuming keyboard input while open. Overlays paint back-to-front (module overlays, command help popup, app-level dialog, keybind-help dialog on top).

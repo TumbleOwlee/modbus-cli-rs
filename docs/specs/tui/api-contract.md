@@ -12,7 +12,7 @@ Dispatch: first token matched against the generic set; not in the set → forwar
 
 | Command | Aliases | Arguments | Effect (owned here) | Req |
 |---|---|---|---|---|
-| `:quit` | `:q`, `:q!` | — | Stop and close the active tab; quit the app if it was the last | UI-R-019 |
+| `:quit` | `:q`, `:q!` | — | Stop and close the active tab; quit the app if it was the last | UI-R-019, UI-R-316 |
 | `:qall` | `:qa`, `:qa!` | — | Quit the whole app immediately | UI-R-019 |
 | `:new` | `:n` | — | Open the new-module type selector | UI-R-008, UI-R-024 |
 | `:load [path]` | `:l` | optional device-config path | Open the Modbus create dialog, config-path field pre-filled with `path` | UI-R-017 |
@@ -37,7 +37,7 @@ Forwarded to the active view; **semantics owned by the protocol area**. Each vie
 | `:edit` / `:e` | — | Open the module setup dialog | UI-R-018 |
 | `:add` / `:a` | — | Open the add-register dialog | UI-R-018, UI-R-024 |
 | `:start` | — | Start the module (connect/bind) | UI-R-018 |
-| `:stop` | — | Stop the module | UI-R-018 |
+| `:stop` | — | Stop the module | UI-R-018, UI-R-314 |
 | `:restart` | — | Stop then start | UI-R-018 |
 | `:reload` | — | Reload the device config from disk and restart | UI-R-018 |
 | `:compact` | — | Toggle compact table rows | UI-R-018 |
@@ -54,7 +54,7 @@ Modbus monitor module (`role = monitor`, MB-R-140–145, MB-R-191–198):
 | `:edit` / `:e` | — | Open the module setup dialog | UI-R-018 |
 | `:add` / `:a` | — | Open the add-register-interpretation dialog (UI-R-061) | UI-R-018, UI-R-061 |
 | `:start` | — | Start the module (open the serial port receive-only) | UI-R-018 |
-| `:stop` | — | Stop the module | UI-R-018 |
+| `:stop` | — | Stop the module | UI-R-018, UI-R-314 |
 | `:restart` | — | Stop then start | UI-R-018 |
 | `:reload` | — | Reload the device config from disk and restart | UI-R-018 |
 | `:compact` | — | Toggle compact table rows | UI-R-018 |
@@ -70,7 +70,7 @@ Modbus monitor module (`role = monitor`, MB-R-140–145, MB-R-191–198):
 |---|---|---|---|
 | `:edit` / `:e` | — | Open the module setup dialog | UI-R-018 |
 | `:start` | — | Connect to the CSMS | UI-R-018 |
-| `:stop` | — | Disconnect | UI-R-018 |
+| `:stop` | — | Disconnect | UI-R-018, UI-R-314 |
 | `:restart` | — | Reconnect | UI-R-018 |
 | `:compact` | — | Toggle compact rows | UI-R-018 |
 | `:write-device` / `:wd` `[path]` | optional path | Save the device config | UI-R-018 |
@@ -81,7 +81,7 @@ Modbus monitor module (`role = monitor`, MB-R-140–145, MB-R-191–198):
 | Command | Arguments | Purpose (→ ocpp) | Req |
 |---|---|---|---|
 | `:start` | — | Bind the CSMS listener | UI-R-018 |
-| `:stop` | — | Unbind (clears connected-station entries) | UI-R-018 |
+| `:stop` | — | Unbind (clears connected-station entries) | UI-R-018, UI-R-314 |
 | `:restart` | — | Rebind (clears entries) | UI-R-018 |
 | `:edit` / `:e` | — | Open the module setup dialog | UI-R-018 |
 | `:write-device` / `:wd` `[path]` | optional path | Save the device config | UI-R-018 |

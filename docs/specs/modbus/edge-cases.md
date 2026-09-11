@@ -62,6 +62,7 @@ Boundary behavior, error semantics, intentional constraints. The known-limitatio
 | **MB-E-044** | `delay_ms` | applied on **every** (re)connection, not only the first |
 | **MB-E-045** | Read operation to slave id 0 on RTU | fails locally, never sent; exception-retry path (MB-R-101). On TCP, unit 0 is ordinary |
 | **MB-E-046** | Write command to slave id 0 on RTU | fire-and-forget: written, not awaited, logged as executed even if no device applied it (MB-R-102) |
+| **MB-E-089** | Terminate while a client connect attempt hangs against an unresponsive endpoint | the attempt is abandoned at once; the task ends with success and the module reaches `DISCONNECTED` without waiting for the connect or handshake timeout (MB-R-220) |
 
 ---
 
@@ -82,6 +83,8 @@ Boundary behavior, error semantics, intentional constraints. The known-limitatio
 | **MB-E-057** | Malformed frame / framing error | rejected by the protocol layer before the handler; TCP server logs a processing failure and drops the connection, accept loop continues |
 | **MB-E-058** | TCP client disconnects mid-request | that connection's serve task ends; accept loop and store unaffected |
 | **MB-E-059** | RTU serial port disappears mid-serve | serve loop ends, server task ends with an error; retry per MB-E-076 |
+| **MB-E-090** | Terminate while a server bind or serial-port open hangs | the bind or open is abandoned at once and the task ends with success (MB-R-221) |
+| **MB-E-092** | Terminate arriving after a server's serve loop is already running | the serve loop still ends on its own before the task ends; no in-flight connection is torn down early to honor the terminate sooner (MB-R-131, MB-E-076) |
 
 ---
 
@@ -173,3 +176,7 @@ Boundary behavior, error semantics, intentional constraints. The known-limitatio
 ### Bit-field mask absent from the width error
 
 **MB-E-083** — `BitFieldWidth`'s message names the format by display text (MB-R-155), which carries byte order but not the mask, so the offending mask does not appear; the user supplied it, and the alternative is dumping the whole format struct.
+
+### A serial-port open cannot be preempted
+
+**MB-E-091** — A serial-port open is a synchronous call with no await point, so a terminate arriving while it executes cannot preempt it; the terminate is honored at the first await surrounding the open (MB-R-220, MB-R-221).
