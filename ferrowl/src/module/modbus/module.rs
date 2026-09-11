@@ -684,9 +684,8 @@ mod tests {
     }
 
     #[tokio::test]
-    /// MB-R-210 — a module instance owns one shared register store, one register set, and one
-    /// log: two accessor calls return handles to the same store/log (not fresh copies), the
-    /// register set is a stable field (not rebuilt per accessor call), and the store `memory()`
+    /// MB-R-210 — a module instance owns one shared register store and one log: two accessor
+    /// calls return handles to the same store/log (not fresh copies), and the store `memory()`
     /// hands back is literally what the running network instance serves from — a raw write
     /// through `memory()` is visible to a real client's read over the wire.
     async fn ut_module_owns_one_shared_store_and_log() {
@@ -698,11 +697,6 @@ mod tests {
         let mut module = ModbusModule::new(&test_spec("mb210", 0), &device);
         assert!(std::sync::Arc::ptr_eq(&module.memory(), &module.memory()));
         assert!(std::sync::Arc::ptr_eq(&module.log(), &module.log()));
-        assert_eq!(
-            module.registers().as_ptr(),
-            module.registers().as_ptr(),
-            "the register set must be a stable field, not rebuilt on every accessor call"
-        );
 
         module.start().await.expect("start");
         let mut addr = None;

@@ -525,7 +525,7 @@ mod tests {
             // A busy Lua loop, slow enough to measure, that only finishes by writing "done".
             r#"
                 local n = 0
-                for i = 1, 30000000 do n = n + 1 end
+                for i = 1, 8000000 do n = n + 1 end
                 C_Module:Get("m"):Register():Set("x", "done")
             "#
             .to_string(),

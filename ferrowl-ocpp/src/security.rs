@@ -984,7 +984,9 @@ mod tests {
     }
 
     // Guards `ut_self_signed_pair_never_written_to_disk`, the only test in this file that
-    // changes the process cwd, so a parallel test run cannot race it.
+    // changes the process cwd, so a parallel test run cannot race it. This lock only
+    // serializes against other lock-takers: any future test elsewhere in this binary that
+    // reads/writes a relative path without taking it can still race the cwd change here.
     static CWD_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     /// OC-R-170 — a CSMS's cached self-signed pair is never written to disk: building and
@@ -1014,6 +1016,8 @@ mod tests {
                 after.is_empty(),
                 "generating and reusing a self-signed pair must not write any file to cwd"
             );
+            // The scratch-cwd probe only catches an implicit relative-path write; a hard-coded
+            // absolute-path write elsewhere would pass this assertion undetected.
         });
 
         std::env::set_current_dir(&original_cwd).unwrap();

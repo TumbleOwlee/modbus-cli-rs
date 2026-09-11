@@ -207,6 +207,7 @@ async fn tcp_client_polls_server_and_executes_commands() {
         },
     ]));
 
+    let (client_log, client_lines) = capturing();
     let (tx, rx) = mpsc::channel::<Command>(16);
     let (client, _connected) = tcp::ClientBuilder::new(
         Arc::new(RwLock::new(config(port))),
@@ -214,12 +215,25 @@ async fn tcp_client_polls_server_and_executes_commands() {
         cli_mem.clone(),
         tcp::new_self_signed_cache(),
     )
-    .spawn(rx, sink(), sink())
+    .spawn(rx, client_log, sink())
     .await
     .expect("client failed to connect");
 
     // Let the client poll every operation at least once.
     sleep(Duration::from_millis(800)).await;
+
+    // MB-R-204: a 1 ms tick over four round-robin operations logs a "successful" line per read;
+    // a coarser tick (e.g. the crate's non-zero default) could not clear a fraction of this
+    // count in the same window, so this floor pins the tick rate, not just that 0 was accepted.
+    let successful_reads = client_lines
+        .lock()
+        .iter()
+        .filter(|l| l.contains("successful"))
+        .count();
+    assert!(
+        successful_reads > 50,
+        "expected far more than 50 successful reads in 800ms from a 1 ms tick, got {successful_reads}"
+    );
 
     {
         let g = cli_mem.read();

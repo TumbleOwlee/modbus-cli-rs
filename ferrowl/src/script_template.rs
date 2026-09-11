@@ -62,7 +62,6 @@ mod tests {
     }
 
     #[test]
-    /// SC-R-063 — every script context has at least one template, so the browser is never empty.
     fn ut_every_context_has_a_template() {
         for ctx in CONTEXTS {
             assert!(!templates(ctx).is_empty(), "{ctx:?} has no template");
