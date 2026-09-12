@@ -5,8 +5,9 @@ use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use ferrowl_ui::{
     AlternateScreen, Border, EventResult,
     state::{
-        DiffViewState, DiffViewStateBuilder, FileStatus, FileTreeOutcome, FileTreeState,
-        FileTreeStateBuilder, SuggestInputState, SuggestInputStateBuilder,
+        DiffViewState, DiffViewStateBuilder, FileStatus, FileTreeBadge, FileTreeEntry,
+        FileTreeOutcome, FileTreeState, FileTreeStateBuilder, SuggestInputState,
+        SuggestInputStateBuilder,
     },
     traits::{HandleEvents, SetFocus, Suggestion, SuggestionProvider},
     widgets::{
@@ -16,9 +17,28 @@ use ferrowl_ui::{
 use ratatui::{
     Frame,
     layout::{Constraint, Layout, Margin, Rect},
+    style::Style,
     widgets::{Block, Widget},
 };
-use std::{io::Stdout, process::Command, time::Duration};
+use std::{collections::HashMap, io::Stdout, process::Command, time::Duration};
+
+/// Added/removed line counts from `git diff --numstat`, drawn as `"+<added> -<removed>"`
+/// in the row's own styling.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct LineCountBadge {
+    added: u64,
+    removed: u64,
+}
+
+impl FileTreeBadge for LineCountBadge {
+    fn text(&self) -> String {
+        format!("+{} -{}", self.added, self.removed)
+    }
+
+    fn style(&self) -> Option<Style> {
+        None
+    }
+}
 
 /// Suggests local git branches by prefix, from a fixed snapshot taken once at startup:
 /// local branches don't change mid-session, so re-querying on every keystroke would
@@ -117,8 +137,13 @@ fn parse_branches(out: &str) -> Vec<String> {
 
 /// Parses `git diff --name-status --no-renames` output into paths with their change
 /// status. An unrecognized status letter is treated as unchanged (`None`) rather than
-/// guessed at.
-fn parse_name_status(out: &str) -> Vec<(String, Option<FileStatus>)> {
+/// guessed at. `counts` is a per-path `(added, removed)` line-count table from `git diff
+/// --numstat`; a matching path gets a `"+<added> -<removed>"` badge, a path with no match
+/// (e.g. a binary file) gets none.
+fn parse_name_status(
+    out: &str,
+    counts: &HashMap<String, (u64, u64)>,
+) -> Vec<FileTreeEntry<FileStatus, LineCountBadge>> {
     out.lines()
         .filter_map(|line| {
             let mut parts = line.splitn(2, '\t');
@@ -133,7 +158,34 @@ fn parse_name_status(out: &str) -> Vec<(String, Option<FileStatus>)> {
                 'M' => Some(FileStatus::Modified),
                 _ => None,
             };
-            Some((path.to_string(), status))
+            let mut entry = FileTreeEntry::new(path);
+            if let Some(status) = status {
+                entry = entry.with_status(status);
+            }
+            if let Some(&(added, removed)) = counts.get(path) {
+                entry = entry.with_badge(LineCountBadge { added, removed });
+            }
+            Some(entry)
+        })
+        .collect()
+}
+
+/// Parses `git diff --numstat` output into per-path added/removed line counts. A binary
+/// file reports `-` for both counts; those paths are skipped rather than badged with a
+/// bogus number.
+fn parse_numstat(out: &str) -> HashMap<String, (u64, u64)> {
+    out.lines()
+        .filter_map(|line| {
+            let mut parts = line.splitn(3, '\t');
+            let added = parts.next()?.trim();
+            let removed = parts.next()?.trim();
+            let path = parts.next()?.trim();
+            if path.is_empty() {
+                return None;
+            }
+            let added: u64 = added.parse().ok()?;
+            let removed: u64 = removed.parse().ok()?;
+            Some((path.to_string(), (added, removed)))
         })
         .collect()
 }
@@ -158,13 +210,13 @@ struct Model {
     git: GitFn,
     base: SuggestInputState<BranchProvider>,
     branch: SuggestInputState<BranchProvider>,
-    tree: FileTreeState,
+    tree: FileTreeState<FileStatus, LineCountBadge>,
     diff: DiffViewState,
     focus: Focus,
     /// The paths last passed to the file tree's `set_paths`, kept here because the
     /// tree's own row list is crate-private: this is the only way anything outside
     /// `ferrowl-ui` (including this example's tests) can observe what it was given.
-    paths: Vec<(String, Option<FileStatus>)>,
+    paths: Vec<FileTreeEntry<FileStatus, LineCountBadge>>,
     /// The branch names last fetched from the git seam, kept here for the same reason as
     /// `paths`: nothing outside this module can otherwise observe what the suggestion
     /// providers were built with. Read only by this file's own tests.
@@ -229,9 +281,13 @@ impl Model {
             return;
         }
         let range = format!("{base}...{branch}");
+        let counts = match (self.git)(&["diff", "--numstat", &range]) {
+            Ok(out) => parse_numstat(&out),
+            Err(_) => HashMap::new(),
+        };
         match (self.git)(&["diff", "--name-status", "--no-renames", &range]) {
             Ok(out) => {
-                self.paths = parse_name_status(&out);
+                self.paths = parse_name_status(&out, &counts);
                 self.tree.set_paths(&self.paths);
             }
             Err(e) => {
@@ -301,14 +357,15 @@ fn ui(f: &mut Frame, model: &mut Model) {
         .unwrap();
     f.render_stateful_widget(&branch_widget, panes.branch, &mut model.branch);
 
-    let tree_widget = FileTreeBuilder::default()
-        .title(Some("File Tree".into()))
-        .border(Border::Full(Margin {
-            horizontal: 1,
-            vertical: 0,
-        }))
-        .build()
-        .unwrap();
+    let tree_widget: ferrowl_ui::widgets::FileTree<FileStatus, LineCountBadge> =
+        FileTreeBuilder::default()
+            .title(Some("File Tree".into()))
+            .border(Border::Full(Margin {
+                horizontal: 1,
+                vertical: 0,
+            }))
+            .build()
+            .unwrap();
     f.render_stateful_widget(&tree_widget, panes.browser, &mut model.tree);
 
     if let Some(err) = &model.error {
@@ -449,10 +506,24 @@ mod tests {
         whole_diff: &str,
         shows: &[(&str, &str)],
     ) -> GitFn {
+        fixture_with_numstat(base, branch, name_status, whole_diff, "", shows)
+    }
+
+    /// Like `fixture_with_show`, plus the `git diff --numstat` output the reload's
+    /// line-count lookup resolves to.
+    fn fixture_with_numstat(
+        base: &str,
+        branch: &str,
+        name_status: &str,
+        whole_diff: &str,
+        numstat: &str,
+        shows: &[(&str, &str)],
+    ) -> GitFn {
         let base = base.to_string();
         let branch = branch.to_string();
         let name_status = name_status.to_string();
         let whole_diff = whole_diff.to_string();
+        let numstat = numstat.to_string();
         let shows: Vec<(String, String)> = shows
             .iter()
             .map(|(p, t)| (p.to_string(), t.to_string()))
@@ -461,6 +532,7 @@ mod tests {
             let range = format!("{base}...{branch}");
             match args {
                 ["for-each-ref", ..] => Ok(format!("{base}\n{branch}\n")),
+                ["diff", "--numstat", r] if *r == range => Ok(numstat.clone()),
                 ["diff", "--name-status", "--no-renames", r] if *r == range => {
                     Ok(name_status.clone())
                 }
@@ -618,7 +690,7 @@ mod tests {
         model.reload();
         assert_eq!(
             model.paths,
-            vec![("src/a.rs".to_string(), Some(FileStatus::Modified))]
+            vec![FileTreeEntry::new("src/a.rs").with_status(FileStatus::Modified)]
         );
         let whole_row_count = row_count(&model.diff);
         assert_eq!(whole_row_count, 3);
@@ -636,7 +708,7 @@ mod tests {
         model.reload();
         assert_eq!(
             model.paths,
-            vec![("src/b.rs".to_string(), Some(FileStatus::Added))]
+            vec![FileTreeEntry::new("src/b.rs").with_status(FileStatus::Added)]
         );
         assert_eq!(row_count(&model.diff), 1);
     }
@@ -665,14 +737,60 @@ mod tests {
     fn ut_name_status_output_maps_to_paths_and_change_statuses() {
         let parsed = parse_name_status(
             "A\tsrc/new.rs\nD\tsrc/old.rs\nM\tsrc/changed.rs\nR100\tsrc/moved.rs\n",
+            &HashMap::new(),
         );
         assert_eq!(
             parsed,
             vec![
-                ("src/new.rs".to_string(), Some(FileStatus::Added)),
-                ("src/old.rs".to_string(), Some(FileStatus::Removed)),
-                ("src/changed.rs".to_string(), Some(FileStatus::Modified)),
-                ("src/moved.rs".to_string(), None),
+                FileTreeEntry::new("src/new.rs").with_status(FileStatus::Added),
+                FileTreeEntry::new("src/old.rs").with_status(FileStatus::Removed),
+                FileTreeEntry::new("src/changed.rs").with_status(FileStatus::Modified),
+                FileTreeEntry::new("src/moved.rs"),
+            ]
+        );
+    }
+
+    #[test]
+    /// `git diff --numstat` output maps each path to an `(added, removed)` pair; a binary
+    /// file's `-`/`-` counts are skipped rather than parsed as zero.
+    fn ut_numstat_output_maps_paths_to_added_and_removed_line_counts() {
+        let parsed =
+            parse_numstat("12\t3\tsrc/changed.rs\n0\t7\tsrc/old.rs\n-\t-\tsrc/image.png\n");
+        assert_eq!(
+            parsed,
+            HashMap::from([
+                ("src/changed.rs".to_string(), (12, 3)),
+                ("src/old.rs".to_string(), (0, 7)),
+            ])
+        );
+    }
+
+    #[test]
+    /// Reloading attaches a `"+<added> -<removed>"` badge built from `--numstat` to the
+    /// matching path's entry, and leaves a path absent from `--numstat` (e.g. binary)
+    /// without a badge.
+    fn ut_reload_badges_each_path_with_its_added_and_removed_line_counts() {
+        let mut model = Model::new(fixture_with_numstat(
+            "main",
+            "feature",
+            "M\tsrc/changed.rs\nA\tsrc/image.png\n",
+            "",
+            "12\t3\tsrc/changed.rs\n-\t-\tsrc/image.png\n",
+            &[],
+        ));
+        model.base.set_input("main".to_string());
+        model.branch.set_input("feature".to_string());
+        model.reload();
+        assert_eq!(
+            model.paths,
+            vec![
+                FileTreeEntry::new("src/changed.rs")
+                    .with_status(FileStatus::Modified)
+                    .with_badge(LineCountBadge {
+                        added: 12,
+                        removed: 3
+                    }),
+                FileTreeEntry::new("src/image.png").with_status(FileStatus::Added),
             ]
         );
     }

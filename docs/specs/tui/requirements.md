@@ -508,7 +508,7 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 
 ## File tree widget
 
-**UI-R-234** — The file tree widget's state is built from a list of file paths and derives the directory nodes from the paths' components, so a caller supplies paths alone and never assembles a tree.
+**UI-R-234** — The file tree widget's state is built from a list of entries, each naming a path and optionally a status and a badge, and derives the directory nodes from the paths' components, so a caller supplies a flat list and never assembles a tree.
 
 **UI-R-235** — Every directory node is expanded when the tree is built, and the state can expand all directories or collapse all of them in one call.
 
@@ -528,13 +528,33 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **UI-R-243** — The file tree widget answers the selected node's full path and whether that node is a directory.
 
-**UI-R-244** — A file node may carry a change status of added, removed or modified, drawn as a leading `+`, `-` or `~` marker and styling that row with the syntax theme's added, removed and meta styles (UI-R-162, UI-R-163); a node with no status takes the normal text style.
+**UI-R-244** — A file tree is generic over a caller-chosen status type, a file node may carry an optional status of that type, and the row's leading marker and its styling are the ones the formatting trait implemented for that type reports for the node's status, so the widget fixes neither the set of statuses nor how any of them looks.
 
 **UI-R-245** — The file tree's viewport scrolls vertically to keep the selected row visible, and `PageDown`, `PageUp`, `Ctrl+D` and `Ctrl+U` move the selection with the remembered-height and clamping semantics of UI-R-293 through UI-R-295.
 
 **UI-R-246** — The file tree paints the focused border style while focused and the normal border otherwise (UI-R-110).
 
-**UI-R-252** — The file tree draws its selected row in the theme's highlighted-row style across the widget's full width, as the diff widget draws its active row (UI-R-224), the row's change-status styling (UI-R-244) supplying the foreground.
+**UI-R-252** — The file tree draws its selected row in the theme's highlighted-row style across the widget's full width, as the diff widget draws its active row (UI-R-224), the row's status styling (UI-R-244) supplying the foreground.
+
+**UI-R-314** — A file tree is generic over a caller-chosen badge type, a file node may carry an optional badge of that type, and the badge's text and its optional style are the ones the badge-formatting trait implemented for that type reports, so a caller can hand the widget its own values and never assemble a rendered badge.
+
+**UI-R-315** — A badged row draws its badge text after the node's name, separated from it by one space, while the status marker (UI-R-244) stays leading, so a badged row reads status marker, name, badge from left to right.
+
+**UI-R-316** — A badge whose type reports a style has its text drawn in that style while the rest of the row keeps the styling UI-R-244 gives it, and that holds on the selected row, where the badge keeps its own foreground over the highlighted-row background (UI-R-252).
+
+**UI-R-317** — The file tree state accepts a badge of its badge type for a path after construction and accepts clearing it, replacing any badge that path already carried, with the next render reflecting the change and the selection and every directory's expansion left unchanged.
+
+**UI-R-318** — The file tree reserves no badge column: a node with no badge draws exactly the cells it would draw were no node badged, with no padding or placeholder, so an unbadged tree renders identically whether or not any sibling carries a badge.
+
+**UI-R-319** — The shipped status type reports added, removed and modified as the leading markers `+`, `-` and `~` with the syntax theme's added, removed and meta styles (UI-R-162, UI-R-163), which is the behavior UI-R-244 fixed before it became generic.
+
+**UI-R-320** — The shipped status type (UI-R-319) is the file tree's default status type, so a caller that names no status type builds and renders a tree exactly as it did before the type became caller-chosen.
+
+**UI-R-321** — A file node whose status is absent takes the normal text style and draws no leading marker, whatever status type the tree carries.
+
+**UI-R-322** — A badge whose type reports no style has its text drawn in the row's own styling, the styling the node's status gives that row through UI-R-244, so an unstyled badge blends into the row rather than falling back to a widget-chosen style.
+
+**UI-R-323** — The file tree's badge type defaults to a shipped type that yields no badge on any row, so a caller that names no badge type builds and renders a tree exactly as it did before badges existed, as UI-R-320 does for the status type.
 
 ## Syntax highlighting
 
