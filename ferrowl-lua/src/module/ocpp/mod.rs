@@ -158,52 +158,14 @@ fn table_to_overrides(table: Option<Table>) -> Result<Vec<(String, ValueType)>> 
 mod tests {
     use super::*;
     use crate::ContextBuilder;
-    use crate::module::{OcppActions, Read, Write};
-    use std::cell::RefCell;
+    use crate::module::test_support::{DispatchLog, MockHost, Store, pairs};
     use std::collections::HashMap;
-    use std::rc::Rc;
-
-    /// Record of dispatched actions: `(action name, overrides as name/value pairs)`.
-    type Dispatched = Rc<RefCell<Vec<(String, Vec<(String, ValueType)>)>>>;
-
-    /// A mock host: an in-memory key/value store plus a record of dispatched actions.
-    #[derive(Clone, Default)]
-    struct MockHandle {
-        store: Rc<RefCell<HashMap<String, ValueType>>>,
-        dispatched: Dispatched,
-    }
-
-    impl Read for MockHandle {
-        fn read(&self, name: String) -> mlua::Result<ValueType> {
-            self.store
-                .borrow()
-                .get(&name)
-                .cloned()
-                .ok_or_else(|| mlua::Error::RuntimeError(format!("unknown '{name}'")))
-        }
-    }
-    impl Write for MockHandle {
-        fn write(&self, name: String, value: ValueType) -> mlua::Result<()> {
-            self.store.borrow_mut().insert(name, value);
-            Ok(())
-        }
-    }
-    impl OcppActions for MockHandle {
-        fn actions() -> Vec<&'static str> {
-            vec!["StartTransaction"]
-        }
-        fn dispatch(&self, action: &str, args: Vec<(String, ValueType)>) -> bool {
-            self.dispatched
-                .borrow_mut()
-                .push((action.to_string(), args));
-            true
-        }
-    }
+    use std::sync::{Arc, Mutex};
 
     #[test]
     /// SC-R-027, SC-R-042 — C_OCPP Get/Set round-trip a state field and an action dispatches with its override table flattened to scalar pairs.
     fn ut_get_set_roundtrip_and_dispatch() {
-        let handle = MockHandle::default();
+        let handle = MockHost::default();
         let mut ctx = ContextBuilder::<String>::default()
             .with_stdlib()
             .with_module(Ocpp::init(handle.clone()))
@@ -222,111 +184,29 @@ mod tests {
         ctx.call_all().expect("run");
 
         // Set/Get round-tripped through the host store.
-        match handle.store.borrow().get("Power") {
-            Some(ValueType::Int(v)) => assert_eq!(*v, 43),
+        match handle.get("Power") {
+            Some(ValueType::Int(v)) => assert_eq!(v, 43),
             other => panic!("expected Int(43), got {other:?}"),
         }
         // The action was enqueued with its override arg.
-        let dispatched = handle.dispatched.borrow();
+        let dispatched = handle.dispatched();
         assert_eq!(dispatched.len(), 1);
-        assert_eq!(dispatched[0].0, "StartTransaction");
-        assert_eq!(dispatched[0].1.len(), 1);
-        assert_eq!(dispatched[0].1[0].0, "idTag");
+        assert_eq!(dispatched[0].action, "StartTransaction");
+        assert_eq!(dispatched[0].args.len(), 1);
+        assert_eq!(dispatched[0].args[0].0, "idTag");
     }
 
-    type Store = Rc<RefCell<HashMap<String, ValueType>>>;
-    /// Records dispatched actions as `(scope_label, action)`.
-    type DispatchLog = Rc<RefCell<Vec<(String, String)>>>;
     /// One station: its CS-level store plus per-connector stores.
     type StationData = (Store, HashMap<i64, Store>);
 
     fn store_get(store: &Store, key: &str) -> Option<ValueType> {
-        store.borrow().get(key).cloned()
-    }
-
-    /// A handle scoped to one state store, tagging dispatched actions with `scope`.
-    #[derive(Clone)]
-    struct ScopeHandle {
-        scope: String,
-        store: Store,
-        dispatched: DispatchLog,
-    }
-    impl Read for ScopeHandle {
-        fn read(&self, name: String) -> mlua::Result<ValueType> {
-            self.store
-                .borrow()
-                .get(&name)
-                .cloned()
-                .ok_or_else(|| mlua::Error::RuntimeError(format!("unknown '{name}'")))
-        }
-    }
-    impl Write for ScopeHandle {
-        fn write(&self, name: String, value: ValueType) -> mlua::Result<()> {
-            self.store.borrow_mut().insert(name, value);
-            Ok(())
-        }
-    }
-    impl OcppActions for ScopeHandle {
-        fn actions() -> Vec<&'static str> {
-            vec!["BootNotification", "StartTransaction"]
-        }
-        fn dispatch(&self, action: &str, _args: Vec<(String, ValueType)>) -> bool {
-            self.dispatched
-                .borrow_mut()
-                .push((self.scope.clone(), action.to_string()));
-            true
-        }
-    }
-
-    /// Client host: a CS-level store plus lazily-created per-connector stores.
-    #[derive(Clone, Default)]
-    struct ClientHost {
-        cs: Store,
-        conns: Rc<RefCell<HashMap<i64, Store>>>,
-        dispatched: DispatchLog,
-    }
-    impl Read for ClientHost {
-        fn read(&self, name: String) -> mlua::Result<ValueType> {
-            store_get(&self.cs, &name)
-                .ok_or_else(|| mlua::Error::RuntimeError(format!("unknown '{name}'")))
-        }
-    }
-    impl Write for ClientHost {
-        fn write(&self, name: String, value: ValueType) -> mlua::Result<()> {
-            self.cs.borrow_mut().insert(name, value);
-            Ok(())
-        }
-    }
-    impl OcppActions for ClientHost {
-        fn actions() -> Vec<&'static str> {
-            vec!["BootNotification", "StartTransaction"]
-        }
-        fn dispatch(&self, action: &str, _args: Vec<(String, ValueType)>) -> bool {
-            self.dispatched
-                .borrow_mut()
-                .push(("cs".to_string(), action.to_string()));
-            true
-        }
-    }
-    impl OcppClientHost for ClientHost {
-        type Conn = ScopeHandle;
-        fn connector(&self, id: i64) -> ScopeHandle {
-            let store = self.conns.borrow_mut().entry(id).or_default().clone();
-            ScopeHandle {
-                scope: format!("c{id}"),
-                store,
-                dispatched: self.dispatched.clone(),
-            }
-        }
-        fn connectors(&self) -> Vec<i64> {
-            self.conns.borrow().keys().copied().collect()
-        }
+        store.lock().unwrap().get(key).cloned()
     }
 
     #[test]
     /// SC-R-027 — client C_OCPP: bare Get/Set/action hit CS level, Connector(id) scopes to a connector.
     fn ut_client_bare_is_cs_connector_is_scoped() {
-        let host = ClientHost::default();
+        let host = MockHost::scoped("cs", Store::default(), DispatchLog::default());
         let mut ctx = ContextBuilder::<String>::default()
             .with_stdlib()
             .with_module(OcppClient::init(host.clone()))
@@ -344,15 +224,15 @@ mod tests {
         ctx.call_all().expect("run");
 
         // Bare Get/Set hit CS-level state; Connector(id) hits that connector's store.
-        assert!(matches!(store_get(&host.cs, "Model"), Some(ValueType::String(s)) if s == "M"));
-        let conn1 = host.conns.borrow()[&1].clone();
+        assert!(matches!(host.get("Model"), Some(ValueType::String(s)) if s == "M"));
+        let conn1 = host.conn_store(1);
         assert!(matches!(
             store_get(&conn1, "Power"),
             Some(ValueType::Int(11))
         ));
 
         // Actions dispatch at the scope they were called on.
-        let log = host.dispatched.borrow();
+        let log = host.dispatched_pairs();
         assert!(log.contains(&("cs".to_string(), "BootNotification".to_string())));
         assert!(log.contains(&("c2".to_string(), "StartTransaction".to_string())));
     }
@@ -360,7 +240,7 @@ mod tests {
     /// Server host: a fixed map of stations, each with a CS store and per-connector stores.
     #[derive(Clone)]
     struct ServerHost {
-        stations: Rc<RefCell<HashMap<String, StationData>>>,
+        stations: Arc<Mutex<HashMap<String, StationData>>>,
         dispatched: DispatchLog,
     }
     impl ServerHost {
@@ -374,21 +254,21 @@ mod tests {
             stations.insert("cp001".to_string(), mk(&[1, 2]));
             stations.insert("cp002".to_string(), mk(&[1]));
             Self {
-                stations: Rc::new(RefCell::new(stations)),
-                dispatched: Rc::new(RefCell::new(Vec::new())),
+                stations: Arc::new(Mutex::new(stations)),
+                dispatched: Arc::new(Mutex::new(Vec::new())),
             }
         }
     }
     impl OcppServerHost for ServerHost {
-        type Station = ScopeHandle;
-        type Conn = ScopeHandle;
+        type Station = MockHost;
+        type Conn = MockHost;
         fn stations(&self) -> Vec<String> {
-            let mut s: Vec<String> = self.stations.borrow().keys().cloned().collect();
+            let mut s: Vec<String> = self.stations.lock().unwrap().keys().cloned().collect();
             s.sort();
             s
         }
         fn connectors(&self, cs: &str) -> Vec<i64> {
-            let stations = self.stations.borrow();
+            let stations = self.stations.lock().unwrap();
             let Some((_, conns)) = stations.get(cs) else {
                 return Vec::new();
             };
@@ -396,23 +276,19 @@ mod tests {
             ids.sort();
             ids
         }
-        fn station(&self, cs: &str) -> Option<ScopeHandle> {
-            let stations = self.stations.borrow();
+        fn station(&self, cs: &str) -> Option<MockHost> {
+            let stations = self.stations.lock().unwrap();
             let (store, _) = stations.get(cs)?;
-            Some(ScopeHandle {
-                scope: cs.to_string(),
-                store: store.clone(),
-                dispatched: self.dispatched.clone(),
-            })
+            Some(MockHost::scoped(cs, store.clone(), self.dispatched.clone()))
         }
-        fn connector(&self, cs: &str, id: i64) -> Option<ScopeHandle> {
-            let stations = self.stations.borrow();
+        fn connector(&self, cs: &str, id: i64) -> Option<MockHost> {
+            let stations = self.stations.lock().unwrap();
             let (_, conns) = stations.get(cs)?;
-            Some(ScopeHandle {
-                scope: format!("{cs}/{id}"),
-                store: conns.get(&id)?.clone(),
-                dispatched: self.dispatched.clone(),
-            })
+            Some(MockHost::scoped(
+                &format!("{cs}/{id}"),
+                conns.get(&id)?.clone(),
+                self.dispatched.clone(),
+            ))
         }
     }
 
@@ -442,7 +318,7 @@ mod tests {
             .expect("build context");
         ctx.call_all().expect("run");
 
-        let stations = host.stations.borrow();
+        let stations = host.stations.lock().unwrap();
         let (cp001_cs, cp001_conns) = &stations["cp001"];
         // Scope accessors route Set to the right station/connector store.
         assert!(matches!(store_get(cp001_cs, "Model"), Some(ValueType::String(s)) if s == "X"));
@@ -468,8 +344,7 @@ mod tests {
 
         // Action dispatched on the cp002/1 connector accessor.
         assert!(
-            host.dispatched
-                .borrow()
+            pairs(&host.dispatched)
                 .contains(&("cp002/1".to_string(), "StartTransaction".to_string()))
         );
     }
@@ -477,7 +352,7 @@ mod tests {
     #[test]
     /// SC-R-032, SC-R-042 — a malformed OCPP override table (non-scalar entry) surfaces as a runtime error rather than being coerced.
     fn ut_malformed_override_table_propagates_error() {
-        let handle = MockHandle::default();
+        let handle = MockHost::default();
         let mut ctx = ContextBuilder::<String>::default()
             .with_stdlib()
             .with_module(Ocpp::init(handle.clone()))

@@ -7,12 +7,25 @@ use std::sync::{Arc, Mutex};
 /// A key/value state store shared between a mock handle and the test asserting on it.
 pub(crate) type Store = Arc<Mutex<HashMap<String, ValueType>>>;
 
-/// One recorded `dispatch` call: the scope label of the handle it was called on and the action
-/// name.
+/// One recorded `dispatch` call: the scope label of the handle it was called on, the action
+/// name, and the override table flattened to name/value pairs.
 #[derive(Clone, Debug)]
 pub(crate) struct Dispatch {
     pub(crate) scope: String,
     pub(crate) action: String,
+    pub(crate) args: Vec<(String, ValueType)>,
+}
+
+/// Shared dispatch log: every handle cloned or derived from one mock appends to the same log.
+pub(crate) type DispatchLog = Arc<Mutex<Vec<Dispatch>>>;
+
+/// A dispatch log's entries as `(scope, action)`.
+pub(crate) fn pairs(log: &DispatchLog) -> Vec<(String, String)> {
+    log.lock()
+        .unwrap()
+        .iter()
+        .map(|d| (d.scope.clone(), d.action.clone()))
+        .collect()
 }
 
 /// Shared `Send + Sync` in-memory host, implementing every trait the module unit tests mock:
@@ -23,10 +36,21 @@ pub(crate) struct MockHost {
     pub(crate) scope: String,
     pub(crate) store: Store,
     pub(crate) conns: Arc<Mutex<HashMap<i64, Store>>>,
-    pub(crate) dispatched: Arc<Mutex<Vec<Dispatch>>>,
+    pub(crate) dispatched: DispatchLog,
 }
 
 impl MockHost {
+    /// A handle over an existing store, sharing an existing dispatch log, with an empty
+    /// connector map.
+    pub(crate) fn scoped(scope: &str, store: Store, dispatched: DispatchLog) -> Self {
+        Self {
+            scope: scope.to_string(),
+            store,
+            conns: Arc::new(Mutex::new(HashMap::new())),
+            dispatched,
+        }
+    }
+
     /// Snapshot of a stored value by name.
     pub(crate) fn get(&self, name: &str) -> Option<ValueType> {
         self.store.lock().unwrap().get(name).cloned()
@@ -37,14 +61,14 @@ impl MockHost {
         self.conns.lock().unwrap()[&id].clone()
     }
 
+    /// Snapshot of every recorded dispatch, in call order.
+    pub(crate) fn dispatched(&self) -> Vec<Dispatch> {
+        self.dispatched.lock().unwrap().clone()
+    }
+
     /// Every recorded dispatch as `(scope, action)`.
     pub(crate) fn dispatched_pairs(&self) -> Vec<(String, String)> {
-        self.dispatched
-            .lock()
-            .unwrap()
-            .iter()
-            .map(|d| (d.scope.clone(), d.action.clone()))
-            .collect()
+        pairs(&self.dispatched)
     }
 }
 
@@ -76,10 +100,11 @@ impl OcppActions for MockHost {
     fn actions() -> Vec<&'static str> {
         vec!["BootNotification", "StartTransaction"]
     }
-    fn dispatch(&self, action: &str, _args: Vec<(String, ValueType)>) -> bool {
+    fn dispatch(&self, action: &str, args: Vec<(String, ValueType)>) -> bool {
         self.dispatched.lock().unwrap().push(Dispatch {
             scope: self.scope.clone(),
             action: action.to_string(),
+            args,
         });
         true
     }
