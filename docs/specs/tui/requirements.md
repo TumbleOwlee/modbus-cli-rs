@@ -538,7 +538,7 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **UI-R-314** — A file tree node may carry an optional badge supplied by the caller as a display marker and a style, which the widget stores against that node's full path and never interprets, so any caller-defined meaning can be attached to a row.
 
-**UI-R-315** — A badged row draws its badge marker after the status marker (UI-R-244) and immediately before the node's name, separated from the name by one space, so the badge reads as a prefix of the name rather than a replacement for the status marker.
+**UI-R-315** — A badged row draws its badge marker after the node's name, separated from it by one space, while the status marker (UI-R-244) stays leading, so a badged row reads status marker, name, badge from left to right.
 
 **UI-R-316** — The badge marker's cells are drawn in the badge's own style while the rest of the row keeps the styling UI-R-244 gives it, and that holds on the selected row, where the badge keeps its own foreground over the highlighted-row background (UI-R-252).
 

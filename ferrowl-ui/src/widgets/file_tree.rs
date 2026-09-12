@@ -153,14 +153,14 @@ impl<S: FileTreeStatus> StatefulWidget for &FileTree<S> {
             prefix.push(marker);
             prefix.push_str(&content_prefix);
 
-            let mut segments: Vec<(String, Style)> = vec![(prefix, style)];
+            let mut segments: Vec<(String, Style)> =
+                vec![(prefix, style), (row.name.clone(), style)];
             if let Some(badge) = &row.badge
                 && !badge.marker.is_empty()
             {
-                segments.push((badge.marker.clone(), badge.style));
                 segments.push((" ".to_string(), style));
+                segments.push((badge.marker.clone(), badge.style));
             }
-            segments.push((row.name.clone(), style));
 
             let row_rect = Rect {
                 x: area.x,
@@ -527,25 +527,25 @@ mod tests {
         let w = FileTree::default();
         let mut b = buffer(20, 1);
         StatefulWidget::render(&w, Rect::new(0, 0, 20, 1), &mut b, &mut s);
-        assert!(row_text(&b, 0, 20).starts_with(" * a.rs"));
-        assert_eq!(b[(1, 0)].fg, ratatui::style::Color::Cyan);
+        assert!(row_text(&b, 0, 20).starts_with(" a.rs *"));
+        assert_eq!(b[(6, 0)].fg, ratatui::style::Color::Cyan);
     }
 
     #[test]
-    /// UI-R-315 — a badge draws after the status marker and immediately before the name,
-    /// separated from the name by one space.
-    fn ut_badge_draws_after_the_status_marker_and_one_space_before_the_name() {
+    /// UI-R-315 — a badge draws after the node's name, separated from it by one space,
+    /// while the status marker stays leading.
+    fn ut_badge_draws_after_the_name_and_one_space_after_it() {
         let badge = FileTreeBadge::new("*", Style::default());
         let mut s = badged_tree(&[("a.rs", Some(FileStatus::Added), Some(badge))]);
         let w = FileTree::default();
         let mut b = buffer(20, 1);
         StatefulWidget::render(&w, Rect::new(0, 0, 20, 1), &mut b, &mut s);
-        assert_eq!(row_text(&b, 0, 8), " +* a.rs");
+        assert_eq!(row_text(&b, 0, 8), " +a.rs *");
     }
 
     #[test]
     /// UI-R-316 — the badge marker's cells carry the badge's own style, while the
-    /// separating space and the name cells carry the row's status style.
+    /// leading status marker, separating space and name cells carry the row's status style.
     fn ut_badge_keeps_its_own_style_while_the_row_keeps_the_status_style() {
         let badge = FileTreeBadge::new("*", Style::default().fg(ratatui::style::Color::Cyan));
         let mut s = badged_tree(&[("a.rs", Some(FileStatus::Added), Some(badge))]);
@@ -553,11 +553,11 @@ mod tests {
         let mut b = buffer(20, 1);
         StatefulWidget::render(&w, Rect::new(0, 0, 20, 1), &mut b, &mut s);
         let added_fg = w.syntax_theme.added.fg.expect("style sets a color");
-        // ` +* a.rs`: 0=' ' 1='+' 2='*' 3=' ' 4='a'
+        // ` +a.rs *`: 0=' ' 1='+' 2='a' ... 5='s' 6=' ' 7='*'
         assert_eq!(b[(1, 0)].fg, added_fg);
-        assert_eq!(b[(2, 0)].fg, ratatui::style::Color::Cyan);
-        assert_eq!(b[(3, 0)].fg, added_fg);
-        assert_eq!(b[(4, 0)].fg, added_fg);
+        assert_eq!(b[(2, 0)].fg, added_fg);
+        assert_eq!(b[(6, 0)].fg, added_fg);
+        assert_eq!(b[(7, 0)].fg, ratatui::style::Color::Cyan);
     }
 
     #[test]
@@ -576,7 +576,7 @@ mod tests {
                 w.highlighted_row.bg.expect("style sets a color")
             );
         }
-        assert_eq!(b[(1, 0)].fg, ratatui::style::Color::Cyan);
+        assert_eq!(b[(6, 0)].fg, ratatui::style::Color::Cyan);
     }
 
     #[test]
@@ -591,7 +591,7 @@ mod tests {
         s.set_badge("a.rs", Some(FileTreeBadge::new("*", Style::default())));
         let mut b = buffer(20, 1);
         StatefulWidget::render(&w, Rect::new(0, 0, 20, 1), &mut b, &mut s);
-        assert!(row_text(&b, 0, 20).starts_with(" * a.rs"));
+        assert!(row_text(&b, 0, 20).starts_with(" a.rs *"));
     }
 
     #[test]
@@ -615,21 +615,21 @@ mod tests {
     }
 
     #[test]
-    /// UI-E-147 — a badge on a status-free file draws before the name with no status
-    /// marker preceding it.
-    fn ut_badge_on_a_status_free_file_draws_before_the_name_with_no_status_marker() {
+    /// UI-E-147 — a badge on a status-free file draws with no leading status marker; the
+    /// badge still follows the name one space later.
+    fn ut_badge_on_a_status_free_file_draws_with_no_status_marker() {
         let badge = FileTreeBadge::new("*", Style::default());
         let mut s = badged_tree(&[("a.rs", None, Some(badge))]);
         let w = FileTree::default();
         let mut b = buffer(20, 1);
         StatefulWidget::render(&w, Rect::new(0, 0, 20, 1), &mut b, &mut s);
-        assert_eq!(row_text(&b, 0, 8), " * a.rs ");
+        assert_eq!(row_text(&b, 0, 8), " a.rs * ");
     }
 
     #[test]
-    /// UI-E-149 — a badge widening a row clips the name at the area width without
-    /// wrapping onto the next row.
-    fn ut_badge_widening_a_row_clips_the_name_at_the_area_width() {
+    /// UI-E-149 — a badge widening a row past the area is clipped away entirely; the name
+    /// is drawn in full and the row never wraps onto the next row.
+    fn ut_badge_widening_a_row_is_clipped_away_at_the_area_width() {
         let badge = FileTreeBadge::new("*", Style::default());
         let mut s = badged_tree(&[("a-very-long-file-name-indeed.rs", None, Some(badge))]);
         let w = FileTree::default();
@@ -637,7 +637,7 @@ mod tests {
         StatefulWidget::render(&w, Rect::new(0, 0, 10, 2), &mut b, &mut s);
         let line = row_text(&b, 0, 10);
         assert_eq!(line.chars().count(), 10);
-        assert_eq!(line, " * a-very-");
+        assert_eq!(line, " a-very-lo");
         assert!(row_text(&b, 1, 10).trim().is_empty());
     }
 
