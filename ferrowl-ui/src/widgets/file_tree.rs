@@ -177,10 +177,7 @@ impl<S: FileTreeStatus> StatefulWidget for &FileTree<S> {
                     break;
                 }
                 let budget = (end - x) as usize;
-                let clipped: String = chunk.chars().take(budget).collect();
-                let len = clipped.chars().count() as u16;
-                buf.set_string(x, y, &clipped, seg_style);
-                x += len;
+                (x, _) = buf.set_stringn(x, y, &chunk, budget, seg_style);
             }
 
             if !rows.is_empty() && i == selected {
@@ -611,8 +608,8 @@ mod tests {
         let mut b_badged = buffer(20, 2);
         StatefulWidget::render(&w, Rect::new(0, 0, 20, 2), &mut b_badged, &mut with_badge);
 
+        assert_eq!(row_text(&b_plain, 1, 20), row_text(&b_badged, 1, 20));
         for x in 0..20 {
-            assert_eq!(row_text(&b_plain, 1, 20), row_text(&b_badged, 1, 20));
             assert_eq!(b_plain[(x, 1)].fg, b_badged[(x, 1)].fg);
         }
     }
@@ -658,9 +655,24 @@ mod tests {
         let mut b_plain = buffer(20, 1);
         StatefulWidget::render(&w, Rect::new(0, 0, 20, 1), &mut b_plain, &mut plain);
 
+        assert_eq!(row_text(&b_empty, 0, 20), row_text(&b_plain, 0, 20));
         for x in 0..20 {
-            assert_eq!(row_text(&b_empty, 0, 20), row_text(&b_plain, 0, 20));
             assert_eq!(b_empty[(x, 0)].fg, b_plain[(x, 0)].fg);
         }
+    }
+
+    #[test]
+    /// UI-E-148 — a badge set for a directory path is stored but never drawn: the
+    /// directory row and its children's ancestor cells carry no badge marker.
+    fn ut_badge_for_a_directory_path_draws_no_badge_on_that_row_or_its_children() {
+        let mut s = tree(&[("a/b.rs", None)]);
+        s.set_badge("a", Some(FileTreeBadge::new("*", Style::default())));
+        s.expand_all();
+        let w = FileTree::default();
+        let mut b = buffer(20, 2);
+        StatefulWidget::render(&w, Rect::new(0, 0, 20, 2), &mut b, &mut s);
+        assert!(row_text(&b, 0, 20).starts_with("▾a"));
+        assert!(!row_text(&b, 0, 20).contains('*'));
+        assert!(row_text(&b, 1, 20).starts_with("   b.rs"));
     }
 }

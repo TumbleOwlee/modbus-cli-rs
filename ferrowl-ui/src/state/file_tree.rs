@@ -61,7 +61,7 @@ impl FileTreeBadge {
 }
 
 /// UI-R-234, UI-R-314 — one path plus what the caller attaches to it.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FileTreeEntry<S = FileStatus> {
     path: String,
     status: Option<S>,
@@ -89,12 +89,6 @@ impl<S> FileTreeEntry<S> {
 
     pub fn path(&self) -> &str {
         &self.path
-    }
-}
-
-impl<S: PartialEq> PartialEq for FileTreeEntry<S> {
-    fn eq(&self, other: &Self) -> bool {
-        self.path == other.path && self.status == other.status && self.badge == other.badge
     }
 }
 
@@ -286,18 +280,26 @@ pub struct FileTreeState<S = FileStatus> {
     focused: bool,
 }
 
+/// Collects the badge each entry carries into a path-keyed map, shared by
+/// `FileTreeStateBuilder::paths` and `FileTreeState::set_paths`.
+fn badges_from<S>(entries: &[FileTreeEntry<S>]) -> HashMap<String, FileTreeBadge> {
+    entries
+        .iter()
+        .filter_map(|entry| {
+            entry
+                .badge
+                .as_ref()
+                .map(|b| (entry.path.clone(), b.clone()))
+        })
+        .collect()
+}
+
 impl<S: FileTreeStatus> FileTreeStateBuilder<S> {
     /// UI-R-234, UI-R-314 — entries plus their optional status and badge, routed through
     /// `build_tree` for the tree and collected into the badge map.
     pub fn paths(&mut self, entries: Vec<FileTreeEntry<S>>) -> &mut Self {
-        let mut badges = HashMap::new();
-        for entry in &entries {
-            if let Some(badge) = &entry.badge {
-                badges.insert(entry.path.clone(), badge.clone());
-            }
-        }
+        self.badges = Some(badges_from(&entries));
         self.root = Some(build_tree(&entries));
-        self.badges = Some(badges);
         self
     }
 }
@@ -314,14 +316,8 @@ impl<S: FileTreeStatus> FileTreeState<S> {
     /// UI-R-234 — rebuilds the tree from a fresh path list, routed through `build_tree`
     /// like the builder's `paths` setter; the selection is clamped to the new row count.
     pub fn set_paths(&mut self, entries: &[FileTreeEntry<S>]) {
-        let mut badges = HashMap::new();
-        for entry in entries {
-            if let Some(badge) = &entry.badge {
-                badges.insert(entry.path.clone(), badge.clone());
-            }
-        }
+        self.badges = badges_from(entries);
         self.root = build_tree(entries);
-        self.badges = badges;
         let rows = self.visible_rows();
         self.selected = self.selected.min(rows.len().saturating_sub(1));
         self.scroll_offset = 0;
@@ -996,6 +992,14 @@ mod tests {
             Some(FileTreeBadge::new("*", Style::default())),
         );
         s.set_badge("a", Some(FileTreeBadge::new("*", Style::default())));
+        assert_eq!(
+            s.badges.get("no/such/path"),
+            Some(&FileTreeBadge::new("*", Style::default()))
+        );
+        assert_eq!(
+            s.badges.get("a"),
+            Some(&FileTreeBadge::new("*", Style::default()))
+        );
         for row in s.visible_rows() {
             assert_eq!(row.badge, None);
         }
