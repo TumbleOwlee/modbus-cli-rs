@@ -261,10 +261,14 @@ fn teardown_line(name: &str, outcome: Option<(Level, String)>) -> String {
 
 /// Stop every module (best-effort: a stop failure is logged but does not change the exit code —
 /// we're already tearing down). Returns the teardown line reported for each module, in order
-/// (CL-R-055, CL-R-056).
+/// (CL-R-055, CL-R-056). Reported names are deduped the same way [`build_registry`] dedupes
+/// `C_Module` keys, so a repeated `--module`/`--ocpp` name is distinguishable in the teardown
+/// report just as it is in the registry.
 async fn stop_all(modules: &mut [RunModule]) -> Vec<String> {
+    let names: Vec<String> = modules.iter().map(|m| m.name.clone()).collect();
+    let deduped = dedupe_names(&names);
     let mut lines = Vec::new();
-    for module in modules.iter_mut() {
+    for (module, name) in modules.iter_mut().zip(deduped.iter()) {
         let result = module.view.handle_command("stop").await;
         let outcome = if let CommandResult::Handled(Some((level, msg))) = &result {
             module.log.write().await.write(*level, msg);
@@ -272,7 +276,7 @@ async fn stop_all(modules: &mut [RunModule]) -> Vec<String> {
         } else {
             None
         };
-        let line = teardown_line(&module.name, outcome);
+        let line = teardown_line(name, outcome);
         eprintln!("{line}");
         lines.push(line);
     }
@@ -882,7 +886,8 @@ mod tests {
 
     #[tokio::test]
     /// CL-R-055 — each module the headless runner stops is reported, in list order, as
-    /// `Stopped '<name>'`.
+    /// `Stopped '<name>'`, `<name>` deduped the same way `build_registry` dedupes module names
+    /// (two modules sharing a raw name get distinct reported names).
     async fn ut_stop_all_reports_each_module_in_order() {
         let (view_a, _handle_a) = crate::app::testkit::MockView::pair("a");
         let (view_b, _handle_b) = crate::app::testkit::MockView::pair("b");
@@ -894,7 +899,7 @@ mod tests {
                 last_written: 0,
             },
             RunModule {
-                name: "b".to_string(),
+                name: "a".to_string(),
                 view: view_b.boxed(),
                 log: new_log(),
                 last_written: 0,
@@ -903,7 +908,8 @@ mod tests {
         let lines = stop_all(&mut modules).await;
         assert_eq!(
             lines,
-            vec!["Stopped 'a'".to_string(), "Stopped 'b'".to_string()]
+            vec!["Stopped 'a'".to_string(), "Stopped 'a (2)'".to_string()],
+            "CL-R-055 reports the deduped name, matching build_registry's dedupe_names key"
         );
     }
 
