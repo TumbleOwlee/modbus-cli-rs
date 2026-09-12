@@ -664,6 +664,18 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **UI-R-175** — The tab widget recomputes its scroll offset from the active tab's block on every render (UI-R-118) and stores it in its state as the record of the last computed window start, so the stored offset is an output of a render and never an input carried into the next one.
 
+**UI-R-324** — The tab widget's state (UI-R-119) reports a shared reference to the tab value at its active index (UI-R-325), and reports nothing only when its tab list is empty.
+
+**UI-R-325** — Every read of the tab widget state's active index — by the state's own accessors, by a selection operation (UI-R-326, UI-R-327, UI-R-328) and by rendering (UI-R-116, UI-R-118) alike — yields a valid index into the current tab list: a stored value that is not one, including a value the caller wrote into the field directly (UI-R-119), yields `0`.
+
+**UI-R-326** — Selecting an index on the tab widget's state sets the active index (UI-R-325) to that index clamped to the last index of the current tab list, so an index beyond the last tab selects the last tab (the application-level `Ctrl+t` jump's own range rule: UI-R-012).
+
+**UI-R-327** — Advancing the tab widget's state to the next tab moves the active index (UI-R-325) one position forward, wrapping from the last tab to the first.
+
+**UI-R-328** — Retreating the tab widget's state to the previous tab moves the active index (UI-R-325) one position backward, wrapping from the first tab to the last.
+
+**UI-R-329** — Replacing the tab widget state's tab list keeps the active index (UI-R-325) where it is when it is still valid for the new list and clamps it to the new list's last index otherwise.
+
 ## Modbus monitor view
 
 **UI-R-060** — A Modbus monitor module's content view has a left panel listing every unit id observed (updated live) and, on the right, sections scoped to the selected unit id: a message table (MB-R-146 records), a memory layout (MB-R-144's observed-value table, grouped by table kind), and a resolved-registers table (MB-R-145 interpretations applied to that unit id's memory).

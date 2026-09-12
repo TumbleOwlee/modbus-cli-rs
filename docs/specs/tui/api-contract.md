@@ -347,6 +347,21 @@ Event handling: `Enter` returns a submit outcome carrying the trimmed input text
 
 Builder: a help list of `(usage, description)` pairs, rendered as a bordered box above the line while open and non-empty (UI-R-196).
 
+## Tab bar widget
+
+Public surface: an ordered tab list and an active index the caller owns and updates before each render, plus a scroll offset the widget maintains (UI-R-119, UI-R-175); layout direction, padding and alignment builder options (UI-R-173, UI-R-120, UI-R-126); and the selection helpers below, which are the supported way for a caller to drive tab switching (UI-R-010, UI-R-011) instead of computing the index itself. The active index is never read or left out of range: an index handed in is clamped to the last tab, an already-invalid stored index reads as `0` (UI-R-325).
+
+| Method | Action | Req |
+|---|---|---|
+| `selected()` | Shared reference to the active tab's value, absent only for an empty tab list | UI-R-324 |
+| `selected_index()` | The active index, always valid for the current tab list | UI-R-325 |
+| `select_index(idx)` | Jump to an index, clamped to the last tab | UI-R-326 |
+| `next()` | Activate the next tab, wrapping at the end | UI-R-327 |
+| `previous()` | Activate the previous tab, wrapping at the start | UI-R-328 |
+| `set_titles(titles)` | Replace the tab list, clamping the active index | UI-R-329 |
+
+Note on scope: UI-R-012 (an app-level `Ctrl+t` jump to an out-of-range index is a silent no-op) is unchanged and does not conflict with the clamping of UI-R-326 — the application's range check stays at the application level, above the state.
+
 ## Editor dialog widget
 
 Builder: `title: String`, width and height percentages defaulting to 60/50, and a minimum size defaulting to 40 columns by 8 rows (UI-R-199, UI-R-200).
