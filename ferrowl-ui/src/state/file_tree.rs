@@ -49,6 +49,7 @@ pub trait FileTreeBadge: Clone {
     fn style(&self) -> Option<Style>;
 }
 
+/// The file tree's default badge type: yields no badge text on any row.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct NoBadge;
 
