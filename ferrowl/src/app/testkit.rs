@@ -162,6 +162,10 @@ pub(super) struct MockView {
     serial_paths: Arc<Mutex<Option<SerialPathRegistry>>>,
     keys: Arc<Mutex<Vec<(KeyModifiers, KeyCode)>>>,
     command_result: Option<CommandResult>,
+    /// UI-R-316 — `lifecycle_pending()`'s backing counter: `0` = not pending; `usize::MAX` = a
+    /// deferred stop that never settles; otherwise the number of `refresh()` calls still needed
+    /// before it clears.
+    pending_stop: Arc<AtomicUsize>,
 }
 
 impl MockView {
@@ -195,8 +199,23 @@ impl MockView {
             serial_paths,
             keys,
             command_result: None,
+            pending_stop: Arc::new(AtomicUsize::new(0)),
         };
         (view, handle)
+    }
+
+    /// Make this view report a pending deferred stop that clears after `refreshes` more
+    /// `refresh()` calls.
+    pub(super) fn with_pending_stop_settling_after(self, refreshes: usize) -> Self {
+        self.pending_stop.store(refreshes.max(1), Ordering::Relaxed);
+        self
+    }
+
+    /// Make this view report a pending deferred stop that never clears, so a settle loop driving
+    /// it must give up once its bound expires.
+    pub(super) fn with_pending_stop_never_settling(self) -> Self {
+        self.pending_stop.store(usize::MAX, Ordering::Relaxed);
+        self
     }
 
     /// Make the next `handle_command` call return `Handled(Some((level, message)))` instead of
@@ -266,13 +285,22 @@ impl ModuleView for MockView {
 
     fn refresh<'a>(&'a mut self) -> RefreshFuture<'a> {
         let refreshes = self.refreshes.clone();
+        let pending_stop = self.pending_stop.clone();
         Box::pin(async move {
             refreshes.fetch_add(1, Ordering::Relaxed);
+            let _ = pending_stop.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |n| match n {
+                0 | usize::MAX => None,
+                n => Some(n - 1),
+            });
         })
     }
 
     fn is_overlay_active(&self) -> bool {
         self.overlay_active
+    }
+
+    fn lifecycle_pending(&self) -> bool {
+        self.pending_stop.load(Ordering::Relaxed) > 0
     }
 
     fn handle_command<'a>(&'a mut self, cmd: &'a str) -> CommandFuture<'a> {

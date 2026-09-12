@@ -65,6 +65,11 @@ pub type CommandFuture<'a> =
 
 pub type RefreshFuture<'a> = std::pin::Pin<Box<dyn std::future::Future<Output = ()> + 'a>>;
 
+/// UI-R-316, CL-R-055 — the bound a caller waits for a signalled-but-not-yet-complete lifecycle
+/// stop to settle before proceeding anyway (tab close, headless teardown). One named constant
+/// shared by every settle loop rather than a literal repeated per call site.
+pub const SETTLE_BOUND: std::time::Duration = std::time::Duration::from_secs(1);
+
 /// The trait every module content view must implement.
 ///
 /// `Tab` and `App` interact with a module exclusively through this interface.
@@ -100,6 +105,13 @@ pub trait ModuleView: SetFocus + IsFocus {
     /// `"reload"`, `"edit"`, `"add"`, `"compact"`, `"wd [path]"`, `"log <file>"`,
     /// `"set <reg> <val>"`.
     fn handle_command<'a>(&'a mut self, cmd: &'a str) -> CommandFuture<'a>;
+
+    /// UI-R-314 — true while a lifecycle command dispatched by this view is still completing.
+    /// Callers that must see the operation through (headless teardown, closing a tab) drive
+    /// `refresh()` until this is false. Default: no deferred work.
+    fn lifecycle_pending(&self) -> bool {
+        false
+    }
 
     /// Module-specific commands shown in the help popup.
     fn commands(&self) -> &[CommandDescriptor];
