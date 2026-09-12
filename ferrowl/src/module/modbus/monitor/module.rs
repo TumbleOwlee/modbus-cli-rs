@@ -397,6 +397,11 @@ impl ModbusMonitorModule {
 
     /// Stop the running task: send `Terminate` then, after a grace period, abort if it is still
     /// alive. Mirrors `Instance::stop`'s grace-period-then-abort shape.
+    ///
+    /// Test-only: the view's deferred-dispatch stop leg uses `request_stop`/`poll_stop` instead;
+    /// kept as the blocking convenience its own test suite still exercises directly for
+    /// setup/cleanup.
+    #[cfg(test)]
     pub async fn stop(&mut self) -> Result<(), Error> {
         self.request_stop().await?;
         loop {
