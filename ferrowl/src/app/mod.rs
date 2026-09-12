@@ -475,6 +475,10 @@ impl<S: DrawSurface> App<S> {
                 tab.replace_view(new_view);
                 registry_stale = true;
             }
+            // A deferred lifecycle command (e.g. `:reload`) may swap in a fresh module with a
+            // fresh log ring after `run_command` already returned, so `commands.rs`'s own
+            // `tab.log = tab.view.log();` on a `Handled` result no longer catches it.
+            tab.log = tab.view.log();
             let name = tab.view.name();
             if name != tab.name {
                 tab.name = name;

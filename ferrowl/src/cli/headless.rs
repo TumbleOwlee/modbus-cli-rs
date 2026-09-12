@@ -256,6 +256,17 @@ async fn stop_all(modules: &mut [RunModule]) {
         {
             module.log.write().await.write(level, &msg);
         }
+        // CL-R-055 — a deferred stop only signals the task; drive it to completion (bounded) so
+        // teardown actually joins the task before moving to the next module. A slow/never-
+        // settling module never becomes an error (CL-R-026): the runner moves on regardless once
+        // the bound expires.
+        let started = std::time::Instant::now();
+        while module.view.lifecycle_pending()
+            && started.elapsed() < crate::module::view::SETTLE_BOUND
+        {
+            module.view.refresh().await;
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
     }
 }
 
@@ -846,6 +857,110 @@ mod tests {
         assert_eq!(run(&modbus_run_args(&dir, port, 1)).await, 0);
         // If the first run had not stopped its listener, this bind (inside start) would fail.
         assert_eq!(run(&modbus_run_args(&dir, port, 1)).await, 0);
+    }
+
+    /// A `ModuleView` double whose `lifecycle_pending()` never clears and whose `handle_command`
+    /// records every call it received — the minimal fixture needed to prove `stop_all` moves on
+    /// regardless and still dispatches to every module.
+    struct NeverSettlingView {
+        log: SharedLog,
+        stopped: Arc<std::sync::atomic::AtomicBool>,
+    }
+
+    impl ferrowl_ui::traits::SetFocus for NeverSettlingView {
+        fn set_focused(&mut self, _focus: bool) {}
+    }
+    impl ferrowl_ui::traits::IsFocus for NeverSettlingView {
+        fn is_focused(&self) -> bool {
+            false
+        }
+    }
+    impl ModuleView for NeverSettlingView {
+        fn name(&self) -> String {
+            "never-settles".to_string()
+        }
+        fn render(&mut self, _frame: &mut ratatui::Frame, _area: ratatui::layout::Rect) {}
+        fn render_overlay(&mut self, _frame: &mut ratatui::Frame, _area: ratatui::layout::Rect) {}
+        fn handle_events(
+            &mut self,
+            modifiers: crossterm::event::KeyModifiers,
+            code: crossterm::event::KeyCode,
+        ) -> ferrowl_ui::EventResult {
+            ferrowl_ui::EventResult::Unhandled(modifiers, code)
+        }
+        fn refresh<'a>(&'a mut self) -> crate::module::view::RefreshFuture<'a> {
+            Box::pin(async move {})
+        }
+        fn is_overlay_active(&self) -> bool {
+            false
+        }
+        fn handle_command<'a>(
+            &'a mut self,
+            _cmd: &'a str,
+        ) -> crate::module::view::CommandFuture<'a> {
+            self.stopped
+                .store(true, std::sync::atomic::Ordering::Relaxed);
+            Box::pin(async move { CommandResult::Handled(None) })
+        }
+        fn lifecycle_pending(&self) -> bool {
+            true
+        }
+        fn commands(&self) -> &[crate::module::view::CommandDescriptor] {
+            &[]
+        }
+        fn log(&self) -> SharedLog {
+            self.log.clone()
+        }
+    }
+
+    #[tokio::test]
+    /// CL-R-055 — a module whose deferred stop never settles still gets its settle bound waited
+    /// out (not skipped) and does not stall teardown of the next module, which is itself stopped
+    /// and waited out too.
+    async fn ut_stop_all_moves_on_when_a_module_settle_bound_expires() {
+        let stopped_a = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let stopped_b = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let mut modules = vec![
+            RunModule {
+                name: "a".to_string(),
+                view: Box::new(NeverSettlingView {
+                    log: new_log(),
+                    stopped: stopped_a.clone(),
+                }),
+                log: new_log(),
+                last_written: 0,
+            },
+            RunModule {
+                name: "b".to_string(),
+                view: Box::new(NeverSettlingView {
+                    log: new_log(),
+                    stopped: stopped_b.clone(),
+                }),
+                log: new_log(),
+                last_written: 0,
+            },
+        ];
+
+        let before = Instant::now();
+        stop_all(&mut modules).await;
+        let elapsed = before.elapsed();
+        assert!(
+            elapsed >= crate::module::view::SETTLE_BOUND * 2,
+            "stop_all took {elapsed:?}, expected both modules' settle waits to actually run \
+             (each bounded at SETTLE_BOUND) rather than being skipped"
+        );
+        assert!(
+            elapsed < crate::module::view::SETTLE_BOUND * 2 + Duration::from_millis(500),
+            "stop_all took {elapsed:?}, expected each module's settle wait to be bounded"
+        );
+        assert!(
+            stopped_a.load(std::sync::atomic::Ordering::Relaxed),
+            "module a must have been sent stop despite b following it"
+        );
+        assert!(
+            stopped_b.load(std::sync::atomic::Ordering::Relaxed),
+            "module b must still be stopped even after a's settle bound expired"
+        );
     }
 
     #[tokio::test]
