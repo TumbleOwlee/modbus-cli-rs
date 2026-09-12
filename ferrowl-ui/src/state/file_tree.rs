@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crossterm::event::{KeyCode, KeyModifiers};
 use derive_builder::Builder;
 use ratatui::style::Style;
@@ -41,6 +43,61 @@ impl FileTreeStatus for FileStatus {
     }
 }
 
+/// UI-R-314 — a caller-supplied marker and style stored against a path and never
+/// interpreted by the widget.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FileTreeBadge {
+    pub marker: String,
+    pub style: Style,
+}
+
+impl FileTreeBadge {
+    pub fn new(marker: impl Into<String>, style: Style) -> Self {
+        Self {
+            marker: marker.into(),
+            style,
+        }
+    }
+}
+
+/// UI-R-234, UI-R-314 — one path plus what the caller attaches to it.
+#[derive(Debug, Clone)]
+pub struct FileTreeEntry<S = FileStatus> {
+    path: String,
+    status: Option<S>,
+    badge: Option<FileTreeBadge>,
+}
+
+impl<S> FileTreeEntry<S> {
+    pub fn new(path: impl Into<String>) -> Self {
+        Self {
+            path: path.into(),
+            status: None,
+            badge: None,
+        }
+    }
+
+    pub fn with_status(mut self, status: S) -> Self {
+        self.status = Some(status);
+        self
+    }
+
+    pub fn with_badge(mut self, badge: FileTreeBadge) -> Self {
+        self.badge = Some(badge);
+        self
+    }
+
+    pub fn path(&self) -> &str {
+        &self.path
+    }
+}
+
+impl<S: PartialEq> PartialEq for FileTreeEntry<S> {
+    fn eq(&self, other: &Self) -> bool {
+        self.path == other.path && self.status == other.status && self.badge == other.badge
+    }
+}
+
 /// A node of the tree built from the paths [`FileTreeState`] is constructed with. Crate-private
 /// like `DiffRow` in `diff_view.rs`: no `api-contract.md` row exposes the tree itself,
 /// only the path list going in and the selected path coming out.
@@ -71,6 +128,8 @@ pub(crate) struct VisibleRow<S> {
     pub(crate) name: String,
     #[allow(dead_code)]
     pub(crate) status: Option<S>,
+    #[allow(dead_code)]
+    pub(crate) badge: Option<FileTreeBadge>,
 }
 
 /// Outcome of a key offered to [`FileTreeState`] via [`handle_key`](FileTreeState::handle_key).
@@ -87,9 +146,11 @@ pub enum FileTreeOutcome {
 /// Splits each path on `/`, creating the directory nodes its components imply and hanging
 /// the file under the last one (UI-R-234); a path with no `/` becomes a file node directly
 /// under the root (UI-E-104). Every directory created is `expanded: true` (UI-R-235).
-fn build_tree<S: FileTreeStatus>(paths: &[(String, Option<S>)]) -> Vec<TreeNode<S>> {
+fn build_tree<S: FileTreeStatus>(entries: &[FileTreeEntry<S>]) -> Vec<TreeNode<S>> {
     let mut root: Vec<TreeNode<S>> = Vec::new();
-    for (path, status) in paths {
+    for entry in entries {
+        let path = &entry.path;
+        let status = &entry.status;
         let mut components: Vec<&str> = path.split('/').collect();
         let file_name = components.pop().unwrap_or_default();
         let mut siblings = &mut root;
@@ -125,6 +186,7 @@ fn push_visible<S: FileTreeStatus>(
     nodes: &[TreeNode<S>],
     depth: usize,
     prefix: &str,
+    badges: &HashMap<String, FileTreeBadge>,
     out: &mut Vec<VisibleRow<S>>,
 ) {
     let mut dirs: Vec<&TreeNode<S>> = nodes
@@ -163,9 +225,10 @@ fn push_visible<S: FileTreeStatus>(
                     expanded: *expanded,
                     name: name.clone(),
                     status: None,
+                    badge: None,
                 });
                 if *expanded {
-                    push_visible(children, depth + 1, &path, out);
+                    push_visible(children, depth + 1, &path, badges, out);
                 }
             }
             TreeNode::File { name, status } => {
@@ -174,6 +237,7 @@ fn push_visible<S: FileTreeStatus>(
                 } else {
                     format!("{prefix}/{name}")
                 };
+                let badge = badges.get(&path).cloned();
                 out.push(VisibleRow {
                     depth,
                     path,
@@ -181,6 +245,7 @@ fn push_visible<S: FileTreeStatus>(
                     expanded: false,
                     name: name.clone(),
                     status: status.clone(),
+                    badge,
                 });
             }
         }
@@ -205,6 +270,8 @@ fn walk_mut<S>(nodes: &mut [TreeNode<S>], f: &mut impl FnMut(&mut bool)) {
 pub struct FileTreeState<S = FileStatus> {
     #[builder(setter(custom), default = "Vec::new()")]
     root: Vec<TreeNode<S>>,
+    #[builder(setter(custom), default = "HashMap::new()")]
+    badges: HashMap<String, FileTreeBadge>,
     #[builder(setter(skip), default = "0")]
     selected: usize,
     #[builder(setter(skip), default = "0")]
@@ -220,9 +287,17 @@ pub struct FileTreeState<S = FileStatus> {
 }
 
 impl<S: FileTreeStatus> FileTreeStateBuilder<S> {
-    /// UI-R-234 — path plus optional status, routed through `build_tree`.
-    pub fn paths(&mut self, paths: Vec<(String, Option<S>)>) -> &mut Self {
-        self.root = Some(build_tree(&paths));
+    /// UI-R-234, UI-R-314 — entries plus their optional status and badge, routed through
+    /// `build_tree` for the tree and collected into the badge map.
+    pub fn paths(&mut self, entries: Vec<FileTreeEntry<S>>) -> &mut Self {
+        let mut badges = HashMap::new();
+        for entry in &entries {
+            if let Some(badge) = &entry.badge {
+                badges.insert(entry.path.clone(), badge.clone());
+            }
+        }
+        self.root = Some(build_tree(&entries));
+        self.badges = Some(badges);
         self
     }
 }
@@ -238,12 +313,32 @@ impl Default for FileTreeState<FileStatus> {
 impl<S: FileTreeStatus> FileTreeState<S> {
     /// UI-R-234 — rebuilds the tree from a fresh path list, routed through `build_tree`
     /// like the builder's `paths` setter; the selection is clamped to the new row count.
-    pub fn set_paths(&mut self, paths: &[(String, Option<S>)]) {
-        self.root = build_tree(paths);
+    pub fn set_paths(&mut self, entries: &[FileTreeEntry<S>]) {
+        let mut badges = HashMap::new();
+        for entry in entries {
+            if let Some(badge) = &entry.badge {
+                badges.insert(entry.path.clone(), badge.clone());
+            }
+        }
+        self.root = build_tree(entries);
+        self.badges = badges;
         let rows = self.visible_rows();
         self.selected = self.selected.min(rows.len().saturating_sub(1));
         self.scroll_offset = 0;
         self.ensure_visible();
+    }
+
+    /// UI-R-317, UI-E-148 — sets, replaces or (with `None`) clears one path's badge; the
+    /// path need not name a file node. Selection and expansion are untouched.
+    pub fn set_badge(&mut self, path: &str, badge: Option<FileTreeBadge>) {
+        match badge {
+            Some(b) => {
+                self.badges.insert(path.to_string(), b);
+            }
+            None => {
+                self.badges.remove(path);
+            }
+        }
     }
 
     /// UI-R-235 — expands every directory in the tree.
@@ -260,7 +355,7 @@ impl<S: FileTreeStatus> FileTreeState<S> {
     /// directories, directories before files, each group ordered by name.
     pub(crate) fn visible_rows(&self) -> Vec<VisibleRow<S>> {
         let mut out = Vec::new();
-        push_visible(&self.root, 0, "", &mut out);
+        push_visible(&self.root, 0, "", &self.badges, &mut out);
         out
     }
 
@@ -495,8 +590,16 @@ impl<S: FileTreeStatus> IsFocus for FileTreeState<S> {
 mod tests {
     use super::*;
 
-    fn paths(list: &[(&str, Option<FileStatus>)]) -> Vec<(String, Option<FileStatus>)> {
-        list.iter().map(|(p, s)| (p.to_string(), *s)).collect()
+    fn paths(list: &[(&str, Option<FileStatus>)]) -> Vec<FileTreeEntry<FileStatus>> {
+        list.iter()
+            .map(|(p, s)| {
+                let mut e = FileTreeEntry::new(*p);
+                if let Some(s) = s {
+                    e = e.with_status(*s);
+                }
+                e
+            })
+            .collect()
     }
 
     fn tree(list: &[(&str, Option<FileStatus>)]) -> FileTreeState {
@@ -824,8 +927,8 @@ mod tests {
     fn ut_visible_rows_carry_the_caller_status_type() {
         let s: FileTreeState<Severity> = FileTreeStateBuilder::default()
             .paths(vec![
-                ("a/b.rs".to_string(), Some(Severity::Info)),
-                ("a/c.rs".to_string(), None),
+                FileTreeEntry::new("a/b.rs").with_status(Severity::Info),
+                FileTreeEntry::new("a/c.rs"),
             ])
             .build()
             .unwrap();
@@ -833,5 +936,68 @@ mod tests {
         assert_eq!(rows[0].status, None);
         assert_eq!(rows[1].status, Some(Severity::Info));
         assert_eq!(rows[2].status, None);
+    }
+
+    #[test]
+    /// UI-R-314 — a badge supplied at construction is stored against the file's path and
+    /// surfaced by `visible_rows()`.
+    fn ut_badge_from_the_construction_input_is_stored_against_the_path() {
+        let s: FileTreeState = FileTreeStateBuilder::default()
+            .paths(vec![
+                FileTreeEntry::new("a.rs").with_badge(FileTreeBadge::new("*", Style::default())),
+                FileTreeEntry::new("b.rs"),
+            ])
+            .build()
+            .unwrap();
+        let rows = s.visible_rows();
+        assert_eq!(
+            rows[0].badge,
+            Some(FileTreeBadge::new("*", Style::default()))
+        );
+        assert_eq!(rows[1].badge, None);
+    }
+
+    #[test]
+    /// UI-R-317 — `set_badge` sets, replaces and (with `None`) clears a path's badge,
+    /// leaving the selection and every directory's expansion unchanged.
+    fn ut_set_badge_sets_replaces_and_clears_leaving_selection_and_expansion() {
+        let mut s = tree(&[("a/b.rs", None), ("c.rs", None)]);
+        s.handle_key(KeyModifiers::NONE, KeyCode::Char('j'));
+        let selected_before = s.selected_path();
+        let expanded_before: Vec<bool> = s.visible_rows().iter().map(|r| r.expanded).collect();
+
+        s.set_badge("a/b.rs", Some(FileTreeBadge::new("*", Style::default())));
+        assert_eq!(
+            s.visible_rows()[1].badge,
+            Some(FileTreeBadge::new("*", Style::default()))
+        );
+        assert_eq!(s.selected_path(), selected_before);
+
+        s.set_badge("a/b.rs", Some(FileTreeBadge::new("!", Style::default())));
+        assert_eq!(
+            s.visible_rows()[1].badge,
+            Some(FileTreeBadge::new("!", Style::default()))
+        );
+
+        s.set_badge("a/b.rs", None);
+        assert_eq!(s.visible_rows()[1].badge, None);
+        assert_eq!(s.selected_path(), selected_before);
+        let expanded_after: Vec<bool> = s.visible_rows().iter().map(|r| r.expanded).collect();
+        assert_eq!(expanded_before, expanded_after);
+    }
+
+    #[test]
+    /// UI-E-148 — a badge set for a path matching no file node, or matching a directory,
+    /// is stored but produces no badge on any visible row.
+    fn ut_badge_for_an_unknown_or_directory_path_is_stored_and_never_drawn() {
+        let mut s = tree(&[("a/b.rs", None)]);
+        s.set_badge(
+            "no/such/path",
+            Some(FileTreeBadge::new("*", Style::default())),
+        );
+        s.set_badge("a", Some(FileTreeBadge::new("*", Style::default())));
+        for row in s.visible_rows() {
+            assert_eq!(row.badge, None);
+        }
     }
 }
