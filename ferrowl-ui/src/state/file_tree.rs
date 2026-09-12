@@ -8,16 +8,15 @@ use crate::EventResult;
 use crate::style::SyntaxTheme;
 use crate::traits::{HandleEvents, IsFocus, SetFocus};
 
-/// UI-R-244 — the marker and style a file tree draws for a node carrying this status.
-/// `theme` is the widget's syntax theme (UI-R-319); an implementation is free to ignore it.
+/// The marker and style a file tree draws for a node carrying this status. `theme` is the
+/// widget's syntax theme; an implementation is free to ignore it.
 pub trait FileTreeStatus: Clone {
     fn marker(&self) -> String;
     fn style(&self, theme: &SyntaxTheme) -> Style;
 }
 
-/// A file node's change status (UI-R-244, UI-R-319): drawn as a leading marker and styled
-/// with the syntax theme's added/removed/meta styles. Public because the caller sets it per
-/// path.
+/// A file node's change status: drawn as a leading marker and styled with the syntax
+/// theme's added/removed/meta styles. Public because the caller sets it per path.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FileStatus {
     Added,
@@ -43,14 +42,13 @@ impl FileTreeStatus for FileStatus {
     }
 }
 
-/// UI-R-314, UI-R-322 — the text and optional style a file tree draws for a node's badge;
-/// `style` reporting `None` falls back to the row's own styling (UI-R-322).
+/// The text and optional style a file tree draws for a node's badge; `style` reporting
+/// `None` falls back to the row's own styling.
 pub trait FileTreeBadge: Clone {
     fn text(&self) -> String;
     fn style(&self) -> Option<Style>;
 }
 
-/// UI-R-323 — the file tree's default badge type: yields no badge text on any row.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct NoBadge;
 
@@ -64,7 +62,7 @@ impl FileTreeBadge for NoBadge {
     }
 }
 
-/// UI-R-234, UI-R-314 — one path plus what the caller attaches to it.
+/// One path plus what the caller attaches to it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FileTreeEntry<S = FileStatus, B = NoBadge> {
     path: String,
@@ -295,8 +293,8 @@ fn badges_from<S, B: Clone>(entries: &[FileTreeEntry<S, B>]) -> HashMap<String, 
 }
 
 impl<S: FileTreeStatus, B: FileTreeBadge> FileTreeStateBuilder<S, B> {
-    /// UI-R-234, UI-R-314 — entries plus their optional status and badge, routed through
-    /// `build_tree` for the tree and collected into the badge map.
+    /// Entries plus their optional status and badge, routed through `build_tree` for the
+    /// tree and collected into the badge map.
     pub fn paths(&mut self, entries: Vec<FileTreeEntry<S, B>>) -> &mut Self {
         self.badges = Some(badges_from(&entries));
         self.root = Some(build_tree(&entries));
@@ -324,8 +322,8 @@ impl<S: FileTreeStatus, B: FileTreeBadge> FileTreeState<S, B> {
         self.ensure_visible();
     }
 
-    /// UI-R-317, UI-E-148 — sets, replaces or (with `None`) clears one path's badge; the
-    /// path need not name a file node. Selection and expansion are untouched.
+    /// Sets, replaces or (with `None`) clears one path's badge; the path need not name a
+    /// file node. Selection and expansion are untouched.
     pub fn set_badge(&mut self, path: &str, badge: Option<B>) {
         match badge {
             Some(b) => {

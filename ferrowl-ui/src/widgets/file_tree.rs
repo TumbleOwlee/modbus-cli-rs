@@ -15,9 +15,9 @@ use crate::traits::{IsFocus, Margins};
 use crate::widgets::Title;
 
 /// A file tree rendered from a [`FileTreeState`]: each visible row indented by its depth
-/// with an expansion marker on directories (UI-R-238), a status marker and style on a file
-/// that carries one (UI-R-244), and the selected row painted in the theme's highlighted-row
-/// style across the widget's full width (UI-R-252).
+/// with an expansion marker on directories, a status marker and style on a file that
+/// carries one, and the selected row painted in the theme's highlighted-row style across
+/// the widget's full width.
 #[derive(Builder, Debug, Clone, Getters, Setters, CopyGetters, WithSetters)]
 #[getset(set = "pub")]
 pub struct FileTree<S = FileStatus, B = NoBadge> {
