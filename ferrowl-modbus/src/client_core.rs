@@ -563,7 +563,7 @@ where
         mut self,
         operations: Arc<RwLock<Vec<Operation>>>,
         memory: Arc<MemLock<Memory<Key<T>>>>,
-        receiver: &mut Receiver<Command>,
+        commands: &mut crate::common::Commands<'_, Command>,
         config: RunConfig<L, St>,
     ) -> (bool, Result<(), Error>)
     where
@@ -603,7 +603,7 @@ where
                 // Execute next command if available. `None` means every sender was dropped
                 // (e.g. the owning instance was torn down without sending `Terminate`); treat
                 // that the same as an explicit `Terminate`.
-                cmd = receiver.recv() => match cmd.unwrap_or(Command::Terminate) {
+                cmd = commands.recv() => match cmd.unwrap_or(Command::Terminate) {
                     Command::Terminate => {
                         log.invoke("Client gracefully terminated.".to_string())
                             .await;
@@ -716,11 +716,30 @@ where
             let connect = &connect;
             let connected = connected.clone();
             async move {
+                let mut guard = receiver.lock().await;
+                let mut parked: std::collections::VecDeque<Command> =
+                    std::collections::VecDeque::new();
                 let conn_attempt = {
-                    let mut guard = connect.lock().await;
-                    (*guard)()
-                }
-                .await;
+                    let mut connect_guard = connect.lock().await;
+                    crate::common::race_terminate(
+                        (*connect_guard)(),
+                        &mut guard,
+                        |cmd: &Command| matches!(cmd, Command::Terminate),
+                        &mut parked,
+                    )
+                    .await
+                };
+                let conn_attempt = match conn_attempt {
+                    Some(conn_attempt) => conn_attempt,
+                    None => {
+                        // MB-R-220 — terminate (or channel close) arrived while the connect
+                        // attempt itself was in flight: the attempt is abandoned, never having
+                        // reached a connected state.
+                        drop(guard);
+                        status.invoke("Client disconnected".to_string()).await;
+                        return ferrowl_util::backoff::AttemptOutcome::Done;
+                    }
+                };
                 let reconnect = conn_attempt.reconnect;
                 let run_config = RunConfig {
                     log: log.clone(),
@@ -738,6 +757,16 @@ where
                         core
                     }
                     Err(e) => {
+                        // MB-E-093 — a command parked while this failed attempt was in flight is
+                        // dropped here, with the same log line as a command arriving while
+                        // backing off: there is no connection loop left to hand it to.
+                        for _ in 0..parked.len() {
+                            log.invoke(
+                                "Command dropped: client is disconnected and reconnecting."
+                                    .to_string(),
+                            )
+                            .await;
+                        }
                         if !reconnect {
                             log.invoke(format!("{e} Reconnect disabled; client stopping."))
                                 .await;
@@ -753,9 +782,9 @@ where
                     }
                 };
 
-                let mut guard = receiver.lock().await;
+                let mut commands = crate::common::Commands::new(&mut guard, parked);
                 let (had_success, result) = core
-                    .run::<T, _, _>(operations, memory, &mut guard, run_config)
+                    .run::<T, _, _>(operations, memory, &mut commands, run_config)
                     .await;
                 drop(guard);
                 // MB-R-137 — the run() loop has ended (gracefully or not): no longer connected,
@@ -975,7 +1004,7 @@ mod tests {
             .run::<SlaveKey, _, _>(
                 Arc::new(RwLock::new(Vec::new())),
                 Arc::new(MemLock::new(Memory::<Key<SlaveKey>>::default())),
-                &mut rx,
+                &mut crate::common::Commands::new(&mut rx, std::collections::VecDeque::new()),
                 RunConfig {
                     log,
                     status: |_s: String| async move {},
@@ -1184,6 +1213,186 @@ mod tests {
 
         assert!(result.is_ok(), "graceful terminate ends the loop cleanly");
         assert!(!connected.get(), "not connected once the loop has ended");
+    }
+
+    #[tokio::test]
+    /// MB-R-220 — a terminate arriving while the connect attempt itself is in flight aborts it
+    /// immediately and ends the client task with success, without waiting for the attempt to
+    /// resolve.
+    async fn ut_terminate_during_connect_ends_loop_ok() {
+        let (log, _log_lines) = recording_log();
+        let (status, _status_lines) = recording_log();
+        let (tx, rx) = tokio::sync::mpsc::channel::<Command>(4);
+        let connected = ConnectedCell::default();
+
+        let connect = move || {
+            std::future::pending::<ConnectAttempt<FrameTransport<DuplexStream, Rtu>, Rtu>>()
+        };
+
+        tx.send(Command::Terminate).await.unwrap();
+
+        let result = tokio::time::timeout(
+            Duration::from_millis(250),
+            ClientCore::run_reconnect_loop::<SlaveKey, _, _, _, _>(
+                rx,
+                log,
+                status,
+                Arc::new(RwLock::new(Vec::new())),
+                Arc::new(MemLock::new(Memory::<Key<SlaveKey>>::default())),
+                connect,
+                connected,
+            ),
+        )
+        .await
+        .expect("terminate during connect must not hang");
+
+        assert!(
+            result.is_ok(),
+            "abandoned connect attempt ends with success"
+        );
+    }
+
+    #[tokio::test]
+    /// MB-E-093 — a command sent while a connect attempt is still in flight is parked, not
+    /// dropped, and is delivered to the connection loop once the attempt succeeds: a race that
+    /// drops non-terminate commands during connect would silently discard this write instead of
+    /// executing it.
+    async fn ut_command_sent_during_connect_is_executed_after_connect() {
+        let (core, mut peer) = rtu_client_over_duplex();
+        let (log, _log_lines) = recording_log();
+        let (status, _status_lines) = recording_log();
+        let (tx, rx) = tokio::sync::mpsc::channel::<Command>(4);
+        let connected = ConnectedCell::default();
+        let (ready_tx, ready_rx) = tokio::sync::oneshot::channel::<()>();
+
+        let mut once = Some(core);
+        let mut ready_rx = Some(ready_rx);
+        let connect = move || {
+            let core = once
+                .take()
+                .expect("connect is called exactly once in this test");
+            let ready_rx = ready_rx
+                .take()
+                .expect("connect is called exactly once in this test");
+            async move {
+                ready_rx.await.ok();
+                ConnectAttempt {
+                    reconnect: true,
+                    timeout_ms: 200,
+                    delay_ms: 0,
+                    interval_ms: 60_000,
+                    client: Ok(core),
+                }
+            }
+        };
+
+        let handle = tokio::spawn(async move {
+            ClientCore::run_reconnect_loop::<SlaveKey, _, _, _, _>(
+                rx,
+                log,
+                status,
+                Arc::new(RwLock::new(Vec::new())),
+                Arc::new(MemLock::new(Memory::<Key<SlaveKey>>::default())),
+                connect,
+                connected,
+            )
+            .await
+        });
+
+        // Sent while the connect attempt is still pending: must be parked, not dropped.
+        tx.send(Command::WriteSingleRegister(
+            UnitId(0),
+            Address(1),
+            RegisterValue(0x1234),
+        ))
+        .await
+        .unwrap();
+
+        ready_tx.send(()).unwrap();
+
+        let wire = drain_peer(&mut peer).await;
+        assert!(
+            wire.len() >= 6,
+            "the write parked during connect must reach the wire once connected: {wire:?}"
+        );
+        // RTU ADU: slave id, function code (6 = WriteSingleRegister), address (u16 BE), value
+        // (u16 BE), then a 2-byte CRC this assertion does not need to recompute.
+        assert_eq!(
+            &wire[..6],
+            &[0x00, 0x06, 0x00, 0x01, 0x12, 0x34],
+            "the parked write's slave id/function/address/value must reach the wire unchanged"
+        );
+
+        tx.send(Command::Terminate).await.unwrap();
+        let result = tokio::time::timeout(Duration::from_millis(500), handle)
+            .await
+            .expect("loop did not end promptly")
+            .unwrap();
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    /// MB-E-091 — documentation-level test: unlike `ut_terminate_during_connect_ends_loop_ok`'s
+    /// pending, genuinely-abortable future, a synchronous open has no await point for a race to
+    /// preempt, so it always runs to completion (here: an immediate failure against a
+    /// nonexistent path) exactly once per attempt, and a pre-queued terminate takes effect only
+    /// at the await surrounding it — never by cutting the open itself short. `calls == 1` proves
+    /// no second attempt happened; if the terminate were somehow observed before the open ran,
+    /// or if `reconnect` retried past it, this count would differ.
+    async fn ut_terminate_around_serial_open_ends_loop_ok() {
+        let (log, _log_lines) = recording_log();
+        let (status, _status_lines) = recording_log();
+        let (tx, rx) = tokio::sync::mpsc::channel::<Command>(4);
+        let connected = ConnectedCell::default();
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let calls_for_connect = calls.clone();
+
+        let connect = move || {
+            calls_for_connect.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            // Mirrors `open_serial`'s synchronous, no-await-point call against a path that does
+            // not exist: it fails at once, inside the closure, before any `.await`.
+            let open_result: Result<ClientCore<FrameTransport<DuplexStream, Rtu>, Rtu>, Error> =
+                Err(Error::PathConflict {
+                    path: "/dev/nonexistent".to_string(),
+                    other: "other-module".to_string(),
+                });
+            async move {
+                ConnectAttempt {
+                    reconnect: true,
+                    timeout_ms: 200,
+                    delay_ms: 0,
+                    interval_ms: 60_000,
+                    client: open_result,
+                }
+            }
+        };
+
+        tx.send(Command::Terminate).await.unwrap();
+
+        let result = tokio::time::timeout(
+            Duration::from_millis(250),
+            ClientCore::run_reconnect_loop::<SlaveKey, _, _, _, _>(
+                rx,
+                log,
+                status,
+                Arc::new(RwLock::new(Vec::new())),
+                Arc::new(MemLock::new(Memory::<Key<SlaveKey>>::default())),
+                connect,
+                connected,
+            ),
+        )
+        .await
+        .expect("terminate around the serial open must not hang");
+
+        assert!(
+            result.is_ok(),
+            "loop ends with success once terminate is honored"
+        );
+        assert_eq!(
+            calls.load(std::sync::atomic::Ordering::SeqCst),
+            1,
+            "the open runs exactly once before the terminate is observed at the next await"
+        );
     }
 
     #[test]

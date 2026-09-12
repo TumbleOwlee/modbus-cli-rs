@@ -9,6 +9,7 @@
 use std::sync::atomic::Ordering;
 
 use ferrowl_modbus::tcp;
+use ferrowl_modbus::{Command, SlaveKey};
 use ferrowl_test_support::{TempDirGuard, reserve_tcp_port, reserve_temp_dir};
 use ferrowl_util::tls::{CertSource, CertVerification, ClientTlsPolicy};
 use rcgen::{CertificateParams, Issuer, KeyPair};
@@ -561,5 +562,55 @@ async fn tls_handshake_failure_is_distinct_from_refused_and_timeout() {
         timeout_result.is_err(),
         "expected a stalled handshake to time out"
     );
+    stalling_server.abort();
+}
+
+#[tokio::test]
+/// MB-R-220, MB-E-089 — a terminate arriving while a client's TLS handshake is stalled against
+/// an unresponsive peer aborts the attempt at once and ends the client task with success, well
+/// inside the configured 30 s timeout rather than after it elapses.
+async fn it_terminate_during_tls_handshake_returns_immediately() {
+    let stalling_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let stalling_addr = stalling_listener.local_addr().unwrap();
+    let stalling_server = tokio::spawn(async move {
+        let (socket, _) = stalling_listener.accept().await.unwrap();
+        tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+        drop(socket);
+    });
+
+    let mut cfg = config(
+        stalling_addr.port(),
+        tcp::ModbusTlsConfig {
+            client: ClientTlsPolicy::Tls {
+                verification: CertVerification::Skip {},
+            },
+            ..Default::default()
+        },
+    );
+    cfg.timeout_ms = 30_000;
+
+    let (_sender, receiver) = tokio::sync::mpsc::channel::<Command>(1);
+    let builder = tcp::ClientBuilder::<SlaveKey>::new(
+        std::sync::Arc::new(tokio::sync::RwLock::new(cfg)),
+        std::sync::Arc::new(tokio::sync::RwLock::new(Vec::new())),
+        std::sync::Arc::new(parking_lot::RwLock::new(ferrowl_store::Memory::default())),
+        tcp::new_self_signed_cache(),
+    );
+    let (handle, _connected) = builder
+        .spawn(
+            receiver,
+            |_s: String| async move {},
+            |_s: String| async move {},
+        )
+        .await
+        .expect("spawn always returns Ok");
+
+    _sender.send(Command::Terminate).await.unwrap();
+
+    let result = tokio::time::timeout(std::time::Duration::from_millis(500), handle)
+        .await
+        .expect("terminate during a stalled TLS handshake must not wait for the 30s timeout")
+        .expect("task must not panic");
+    assert!(result.is_ok(), "the client task must end successfully");
     stalling_server.abort();
 }
