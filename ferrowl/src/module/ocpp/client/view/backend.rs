@@ -16,8 +16,8 @@ use crate::module::ocpp::server::build_server_view;
 use crate::module::view::{CommandFuture, CommandResult, RefreshFuture, parse_command};
 
 use super::{
-    ClientState, ClientVersion, ClientView, OCPP_CLIENT_COMMAND_SPECS, OcppClientCmd, config_rows,
-    conn_rows, msg_row, nv_rows,
+    ClientState, ClientVersion, ClientView, OCPP_CLIENT_COMMAND_SPECS, OcppClientCmd,
+    PendingLifecycle, config_rows, conn_rows, msg_row, nv_rows,
 };
 
 /// Read a CS-level string field (boot identity) by its `ClientFields` name, for persisting on
@@ -221,6 +221,43 @@ impl<V: ClientVersion> ClientView<V> {
 
     pub(super) fn refresh_impl<'a>(&'a mut self) -> RefreshFuture<'a> {
         Box::pin(async move {
+            // UI-R-314/UI-R-315 — a deferred stop-bearing lifecycle command only signalled
+            // `request_stop()`; drain its outcome (and run any follow-up) once the task actually
+            // ends.
+            if self.pending_lifecycle.is_some()
+                && let Some(stop_result) = self.backend.poll_stop().await
+            {
+                match self.pending_lifecycle.take() {
+                    Some(PendingLifecycle::Stop) => {
+                        let (level, msg) = match stop_result {
+                            Ok(()) => (Level::Info, "Disconnected".to_string()),
+                            // OC-R-102 — a stop failure logs at Error.
+                            Err(e) => (Level::Error, format!("Disconnect failed: {e}")),
+                        };
+                        self.log.write().await.write(level, &msg);
+                    }
+                    Some(PendingLifecycle::Restart) => {
+                        if let Err(e) = stop_result {
+                            self.log
+                                .write()
+                                .await
+                                .write(Level::Error, &format!("Reconnect: stop failed: {e}"));
+                        }
+                        let handler = self.make_handler();
+                        let (level, msg) = match self
+                            .backend
+                            .start(&self.spec, &self.device, &self.log, handler)
+                            .await
+                        {
+                            Ok(()) => (Level::Info, "Reconnecting".to_string()),
+                            Err(e) => (Level::Error, format!("Reconnect failed: {e}")),
+                        };
+                        self.log.write().await.write(level, &msg);
+                    }
+                    None => unreachable!("outer condition checked pending_lifecycle.is_some()"),
+                }
+            }
+
             if let Some((spec, path, extra_headers)) = self.deferred.setup.take() {
                 let mut device = OcppDeviceConfig::from_spec(&spec, self.device.scripts.clone());
                 device.log_file = self.device.log_file.clone();
@@ -445,32 +482,63 @@ impl<V: ClientVersion> ClientView<V> {
                 }
             }),
             OcppClientCmd::Stop => Box::pin(async move {
-                match self.backend.stop().await {
-                    Ok(()) => CommandResult::Handled(Some((Level::Info, "Disconnected".into()))),
-                    Err(e) => CommandResult::Handled(Some((
-                        Level::Error,
-                        format!("Disconnect failed: {e}"),
-                    ))),
+                // A stop already in flight is overwritten with the new follow-up rather than
+                // re-requested — `request_stop()` on an already-`Stopping` backend errors
+                // `NotRunning`, which must never be mistaken for "nothing to stop" and drop the
+                // earlier command's outcome (UI-R-315: never discarded).
+                if self.pending_lifecycle.is_some() {
+                    self.pending_lifecycle = Some(PendingLifecycle::Stop);
+                    return CommandResult::Handled(None);
+                }
+                match self.backend.request_stop().await {
+                    Ok(()) => {
+                        self.pending_lifecycle = Some(PendingLifecycle::Stop);
+                        CommandResult::Handled(None)
+                    }
+                    // Nothing was running: no deferred outcome to carry, and nothing for
+                    // `refresh()` to ever observe — logged, never returned as `:stop`'s own
+                    // immediate result (UI-R-315).
+                    Err(e) => {
+                        self.log
+                            .write()
+                            .await
+                            .write(Level::Error, &format!("Disconnect failed: {e}"));
+                        CommandResult::Handled(None)
+                    }
                 }
             }),
             OcppClientCmd::Restart => Box::pin(async move {
-                if let Err(e) = self.backend.stop().await {
-                    self.log
-                        .write()
-                        .await
-                        .write(Level::Error, &format!("Reconnect: stop failed: {e}"));
+                // See `OcppClientCmd::Stop` above.
+                if self.pending_lifecycle.is_some() {
+                    self.pending_lifecycle = Some(PendingLifecycle::Restart);
+                    return CommandResult::Handled(None);
                 }
-                let handler = self.make_handler();
-                match self
-                    .backend
-                    .start(&self.spec, &self.device, &self.log, handler)
-                    .await
-                {
-                    Ok(()) => CommandResult::Handled(Some((Level::Info, "Reconnecting".into()))),
-                    Err(e) => CommandResult::Handled(Some((
-                        Level::Error,
-                        format!("Reconnect failed: {e}"),
-                    ))),
+                match self.backend.request_stop().await {
+                    Ok(()) => {
+                        self.pending_lifecycle = Some(PendingLifecycle::Restart);
+                        CommandResult::Handled(None)
+                    }
+                    // Nothing was running: run the follow-up start immediately — there is no
+                    // in-flight task `poll_stop()` could ever resolve.
+                    Err(ferrowl_ocpp::Error::NotRunning) => {
+                        let handler = self.make_handler();
+                        match self
+                            .backend
+                            .start(&self.spec, &self.device, &self.log, handler)
+                            .await
+                        {
+                            Ok(()) => {
+                                CommandResult::Handled(Some((Level::Info, "Reconnecting".into())))
+                            }
+                            Err(e) => CommandResult::Handled(Some((
+                                Level::Error,
+                                format!("Reconnect failed: {e}"),
+                            ))),
+                        }
+                    }
+                    Err(e) => {
+                        CommandResult::Handled(Some((Level::Error, format!("Restart failed: {e}"))))
+                    }
                 }
             }),
             OcppClientCmd::Edit => {
@@ -633,6 +701,163 @@ mod tests {
             terminal.backend().buffer()[(0, last_row)].bg,
             COLOR_SCHEME.warning,
             "RECONNECTING row must use the warning background"
+        );
+
+        v.backend.stop().await.expect("cleanup stop");
+    }
+
+    /// UI-R-314 — `:start` schedules the connect task and returns immediately with its existing
+    /// `(Info, …)` message, because the dial happens inside the spawned task, not on this call.
+    /// A characterisation test over unchanged behaviour: it must pass first try, since `:start`
+    /// carries no deferred outcome and is outside UI-R-315's stop-bearing scope.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn ut_start_command_returns_without_waiting() {
+        let guard = reserve_tcp_port();
+        let port = guard.port();
+        let _listener = guard.into_listener();
+
+        let mut v = client_view::<ferrowl_ocpp::V1_6>(OcppVersion::V1_6, port);
+        v.spec.timeout_ms = Some(60_000);
+
+        let before = std::time::Instant::now();
+        let result = v.handle_command("start").await;
+        assert!(
+            before.elapsed() < std::time::Duration::from_millis(50),
+            "handle_command(\"start\") took {:?}, expected to return immediately",
+            before.elapsed()
+        );
+        assert!(
+            matches!(result, CommandResult::Handled(Some((Level::Info, _)))),
+            "expected an immediate Info result"
+        );
+
+        v.backend.stop().await.expect("cleanup stop");
+    }
+
+    /// UI-R-314 — `:stop` against a client whose task is genuinely alive (dialling a peer that
+    /// never completes the handshake) signals termination and returns without waiting for the
+    /// task to end.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn ut_stop_command_returns_without_waiting() {
+        let guard = reserve_tcp_port();
+        let port = guard.port();
+        let _listener = guard.into_listener();
+
+        let mut v = client_view::<ferrowl_ocpp::V1_6>(OcppVersion::V1_6, port);
+        v.spec.timeout_ms = Some(60_000);
+        let handler = v.make_handler();
+        v.backend
+            .start(&v.spec, &v.device, &v.log, handler)
+            .await
+            .expect("start must not fail synchronously");
+
+        let before = std::time::Instant::now();
+        let result = v.handle_command("stop").await;
+        assert!(
+            before.elapsed() < std::time::Duration::from_millis(50),
+            "handle_command(\"stop\") took {:?}, expected to return immediately",
+            before.elapsed()
+        );
+        assert!(matches!(result, CommandResult::Handled(None)));
+        assert!(v.lifecycle_pending());
+
+        for _ in 0..200 {
+            if !v.lifecycle_pending() {
+                break;
+            }
+            v.refresh().await;
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+        assert!(!v.lifecycle_pending());
+    }
+
+    /// UI-R-315 — once `refresh()` settles a deferred stop, the outcome lands in the log as an
+    /// `Info "Disconnected"` line rather than riding the command's own immediate result.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn ut_refresh_logs_stop_outcome() {
+        let guard = reserve_tcp_port();
+        let port = guard.port();
+        let _listener = guard.into_listener();
+
+        let mut v = client_view::<ferrowl_ocpp::V1_6>(OcppVersion::V1_6, port);
+        v.spec.timeout_ms = Some(60_000);
+        let handler = v.make_handler();
+        v.backend
+            .start(&v.spec, &v.device, &v.log, handler)
+            .await
+            .expect("start must not fail synchronously");
+
+        let result = v.handle_command("stop").await;
+        assert!(matches!(result, CommandResult::Handled(None)));
+
+        for _ in 0..200 {
+            if !v.lifecycle_pending() {
+                break;
+            }
+            v.refresh().await;
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+        assert!(!v.lifecycle_pending());
+
+        let lines = v
+            .log
+            .read()
+            .await
+            .peek_n(crate::app::LOG_SIZE)
+            .into_iter()
+            .map(|(_, level, l)| (level, l))
+            .collect::<Vec<_>>();
+        assert!(
+            lines
+                .iter()
+                .any(|(level, l)| *level == Level::Info && l == "Disconnected"),
+            "missing 'Disconnected' Info line: {lines:?}"
+        );
+    }
+
+    /// UI-R-314/UI-R-315 — a `:restart` issued while a `:stop` is still pending overwrites the
+    /// follow-up in place rather than re-requesting `request_stop()` against a backend already
+    /// `Stopping` (which would fall into the idle fallback and, for the client, call the full
+    /// blocking `stop()` from `start()`'s own guard).
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn ut_restart_while_stop_pending_overwrites_the_follow_up() {
+        let guard = reserve_tcp_port();
+        let port = guard.port();
+        let _listener = guard.into_listener();
+
+        let mut v = client_view::<ferrowl_ocpp::V1_6>(OcppVersion::V1_6, port);
+        v.spec.timeout_ms = Some(60_000);
+        let handler = v.make_handler();
+        v.backend
+            .start(&v.spec, &v.device, &v.log, handler)
+            .await
+            .expect("start must not fail synchronously");
+
+        assert!(matches!(
+            v.handle_command("stop").await,
+            CommandResult::Handled(None)
+        ));
+        assert!(v.lifecycle_pending());
+
+        assert!(matches!(
+            v.handle_command("restart").await,
+            CommandResult::Handled(None)
+        ));
+        assert!(
+            v.lifecycle_pending(),
+            "the follow-up must still be pending, not dropped"
+        );
+
+        for _ in 0..200 {
+            if !v.lifecycle_pending() {
+                break;
+            }
+            v.refresh().await;
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+        assert!(
+            !v.lifecycle_pending(),
+            "a stop overwritten with a restart must still settle, not latch forever"
         );
 
         v.backend.stop().await.expect("cleanup stop");

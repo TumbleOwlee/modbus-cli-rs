@@ -469,7 +469,18 @@ pub struct ClientView<V: ClientVersion> {
     compact: bool,
     /// Action-list level cached so `sync_actions` only rebuilds on a CS↔connector change.
     actions_for_connector: Option<bool>,
+    /// UI-R-314/UI-R-315 — a stop-bearing lifecycle command (`:stop`/`:restart`) that has
+    /// signalled `request_stop()` and is waiting for `refresh()` to observe `poll_stop()`
+    /// complete before logging its outcome (and, for `Restart`, running the follow-up start).
+    pending_lifecycle: Option<PendingLifecycle>,
     _version: PhantomData<V>,
+}
+
+/// UI-R-314/UI-R-315 — the follow-up state a deferred stop-bearing lifecycle command needs once
+/// its `poll_stop()` completes.
+enum PendingLifecycle {
+    Stop,
+    Restart,
 }
 
 impl<V: ClientVersion> HasState for ClientView<V> {
@@ -562,6 +573,7 @@ impl<V: ClientVersion> ClientView<V> {
             code_content: String::new(),
             compact: false,
             actions_for_connector: None,
+            pending_lifecycle: None,
             _version: PhantomData,
             spec,
         };
@@ -627,6 +639,10 @@ impl<V: ClientVersion> ModuleView for ClientView<V> {
 
     fn handle_command<'a>(&'a mut self, cmd: &'a str) -> crate::module::view::CommandFuture<'a> {
         self.handle_command_impl(cmd)
+    }
+
+    fn lifecycle_pending(&self) -> bool {
+        self.pending_lifecycle.is_some()
     }
 
     fn commands(&self) -> &[CommandDescriptor] {
