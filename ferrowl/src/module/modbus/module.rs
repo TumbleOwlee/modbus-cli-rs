@@ -380,6 +380,35 @@ impl ModbusModule {
         result
     }
 
+    /// UI-R-314 — sends the underlying instance a graceful terminate and returns immediately;
+    /// see `Instance::request_stop`.
+    // `#[allow(dead_code)]`: no caller until the view's deferred-dispatch stop leg uses this
+    // instead of the blocking `stop()`.
+    #[allow(dead_code)]
+    pub async fn request_stop(&mut self) -> Result<(), Error> {
+        let result = self.instance.request_stop().await;
+        // MB-R-150 — release only when the failure means the instance was already `Idle` (no
+        // task, so no claim of ours is still live to protect): `active()` stays `true` while a
+        // stop is already in flight (`Stopping`), and that in-flight task still holds the port,
+        // so releasing here would let another instance claim it out from under it.
+        if result.is_err() && !self.instance.active() {
+            self.serial_paths.release(&self.name);
+        }
+        result
+    }
+
+    /// UI-R-315, MB-R-150 — polls a stop requested via `request_stop`; releases this instance's
+    /// serial path claim once the underlying instance reports an outcome, exactly as `stop()`
+    /// does today.
+    // `#[allow(dead_code)]`: no caller until the view's deferred-dispatch stop leg uses this
+    // instead of the blocking `stop()`.
+    #[allow(dead_code)]
+    pub async fn poll_stop(&mut self) -> Option<Result<(), Error>> {
+        let result = self.instance.poll_stop().await?;
+        self.serial_paths.release(&self.name);
+        Some(result)
+    }
+
     /// (Re)start the simulation thread from a fresh register snapshot if there is at least one
     /// enabled script; stop it otherwise. Any previously running thread is stopped first, so this
     /// is safe to call whenever the enabled-script set may have changed (construction, script
@@ -931,6 +960,42 @@ mod tests {
         assert_eq!(registry.conflict("B", path), Some("A".to_string()));
 
         module_a.stop().await.expect("stop");
+        assert_eq!(registry.conflict("B", path), None);
+    }
+
+    #[tokio::test]
+    /// MB-R-150 — a repeat `request_stop()` while already stopping must not release the serial
+    /// claim: the task still holds the port until `poll_stop()` reaps it, so releasing it here
+    /// would let another instance claim the same path out from under the still-running task.
+    async fn ut_module_request_stop_while_stopping_does_not_release_claim() {
+        use super::ModbusModule;
+        use crate::instance::error::{Error, InstanceError};
+        use crate::module::modbus::SerialPathRegistry;
+
+        let (device, _dir) = device_with_defs();
+        let path = "/nonexistent/mb-r-150-stopping";
+        let mut module_a = ModbusModule::new(&rtu_spec("A", path), &device);
+        let registry = SerialPathRegistry::new();
+        module_a.set_serial_paths(registry.clone());
+
+        let _ = module_a.start().await;
+        assert_eq!(registry.conflict("B", path), Some("A".to_string()));
+
+        module_a.request_stop().await.expect("first request_stop");
+        let err = module_a.request_stop().await.unwrap_err();
+        assert!(matches!(err, Error::Instance(InstanceError::NotRunning)));
+        assert_eq!(
+            registry.conflict("B", path),
+            Some("A".to_string()),
+            "claim must survive a repeat request_stop while still stopping"
+        );
+
+        loop {
+            if module_a.poll_stop().await.is_some() {
+                break;
+            }
+            tokio::time::sleep(tokio::time::Duration::from_millis(5)).await;
+        }
         assert_eq!(registry.conflict("B", path), None);
     }
 

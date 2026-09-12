@@ -31,6 +31,8 @@ pub enum Error {
     Net(#[from] ferrowl_modbus::Error),
     #[error(transparent)]
     Transport(#[from] MonitorTransportError),
+    #[error("Failed to cancel monitor task")]
+    CancelFailed,
 }
 
 /// One monitor instance: a receive-only observer of an `Rtu`/`Ascii` bus, its register
@@ -47,6 +49,9 @@ pub struct ModbusMonitorModule {
     file_sink: FileSink,
     command_tx: Option<Sender<ServerCommand>>,
     task: Option<JoinHandle<Result<(), ferrowl_modbus::Error>>>,
+    /// UI-R-314 — set by `request_stop` for the duration of the grace period `poll_stop` waits
+    /// out before falling back to `abort()`; `None` when no stop is in flight.
+    stop_deadline: Option<tokio::time::Instant>,
     /// MB-R-152 — the "serial port open" signal, mirroring `ServerHandle::open`
     /// (`instance/handle.rs`) but read directly off the builder's returned
     /// `ConnectedCell` rather than routed through an `Instance`.
@@ -91,6 +96,7 @@ impl ModbusMonitorModule {
             file_sink,
             command_tx: None,
             task: None,
+            stop_deadline: None,
             open: ferrowl_modbus::ConnectedCell::default(),
             serial_paths: SerialPathRegistry::default(),
         }
@@ -145,6 +151,7 @@ impl ModbusMonitorModule {
             file_sink,
             command_tx: None,
             task: None,
+            stop_deadline: None,
             open: ferrowl_modbus::ConnectedCell::default(),
             serial_paths: self.serial_paths,
         }
@@ -330,32 +337,74 @@ impl ModbusMonitorModule {
         Ok(())
     }
 
-    /// Stop the running task: send `Terminate` then, after a grace period, abort if it is still
-    /// alive. Mirrors `Instance::stop`'s grace-period-then-abort shape.
-    pub async fn stop(&mut self) -> Result<(), Error> {
-        let sent_terminate = if let Some(tx) = &self.command_tx {
-            tx.send(ServerCommand::Terminate).await.is_ok()
-        } else {
-            false
-        };
-        if sent_terminate {
-            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    /// UI-R-314 — sends the running task a graceful terminate and returns immediately, without
+    /// waiting for it to actually end (that's [`poll_stop`](Self::poll_stop)'s job). `command_tx`
+    /// and `open` are left untouched here so the status stays truthful (`RECONNECTING`, UI-E-147)
+    /// until `poll_stop` completes.
+    pub async fn request_stop(&mut self) -> Result<(), Error> {
+        if self.stop_deadline.is_some() {
+            // Already stopping: a repeat request must not re-send Terminate or push the grace
+            // deadline back out.
+            return Ok(());
         }
-        self.command_tx = None;
+        if let Some(tx) = &self.command_tx {
+            let _ = tx.send(ServerCommand::Terminate).await;
+        }
+        self.stop_deadline =
+            Some(tokio::time::Instant::now() + tokio::time::Duration::from_millis(100));
+        Ok(())
+    }
 
-        if let Some(handle) = self.task.take() {
+    /// UI-R-315 — polls a stop requested via [`request_stop`](Self::request_stop): `None` while
+    /// there is nothing to report (no stop in flight, or still within the grace period and not
+    /// yet finished on its own); `Some(Ok(()))` once the task has ended — after the grace period
+    /// elapses, a still-unfinished task is aborted first.
+    pub async fn poll_stop(&mut self) -> Option<Result<(), Error>> {
+        let deadline = self.stop_deadline?;
+        let still_running = self.task.as_ref().is_some_and(|h| !h.is_finished());
+        if still_running && tokio::time::Instant::now() < deadline {
+            return None;
+        }
+
+        self.stop_deadline = None;
+        self.command_tx = None;
+        let res = if let Some(handle) = self.task.take() {
             if handle.is_finished() {
-                let _ = handle.await;
+                Ok(Ok(()))
             } else {
                 handle.abort();
-                let _ = handle.await;
+                handle.await
             }
-        }
+        } else {
+            Ok(Ok(()))
+        };
         // MB-R-150 — release unconditionally, mirroring `ModbusModule::stop`.
         self.serial_paths.release(&self.name);
         // MB-R-152 — a stopped monitor must never read back a stale `true`.
         self.open = ferrowl_modbus::ConnectedCell::default();
-        Ok(())
+        Some(match res {
+            Ok(Ok(_)) => Ok(()),
+            Ok(Err(e)) => Err(e.into()),
+            Err(e) => {
+                if e.is_cancelled() {
+                    Ok(())
+                } else {
+                    Err(Error::CancelFailed)
+                }
+            }
+        })
+    }
+
+    /// Stop the running task: send `Terminate` then, after a grace period, abort if it is still
+    /// alive. Mirrors `Instance::stop`'s grace-period-then-abort shape.
+    pub async fn stop(&mut self) -> Result<(), Error> {
+        self.request_stop().await?;
+        loop {
+            if let Some(res) = self.poll_stop().await {
+                return res;
+            }
+            tokio::time::sleep(tokio::time::Duration::from_millis(5)).await;
+        }
     }
 }
 
@@ -614,6 +663,76 @@ mod tests {
         assert!(module.is_running(), "running once start() succeeds");
         module.stop().await.expect("stop");
         assert!(!module.is_running(), "not running once stop() completes");
+    }
+
+    /// MB-R-150, MB-R-152 — `poll_stop()` releases the serial path claim and clears `open` only
+    /// on completion, not merely on `request_stop()`.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn ut_monitor_poll_stop_releases_path_and_clears_open() {
+        use crate::module::modbus::SerialPathRegistry;
+
+        let mut device = device_with_defs();
+        device.reconnect = Some(false);
+        let mut module = ModbusMonitorModule::new(&spec(bad_rtu_endpoint()), &device);
+        let registry = SerialPathRegistry::new();
+        module.set_serial_paths(registry.clone());
+
+        let path = crate::module::modbus::build::endpoint_serial_path(&bad_rtu_endpoint())
+            .expect("Rtu endpoint has a serial path");
+        module
+            .start(|_: String| async {}, |_: String| async {})
+            .await
+            .expect("start always succeeds for a valid transport");
+        assert_eq!(registry.conflict("B", &path), Some("mon1".to_string()));
+
+        module.request_stop().await.expect("request_stop");
+        assert_eq!(
+            registry.conflict("B", &path),
+            Some("mon1".to_string()),
+            "request_stop() alone must not release the claim yet"
+        );
+
+        loop {
+            if module.poll_stop().await.is_some() {
+                break;
+            }
+            tokio::time::sleep(tokio::time::Duration::from_millis(5)).await;
+        }
+        assert_eq!(
+            registry.conflict("B", &path),
+            None,
+            "poll_stop() completion must release the claim"
+        );
+        assert!(!module.open.get(), "poll_stop() completion must clear open");
+    }
+
+    /// UI-R-314 — a repeat `request_stop()` while already stopping is a no-op: it must not push
+    /// the grace deadline back out (which would delay `poll_stop()` reporting completion).
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn ut_monitor_request_stop_while_already_stopping_does_not_extend_deadline() {
+        let mut device = device_with_defs();
+        device.reconnect = Some(false);
+        let mut module = ModbusMonitorModule::new(&spec(bad_rtu_endpoint()), &device);
+        module
+            .start(|_: String| async {}, |_: String| async {})
+            .await
+            .expect("start always succeeds for a valid transport");
+
+        module.request_stop().await.expect("first request_stop");
+        let deadline_after_first = module.stop_deadline;
+        tokio::time::sleep(tokio::time::Duration::from_millis(20)).await;
+        module.request_stop().await.expect("repeat request_stop");
+        assert_eq!(
+            module.stop_deadline, deadline_after_first,
+            "a repeat request_stop() must not push the grace deadline back out"
+        );
+
+        loop {
+            if module.poll_stop().await.is_some() {
+                break;
+            }
+            tokio::time::sleep(tokio::time::Duration::from_millis(5)).await;
+        }
     }
 
     /// MB-R-191 — a monitor's start() rejects a non-serial endpoint with the role/transport
