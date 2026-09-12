@@ -1,6 +1,7 @@
 //! Integration smoke tests for `ferrowl run` (headless/CI mode). Drives the actual compiled
 //! binary as a subprocess since `ferrowl` is bin-only (no lib target to call `headless::run`
-//! from directly), asserting the exit-code contract documented in the README.
+//! from directly), asserting the exit-code contract documented in the README and the stdout/
+//! stderr split of the output contract, including teardown reporting.
 
 use ferrowl_test_support::{reserve_tcp_port, reserve_temp_dir};
 use std::process::Command;
@@ -51,6 +52,35 @@ fn it_fails_hard_on_a_missing_device_config() {
             .lines()
             .any(|line| line.starts_with("Error:") && line.contains("failed to load")),
         "expected an `Error:`-prefixed load-failure line, got: {stderr}"
+    );
+}
+
+#[test]
+/// CL-R-050, CL-R-055 — a setup failure on the `build_modules_into` arm (a later module's device
+/// config fails to load) still stops every already-started module and reports it on stderr,
+/// the same as the other setup-failure arms.
+fn it_setup_failure_reports_teardown_on_stderr() {
+    let device = concat!(env!("CARGO_MANIFEST_DIR"), "/../configs/evse.toml");
+    let port = reserve_tcp_port().release();
+    let good = format!(
+        "name=it-teardown-3,device={device},transport=tcp,ip=127.0.0.1,port={port},role=server"
+    );
+    let bad = "name=bad,device=/no/such/device.toml,transport=tcp,ip=127.0.0.1,port=0,role=server";
+
+    let output = bin()
+        .args(["run", "--module", &good, "--module", bad, "--duration", "1"])
+        .output()
+        .expect("failed to run ferrowl binary");
+
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("Error:"),
+        "expected an `Error:`-prefixed load-failure line, got: {stderr}"
+    );
+    assert!(
+        stderr.contains("Stopped 'it-teardown-3'"),
+        "expected the already-started module's teardown line on stderr, got: {stderr}"
     );
 }
 

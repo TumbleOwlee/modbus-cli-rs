@@ -58,9 +58,10 @@ struct RunModule {
 
 /// Build every configured module, starting each one and failing hard (unlike the TUI's
 /// `build_tabs`, which skips a bad module with an `eprintln!` and keeps going) if a device config
-/// fails to load or `start` reports an error.
-async fn build_modules(args: &RunArgs) -> Result<Vec<RunModule>, String> {
-    let mut modules = Vec::new();
+/// fails to load or `start` reports an error. Pushes each started module into `modules` as it
+/// goes, so on `Err` the caller still finds every module started before the failing one in
+/// `modules` and can stop them (CL-R-050).
+async fn build_modules_into(args: &RunArgs, modules: &mut Vec<RunModule>) -> Result<(), String> {
     // MB-R-150 — one session-wide registry for this headless run, attached to every Rtu/Ascii
     // module immediately after construction and before it starts. No race: modules are built and
     // started one at a time in this same loop, unlike `App`'s tabs (all pre-started before the
@@ -93,7 +94,7 @@ async fn build_modules(args: &RunArgs) -> Result<Vec<RunModule>, String> {
         modules.push(build_ocpp_module(spec).await?);
     }
 
-    Ok(modules)
+    Ok(())
 }
 
 async fn build_ocpp_module(module: OcppModuleSpec) -> Result<RunModule, String> {
@@ -281,13 +282,12 @@ async fn stop_all(modules: &mut [RunModule]) -> Vec<String> {
 /// Run the headless session described by `args`. Returns the process exit code; never panics on
 /// a module's own runtime errors (those surface as log lines), only on setup failure.
 pub async fn run(args: &RunArgs) -> i32 {
-    let mut modules = match build_modules(args).await {
-        Ok(modules) => modules,
-        Err(e) => {
-            eprintln!("Error: {e}");
-            return 1;
-        }
-    };
+    let mut modules = Vec::new();
+    if let Err(e) = build_modules_into(args, &mut modules).await {
+        eprintln!("Error: {e}");
+        stop_all(&mut modules).await;
+        return 1;
+    }
 
     let mut log_file = match crate::cli::open_log_file(args.log_file.as_deref()) {
         Ok(f) => f,
@@ -773,15 +773,25 @@ mod tests {
 
     #[tokio::test]
     /// CL-R-021 — the headless runner treats a module's device-config load failure as fatal to
-    /// startup, rather than skipping the module like the TUI.
+    /// startup, rather than skipping the module like the TUI. A module started before the
+    /// failing one is still handed back to the caller via the out-param.
     async fn ut_build_modules_fails_hard_on_bad_device() {
         let dir = reserve_temp_dir("ferrowl_cl");
-        let mut args = modbus_run_args(&dir, reserve_tcp_port().release(), 1);
+        let device = write_device(&dir);
+        let port = reserve_tcp_port().release();
+        let mut args = modbus_run_args(&dir, port, 1);
         args.modules = vec![
+            format!("name=good,device={device},transport=tcp,ip=127.0.0.1,port={port},role=server"),
             "name=m,device=/no/such/device.toml,transport=tcp,ip=127.0.0.1,port=0,role=server"
                 .into(),
         ];
-        assert!(build_modules(&args).await.is_err());
+        let mut modules = Vec::new();
+        assert!(build_modules_into(&args, &mut modules).await.is_err());
+        assert_eq!(
+            modules.iter().map(|m| m.name.as_str()).collect::<Vec<_>>(),
+            vec!["good"],
+            "the module started before the failing one must still be returned for teardown"
+        );
     }
 
     #[tokio::test]
@@ -915,10 +925,7 @@ mod tests {
             lines,
             vec!["Error: failed to stop 'b': Stop server failed: boom".to_string()]
         );
-        let (_, window) = {
-            let g = log.read().await;
-            (g.written(), g.peek_n(LOG_PEEK))
-        };
+        let window = log.read().await.peek_n(LOG_PEEK);
         assert!(
             window
                 .iter()
