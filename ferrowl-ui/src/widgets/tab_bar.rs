@@ -133,6 +133,7 @@ impl<T: ToLabel + Clone> StatefulWidget for &TabBar<T> {
             state.offset = 0;
             return;
         }
+        let active = state.selected_index();
 
         let along_padding = self.along_padding();
         let across_padding = self.across_padding();
@@ -175,28 +176,23 @@ impl<T: ToLabel + Clone> StatefulWidget for &TabBar<T> {
             })
             .collect();
 
-        if total <= h && state.active < state.titles.len() {
+        if total <= h {
             state.offset = 0;
         }
 
         let mut start = 0usize;
-        let mut active_block = None;
+        let mut active_block = (0, heights[0]);
         for (idx, height) in heights.iter().enumerate() {
-            if idx == state.active {
-                active_block = Some((start, *height));
+            if idx == active {
+                active_block = (start, *height);
             }
             start += height;
         }
         let total_slots = start;
 
-        if active_block.is_none() && state.offset >= total_slots {
-            state.offset = total_slots.saturating_sub(h);
-        }
-
         let mut end = (state.offset + h).min(total_slots);
-        if total > h
-            && let Some((block_start, block_height)) = active_block
-        {
+        if total > h {
+            let (block_start, block_height) = active_block;
             let leftover = h.saturating_sub(block_height);
             let near_ideal = leftover / 2;
             let far_ideal = leftover - near_ideal;
@@ -213,7 +209,7 @@ impl<T: ToLabel + Clone> StatefulWidget for &TabBar<T> {
                 Direction::Vertical => area.y,
                 Direction::Horizontal => area.x,
             } + (slot - state.offset) as u16;
-            let style = if tab_idx == state.active {
+            let style = if tab_idx == active {
                 self.style.selected
             } else {
                 self.style.general
@@ -699,9 +695,11 @@ mod tests {
         assert_eq!(st.offset, 0);
     }
 
-    /// UI-E-066, UI-R-175 — active out of range: no cell selected, offset unchanged, no panic.
+    /// UI-E-066, UI-R-325, UI-R-116 — an active index out of range reads as
+    /// `0`: the first tab takes the active style and the offset resets to
+    /// `0` rather than keeping the stored value.
     #[test]
-    fn ut_active_out_of_range_is_inert() {
+    fn ut_active_out_of_range_renders_as_first_tab() {
         let w = TabBarBuilder::<String>::default()
             .direction(Direction::Vertical)
             .padding(Margin::new(1, 1))
@@ -714,11 +712,11 @@ mod tests {
         };
         let mut b = buffer(3, 3);
         StatefulWidget::render(&w, Rect::new(0, 0, 3, 3), &mut b, &mut st);
-        assert_eq!(st.offset, 1);
+        assert_eq!(st.offset, 0);
         let style = TabBarStyle::default();
         for y in 0..3 {
             for x in 0..3 {
-                assert!(cell_has_style(&b[(x, y)], style.general));
+                assert!(cell_has_style(&b[(x, y)], style.selected));
             }
         }
     }
@@ -991,10 +989,11 @@ mod tests {
         }
     }
 
-    /// UI-E-066, UI-R-175 — an out-of-range active leaves the offset untouched
-    /// even while the stretch path applies, and selects no cell.
+    /// UI-E-066, UI-R-325 — an out-of-range active index reads as `0`: under the
+    /// stretch path the offset resets to `0` and the first tab's cells carry
+    /// the active style.
     #[test]
-    fn ut_out_of_range_active_keeps_offset_when_stretching() {
+    fn ut_out_of_range_active_stretches_onto_first_tab() {
         let w = TabBarBuilder::<String>::default()
             .direction(Direction::Vertical)
             .build()
@@ -1006,16 +1005,19 @@ mod tests {
         };
         let mut b = buffer(1, 10);
         StatefulWidget::render(&w, Rect::new(0, 0, 1, 10), &mut b, &mut st);
-        assert_eq!(st.offset, 2);
+        assert_eq!(st.offset, 0);
         let style = TabBarStyle::default();
-        for y in 0..8 {
-            assert!(!cell_has_style(&b[(0, y)], style.selected));
+        for y in 0..5 {
+            assert!(cell_has_style(&b[(0, y)], style.selected));
+        }
+        for y in 5..10 {
+            assert!(cell_has_style(&b[(0, y)], style.general));
         }
     }
 
-    /// UI-E-085 — an out-of-range active index leaves a stored offset past
-    /// the last cell the current tabs occupy; the offset is clamped so the
-    /// widget draws tabs rather than a blank area.
+    /// UI-E-085, UI-R-175 — a stale offset past the last occupied cell, with
+    /// an out-of-range active index, resets to `0` and the first tab takes
+    /// the active style (UI-E-066), not an unstyled render.
     #[test]
     fn ut_stale_offset_past_end_is_clamped_to_show_tabs() {
         let w = TabBarBuilder::<String>::default()
@@ -1032,6 +1034,10 @@ mod tests {
         assert_eq!(st.offset, 0);
         let rendered: String = (0..3).map(|y| b[(0, y)].symbol().to_string()).collect();
         assert_eq!(rendered, "Abc");
+        let style = TabBarStyle::default();
+        for y in 0..3 {
+            assert!(cell_has_style(&b[(0, y)], style.selected));
+        }
     }
 
     /// UI-E-073 — an empty title with zero vertical padding still takes
