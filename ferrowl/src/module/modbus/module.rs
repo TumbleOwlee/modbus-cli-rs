@@ -370,6 +370,10 @@ impl ModbusModule {
         result
     }
 
+    /// Test-only: the view's deferred-dispatch stop leg (`handle_command`/`refresh`) uses
+    /// `request_stop`/`poll_stop` instead; kept as the blocking convenience its own extensive
+    /// test suite still exercises directly for setup/cleanup.
+    #[cfg(test)]
     pub async fn stop(&mut self) -> Result<(), Error> {
         let result = self.instance.stop().await;
         // MB-R-150 — release unconditionally, even on an error other than `NotRunning`: `stop()`
@@ -382,9 +386,6 @@ impl ModbusModule {
 
     /// UI-R-314 — sends the underlying instance a graceful terminate and returns immediately;
     /// see `Instance::request_stop`.
-    // `#[allow(dead_code)]`: no caller until the view's deferred-dispatch stop leg uses this
-    // instead of the blocking `stop()`.
-    #[allow(dead_code)]
     pub async fn request_stop(&mut self) -> Result<(), Error> {
         let result = self.instance.request_stop().await;
         // MB-R-150 — release only when the failure means the instance was already `Idle` (no
@@ -400,9 +401,6 @@ impl ModbusModule {
     /// UI-R-315, MB-R-150 — polls a stop requested via `request_stop`; releases this instance's
     /// serial path claim once the underlying instance reports an outcome, exactly as `stop()`
     /// does today.
-    // `#[allow(dead_code)]`: no caller until the view's deferred-dispatch stop leg uses this
-    // instead of the blocking `stop()`.
-    #[allow(dead_code)]
     pub async fn poll_stop(&mut self) -> Option<Result<(), Error>> {
         let result = self.instance.poll_stop().await?;
         self.serial_paths.release(&self.name);

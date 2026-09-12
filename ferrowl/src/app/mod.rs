@@ -1011,6 +1011,15 @@ mod tests {
 
         // Stop "b"; "a" is left alone on the path.
         let _ = app.tabs[1].view.handle_command("stop").await;
+        // UI-R-314/UI-R-315 — `:stop` now signals the task and returns immediately; the claim is
+        // only released once `refresh()` observes the deferred stop actually complete.
+        for _ in 0..200 {
+            if !app.tabs[1].view.lifecycle_pending() {
+                break;
+            }
+            app.tabs[1].view.refresh().await;
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
 
         // MB-R-150's own registry (App::serial_paths) drives this, not each tab's log content —
         // the shared registry is the single source of truth for "who's still claiming the path".
