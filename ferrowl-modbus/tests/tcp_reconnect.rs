@@ -260,3 +260,28 @@ async fn ascii_over_tcp_server_bind_failure_retries_then_succeeds() {
 
     handle.abort();
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+/// MB-R-221, MB-E-090 — a terminate arriving around a server's listener bind ends the task with
+/// success rather than waiting for the bind to complete.
+async fn it_terminate_while_server_bind_pending_ends_task_ok() {
+    let port = reserve_tcp_port().release();
+
+    let (sender, receiver) = mpsc::channel::<ServerCommand>(1);
+    let (handle, _bound_addr) = ferrowl_modbus::tcp::ServerBuilder::new(
+        Arc::new(RwLock::new(tcp_config(port, true))),
+        server_mem(),
+        ferrowl_modbus::tcp::new_self_signed_cache(),
+    )
+    .spawn(receiver, sink(), sink())
+    .await
+    .expect("spawn always returns Ok");
+
+    sender.send(ServerCommand::Terminate).await.unwrap();
+
+    let result = tokio::time::timeout(Duration::from_millis(500), handle)
+        .await
+        .expect("terminate around the bind must not hang")
+        .expect("task must not panic");
+    assert!(result.is_ok(), "the server task must end with success");
+}
