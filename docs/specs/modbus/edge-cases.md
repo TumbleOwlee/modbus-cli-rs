@@ -63,6 +63,7 @@ Boundary behavior, error semantics, intentional constraints. The known-limitatio
 | **MB-E-045** | Read operation to slave id 0 on RTU | fails locally, never sent; exception-retry path (MB-R-101). On TCP, unit 0 is ordinary |
 | **MB-E-046** | Write command to slave id 0 on RTU | fire-and-forget: written, not awaited, logged as executed even if no device applied it (MB-R-102) |
 | **MB-E-089** | Terminate while a client connect attempt hangs against an unresponsive endpoint | the attempt is abandoned at once; the task ends with success and the module reaches `DISCONNECTED` without waiting for the connect or handshake timeout (MB-R-220) |
+| **MB-E-093** | Non-terminate command sent while a connection attempt is in flight | parked for the duration of the attempt and delivered to the connection loop once the attempt succeeds; dropped with a log line only if the attempt fails (MB-R-220; the backoff wait is MB-R-054/MB-E-039's separate case, where a command is dropped, not queued) |
 
 ---
 
