@@ -114,11 +114,10 @@ mod tests {
     use super::*;
     use crate::ContextBuilder;
     use crate::module::ValueType;
-    use crate::module::{
-        Has, OcppActions, OcppClient, OcppClientHost, Read, RegisterModule, Write,
-    };
+    use crate::module::test_support::MockHost;
+    use crate::module::{OcppClient, RegisterModule};
     use std::collections::HashMap;
-    use std::sync::{Mutex, RwLock};
+    use std::sync::RwLock;
 
     /// Directory backed by a map the test can mutate directly (to simulate module removal)
     /// independently of the `Arc<dyn ModuleDirectory>` handed to the Lua context.
@@ -145,38 +144,10 @@ mod tests {
         }
     }
 
-    /// A `Send + Sync` in-memory register store, mirroring the `Rc<RefCell<..>>` mock pattern
-    /// used elsewhere but usable from a [`ModuleHost`].
-    #[derive(Clone, Default)]
-    struct MockReadWrite {
-        store: Arc<Mutex<HashMap<String, ValueType>>>,
-    }
-    impl Read for MockReadWrite {
-        fn read(&self, name: String) -> mlua::Result<ValueType> {
-            self.store
-                .lock()
-                .unwrap()
-                .get(&name)
-                .cloned()
-                .ok_or_else(|| mlua::Error::RuntimeError(format!("unknown '{name}'")))
-        }
-    }
-    impl Write for MockReadWrite {
-        fn write(&self, name: String, value: ValueType) -> mlua::Result<()> {
-            self.store.lock().unwrap().insert(name, value);
-            Ok(())
-        }
-    }
-    impl Has for MockReadWrite {
-        fn has(&self, name: String) -> mlua::Result<bool> {
-            Ok(self.store.lock().unwrap().get(&name).is_some())
-        }
-    }
-
     /// A minimal modbus-shaped host: kind `"modbus"`, no ocpp accessor.
     struct ModbusHost {
         role: &'static str,
-        rw: MockReadWrite,
+        rw: MockHost,
     }
     impl ModuleHost for ModbusHost {
         fn kind(&self) -> &'static str {
@@ -195,64 +166,10 @@ mod tests {
         }
     }
 
-    type Store = Arc<Mutex<HashMap<String, ValueType>>>;
-
-    /// A `Send + Sync` ocpp client handle, mirroring the ocpp module's mock host pattern.
-    #[derive(Clone, Default)]
-    struct MockOcppHandle {
-        store: Store,
-        conns: Arc<Mutex<HashMap<i64, Store>>>,
-        dispatched: Arc<Mutex<Vec<(String, String)>>>,
-        scope: String,
-    }
-    impl Read for MockOcppHandle {
-        fn read(&self, name: String) -> mlua::Result<ValueType> {
-            self.store
-                .lock()
-                .unwrap()
-                .get(&name)
-                .cloned()
-                .ok_or_else(|| mlua::Error::RuntimeError(format!("unknown '{name}'")))
-        }
-    }
-    impl Write for MockOcppHandle {
-        fn write(&self, name: String, value: ValueType) -> mlua::Result<()> {
-            self.store.lock().unwrap().insert(name, value);
-            Ok(())
-        }
-    }
-    impl OcppActions for MockOcppHandle {
-        fn actions() -> Vec<&'static str> {
-            vec!["BootNotification"]
-        }
-        fn dispatch(&self, action: &str, _args: Vec<(String, ValueType)>) -> bool {
-            self.dispatched
-                .lock()
-                .unwrap()
-                .push((self.scope.clone(), action.to_string()));
-            true
-        }
-    }
-    impl OcppClientHost for MockOcppHandle {
-        type Conn = MockOcppHandle;
-        fn connector(&self, id: i64) -> MockOcppHandle {
-            let store = self.conns.lock().unwrap().entry(id).or_default().clone();
-            MockOcppHandle {
-                store,
-                conns: self.conns.clone(),
-                dispatched: self.dispatched.clone(),
-                scope: format!("c{id}"),
-            }
-        }
-        fn connectors(&self) -> Vec<i64> {
-            self.conns.lock().unwrap().keys().copied().collect()
-        }
-    }
-
     /// A minimal ocpp-shaped host: kind `"ocpp"`, no register accessor.
     struct OcppHost {
         role: &'static str,
-        handle: MockOcppHandle,
+        handle: MockHost,
     }
     impl ModuleHost for OcppHost {
         fn kind(&self) -> &'static str {
@@ -279,14 +196,14 @@ mod tests {
             "b",
             Arc::new(ModbusHost {
                 role: "client",
-                rw: MockReadWrite::default(),
+                rw: MockHost::default(),
             }),
         );
         dir.insert(
             "a",
             Arc::new(ModbusHost {
                 role: "client",
-                rw: MockReadWrite::default(),
+                rw: MockHost::default(),
             }),
         );
         let module = ModuleDir::init(dir as Arc<dyn ModuleDirectory>);
@@ -327,7 +244,7 @@ mod tests {
             "a",
             Arc::new(ModbusHost {
                 role: "server",
-                rw: MockReadWrite::default(),
+                rw: MockHost::default(),
             }),
         );
         let module = ModuleDir::init(dir as Arc<dyn ModuleDirectory>);
@@ -355,7 +272,7 @@ mod tests {
             "a",
             Arc::new(OcppHost {
                 role: "client",
-                handle: MockOcppHandle::default(),
+                handle: MockHost::default(),
             }),
         );
         let module = ModuleDir::init(dir as Arc<dyn ModuleDirectory>);
@@ -380,7 +297,7 @@ mod tests {
             "a",
             Arc::new(ModbusHost {
                 role: "client",
-                rw: MockReadWrite::default(),
+                rw: MockHost::default(),
             }),
         );
         let module = ModuleDir::init(dir as Arc<dyn ModuleDirectory>);
@@ -397,7 +314,7 @@ mod tests {
     #[test]
     /// SC-R-020 — the session sim reaches a modbus module's register state through C_Module.
     fn ut_register_roundtrip_through_directory() {
-        let rw = MockReadWrite::default();
+        let rw = MockHost::default();
         let dir = Arc::new(MockDirectory::default());
         dir.insert(
             "a",
@@ -422,8 +339,8 @@ mod tests {
             .expect("build context");
         ctx.call_all().expect("run");
 
-        match rw.store.lock().unwrap().get("x") {
-            Some(ValueType::Int(v)) => assert_eq!(*v, 7),
+        match rw.get("x") {
+            Some(ValueType::Int(v)) => assert_eq!(v, 7),
             other => panic!("expected Int(7), got {other:?}"),
         }
     }
@@ -431,7 +348,7 @@ mod tests {
     #[test]
     /// SC-R-020 — the session sim reaches an ocpp module's state and actions through C_Module.
     fn ut_ocpp_roundtrip_through_directory() {
-        let handle = MockOcppHandle::default();
+        let handle = MockHost::default();
         let dir = Arc::new(MockDirectory::default());
         dir.insert(
             "a",
@@ -458,19 +375,17 @@ mod tests {
         ctx.call_all().expect("run");
 
         assert!(matches!(
-            handle.store.lock().unwrap().get("Model"),
+            handle.get("Model"),
             Some(ValueType::String(s)) if s == "M"
         ));
-        let conn1 = handle.conns.lock().unwrap()[&1].clone();
+        let conn1 = handle.conn_store(1);
         assert!(matches!(
             conn1.lock().unwrap().get("Power"),
             Some(ValueType::Int(11))
         ));
         assert!(
             handle
-                .dispatched
-                .lock()
-                .unwrap()
+                .dispatched_pairs()
                 .contains(&("".to_string(), "BootNotification".to_string()))
         );
     }
@@ -483,7 +398,7 @@ mod tests {
             "a",
             Arc::new(ModbusHost {
                 role: "client",
-                rw: MockReadWrite::default(),
+                rw: MockHost::default(),
             }),
         );
         let module = ModuleDir::init(dir.clone() as Arc<dyn ModuleDirectory>);

@@ -6,6 +6,8 @@ mod ocpp;
 mod register;
 mod statics;
 mod test;
+#[cfg(test)]
+pub(crate) mod test_support;
 mod time;
 mod value_type;
 
