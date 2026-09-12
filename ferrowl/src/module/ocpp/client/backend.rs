@@ -376,7 +376,9 @@ impl<V: Version> OcppClient<V> {
         Some(client.join().await)
     }
 
-    /// Terminate the client task, if running.
+    /// Blocking convenience over `request_stop`/`poll_stop`: still the right call wherever the
+    /// caller has nothing else to do until the task ends (setup/cleanup, `start()`'s own idle
+    /// fallback) rather than a deferred outcome to drive from `refresh()`.
     pub async fn stop(&mut self) -> Result<(), Error> {
         if matches!(self.client, CsState::Idle) {
             return Ok(());

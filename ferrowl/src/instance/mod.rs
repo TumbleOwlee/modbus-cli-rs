@@ -1122,7 +1122,6 @@ mod tests {
             before.elapsed()
         );
 
-        // Cleanup: drive the stop to completion.
         loop {
             if instance.poll_stop().await.is_some() {
                 break;
