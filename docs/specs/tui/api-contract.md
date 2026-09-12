@@ -386,7 +386,7 @@ Public surface: construction from a unified diff text plus an optional full new-
 
 ## File tree widget
 
-Public surface: construction from a path list (UI-R-234), a status type parameter bounded by the public status-formatting trait that takes the widget's syntax theme and reports a status's leading marker and style (UI-R-244) and defaults to the shipped added/removed/modified status type (UI-R-319, UI-R-320), expand-all and collapse-all (UI-R-235), optional per-file status of that type (UI-R-244, UI-R-321), per-path badge of a caller-supplied marker and style in the construction input (UI-R-314) and a setter that sets or clears one path's badge afterwards (UI-R-317), selected path and directory query (UI-R-243), focus setter (UI-R-246), event handling returning an activation outcome carrying the activated file's path, a directory-toggle outcome, or consumed (UI-R-242).
+Public surface: construction from a list of entries (UI-R-234), a status type parameter bounded by the public status-formatting trait that takes the widget's syntax theme and reports a status's leading marker and style (UI-R-244) and defaults to the shipped added/removed/modified status type (UI-R-319, UI-R-320), expand-all and collapse-all (UI-R-235), optional per-file status of that type (UI-R-244, UI-R-321), per-path badge of a caller-supplied marker and style in the construction input (UI-R-314) and a setter that sets or clears one path's badge afterwards (UI-R-317), selected path and directory query (UI-R-243), focus setter (UI-R-246), event handling returning an activation outcome carrying the activated file's path, a directory-toggle outcome, or consumed (UI-R-242).
 
 | Key | Mode | Action | Req |
 |---|---|---|---|
