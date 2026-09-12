@@ -60,12 +60,28 @@ pub struct ModbusModuleView {
     sort: Option<(usize, bool)>,
     overlay: ModbusViewOverlay,
     pending: Option<PendingAction>,
+    /// UI-R-314/UI-R-315 — a stop-bearing lifecycle command (`:stop`/`:restart`/`:reload`) that
+    /// has signalled `request_stop()` and is waiting for `refresh()` to observe `poll_stop()`
+    /// complete before logging its outcome (and, for `Restart`/`Reload`, running the follow-up).
+    pending_lifecycle: Option<PendingLifecycle>,
     /// Whether this view (its content pane) currently has keyboard focus, set by the owning `Tab`.
     view_focused: bool,
     /// MB-R-150 — the session-wide serial-path registry attached via `set_serial_paths`, kept so
     /// a `:reload`-rebuilt `self.module` can be reattached to the same registry instead of
     /// silently falling back to a private default.
     serial_paths: super::SerialPathRegistry,
+}
+
+/// UI-R-314/UI-R-315 — the follow-up state a deferred stop-bearing lifecycle command needs once
+/// its `poll_stop()` completes. `Reload` carries the config already loaded synchronously at
+/// dispatch time (`handle_command`), so `refresh()` never re-reads the file.
+enum PendingLifecycle {
+    Stop,
+    Restart,
+    Reload {
+        path: String,
+        device: Box<DeviceConfig>,
+    },
 }
 
 impl ModbusModuleView {
@@ -90,6 +106,7 @@ impl ModbusModuleView {
             sort: None,
             overlay: ModbusViewOverlay::None,
             pending: None,
+            pending_lifecycle: None,
             view_focused: false,
             serial_paths: super::SerialPathRegistry::default(),
         }
@@ -468,6 +485,77 @@ impl ModuleView for ModbusModuleView {
 
     fn refresh<'a>(&'a mut self) -> RefreshFuture<'a> {
         Box::pin(async move {
+            // UI-R-314/UI-R-315 — a deferred stop-bearing lifecycle command only signalled
+            // `request_stop()`; drain its outcome (and run any follow-up) once the task actually
+            // ends. A sibling of `self.pending` below, not folded into it: `PendingAction` is
+            // dialog-driven and always resolves within one tick, this may span several.
+            if self.pending_lifecycle.is_some()
+                && let Some(stop_result) = self.module.poll_stop().await
+            {
+                let role = self.spec.role.to_string();
+                let endpoint = self.spec.endpoint.to_string();
+                match self.pending_lifecycle.take() {
+                    Some(PendingLifecycle::Stop) => {
+                        let (level, msg) = match stop_result {
+                            Ok(()) => (Level::Info, format!("Stopped {role}")),
+                            Err(e) => (Level::Error, format!("Stop {role} failed: {e}")),
+                        };
+                        self.log().write().await.write(level, &msg);
+                    }
+                    Some(PendingLifecycle::Restart) => {
+                        let stop_err = stop_result.err().filter(|e| !e.is_not_running());
+                        let (level, msg) = match self.module.start().await {
+                            Ok(()) => match stop_err {
+                                None => (Level::Info, format!("Restarted {role} on {endpoint}")),
+                                Some(e) => (
+                                    Level::Error,
+                                    format!(
+                                        "Restarted {role} on {endpoint}, but stop of previous instance failed: {e}"
+                                    ),
+                                ),
+                            },
+                            Err(e) => (Level::Error, format!("Restart {role} failed: {e}")),
+                        };
+                        self.log().write().await.write(level, &msg);
+                    }
+                    Some(PendingLifecycle::Reload { path, device }) => {
+                        let stop_err = stop_result.err().filter(|e| !e.is_not_running());
+                        let new_module = ModbusModule::new(&self.spec, &device);
+                        self.module = new_module;
+                        self.device = *device;
+                        // MB-R-150 — reattach the session-wide registry (`ModbusModule::new`
+                        // defaults to a private one), so an in-progress conflict survives
+                        // `:reload` instead of silently clearing.
+                        self.module.set_serial_paths(self.serial_paths.clone());
+                        let defs: Vec<_> = self
+                            .module
+                            .registers()
+                            .iter()
+                            .map(|(n, d, r, v)| {
+                                Definition::new(n.clone(), d.clone(), r.clone(), v.clone())
+                            })
+                            .collect();
+                        self.table.set_definitions(defs);
+                        self.sort = None;
+                        let (level, msg) = if let Err(e) = self.module.start().await {
+                            (Level::Error, format!(":reload start error: {e}"))
+                        } else {
+                            match stop_err {
+                                None => (Level::Info, format!(":reload done — '{path}'")),
+                                Some(e) => (
+                                    Level::Error,
+                                    format!(
+                                        ":reload done — '{path}', but stop of previous instance failed: {e}"
+                                    ),
+                                ),
+                            }
+                        };
+                        self.log().write().await.write(level, &msg);
+                    }
+                    None => unreachable!("outer condition checked pending_lifecycle.is_some()"),
+                }
+            }
+
             if let Some(pending) = self.pending.take() {
                 match pending {
                     PendingAction::Add(edited) => self.apply_add(edited).await,
@@ -539,43 +627,60 @@ impl ModuleView for ModbusModuleView {
 
             ModbusCmd::Stop => Box::pin(async move {
                 let role = self.spec.role.to_string();
-                match self.module.stop().await {
+                // A stop-bearing command is already in flight (its own request_stop already
+                // signalled the instance): overwrite the follow-up rather than re-requesting a
+                // stop `Instance::request_stop` would reject as `NotRunning` (it's already
+                // `Stopping`, not `Idle`) — that rejection must never be mistaken for "nothing to
+                // stop" and drop the earlier command's outcome (UI-R-315: never discarded).
+                if self.pending_lifecycle.is_some() {
+                    self.pending_lifecycle = Some(PendingLifecycle::Stop);
+                    return CommandResult::Handled(None);
+                }
+                match self.module.request_stop().await {
                     Ok(()) => {
-                        CommandResult::Handled(Some((Level::Info, format!("Stopped {role}"))))
+                        self.pending_lifecycle = Some(PendingLifecycle::Stop);
+                        CommandResult::Handled(None)
                     }
-                    Err(e) => CommandResult::Handled(Some((
-                        Level::Error,
-                        format!("Stop {role} failed: {e}"),
-                    ))),
+                    // Nothing was running (Idle): no deferred outcome to carry, and nothing for
+                    // `refresh()` to ever observe (`poll_stop()` only resolves from `Stopping`) —
+                    // logged, never returned as `:stop`'s own immediate result (UI-R-315).
+                    Err(e) => {
+                        self.log()
+                            .write()
+                            .await
+                            .write(Level::Error, &format!("Stop {role} failed: {e}"));
+                        CommandResult::Handled(None)
+                    }
                 }
             }),
 
             ModbusCmd::Restart => Box::pin(async move {
+                // See `ModbusCmd::Stop` above: a stop already in flight is overwritten with the
+                // new follow-up rather than re-requested.
+                if self.pending_lifecycle.is_some() {
+                    self.pending_lifecycle = Some(PendingLifecycle::Restart);
+                    return CommandResult::Handled(None);
+                }
                 let role = self.spec.role.to_string();
                 let endpoint = self.spec.endpoint.to_string();
-                let stop_err = self
-                    .module
-                    .stop()
-                    .await
-                    .err()
-                    .filter(|e| !e.is_not_running());
-                match self.module.start().await {
-                    Ok(()) => match stop_err {
-                        None => CommandResult::Handled(Some((
+                match self.module.request_stop().await {
+                    Ok(()) => {
+                        self.pending_lifecycle = Some(PendingLifecycle::Restart);
+                        CommandResult::Handled(None)
+                    }
+                    // Nothing was running (Idle, MB-R-098: benign, not reported): run the
+                    // follow-up start immediately — there is no in-flight task `poll_stop()`
+                    // could ever resolve.
+                    Err(_) => match self.module.start().await {
+                        Ok(()) => CommandResult::Handled(Some((
                             Level::Info,
                             format!("Restarted {role} on {endpoint}"),
                         ))),
-                        Some(e) => CommandResult::Handled(Some((
+                        Err(e) => CommandResult::Handled(Some((
                             Level::Error,
-                            format!(
-                                "Restarted {role} on {endpoint}, but stop of previous instance failed: {e}"
-                            ),
+                            format!("Restart {role} failed: {e}"),
                         ))),
                     },
-                    Err(e) => CommandResult::Handled(Some((
-                        Level::Error,
-                        format!("Restart {role} failed: {e}"),
-                    ))),
                 }
             }),
 
@@ -596,44 +701,54 @@ impl ModuleView for ModbusModuleView {
                         )));
                     }
                 };
-                let stop_err = self
-                    .module
-                    .stop()
-                    .await
-                    .err()
-                    .filter(|e| !e.is_not_running());
-                let new_module = ModbusModule::new(&self.spec, &device);
-                self.module = new_module;
-                self.device = device;
-                // MB-R-150 — the fresh module's `serial_paths` defaults to a private registry
-                // (`ModbusModule::new`); reattach the session-wide one so an in-progress conflict
-                // survives `:reload` instead of silently clearing.
-                self.module.set_serial_paths(self.serial_paths.clone());
-                let defs: Vec<_> = self
-                    .module
-                    .registers()
-                    .iter()
-                    .map(|(n, d, r, v)| Definition::new(n.clone(), d.clone(), r.clone(), v.clone()))
-                    .collect();
-                self.table.set_definitions(defs);
-                self.sort = None;
-                if let Err(e) = self.module.start().await {
-                    return CommandResult::Handled(Some((
-                        Level::Error,
-                        format!(":reload start error: {e}"),
-                    )));
+                // See `ModbusCmd::Stop` above: a stop already in flight is overwritten with the
+                // new follow-up rather than re-requested.
+                if self.pending_lifecycle.is_some() {
+                    self.pending_lifecycle = Some(PendingLifecycle::Reload {
+                        path,
+                        device: Box::new(device),
+                    });
+                    return CommandResult::Handled(None);
                 }
-                match stop_err {
-                    None => CommandResult::Handled(Some((
-                        Level::Info,
-                        format!(":reload done — '{path}'"),
-                    ))),
-                    Some(e) => CommandResult::Handled(Some((
-                        Level::Error,
-                        format!(
-                            ":reload done — '{path}', but stop of previous instance failed: {e}"
-                        ),
-                    ))),
+                match self.module.request_stop().await {
+                    Ok(()) => {
+                        self.pending_lifecycle = Some(PendingLifecycle::Reload {
+                            path,
+                            device: Box::new(device),
+                        });
+                        CommandResult::Handled(None)
+                    }
+                    // Nothing was running (Idle): rebuild and start immediately — there is no
+                    // in-flight task `poll_stop()` could ever resolve.
+                    Err(_) => {
+                        let new_module = ModbusModule::new(&self.spec, &device);
+                        self.module = new_module;
+                        self.device = device;
+                        // MB-R-150 — the fresh module's `serial_paths` defaults to a private
+                        // registry (`ModbusModule::new`); reattach the session-wide one so an
+                        // in-progress conflict survives `:reload` instead of silently clearing.
+                        self.module.set_serial_paths(self.serial_paths.clone());
+                        let defs: Vec<_> = self
+                            .module
+                            .registers()
+                            .iter()
+                            .map(|(n, d, r, v)| {
+                                Definition::new(n.clone(), d.clone(), r.clone(), v.clone())
+                            })
+                            .collect();
+                        self.table.set_definitions(defs);
+                        self.sort = None;
+                        if let Err(e) = self.module.start().await {
+                            return CommandResult::Handled(Some((
+                                Level::Error,
+                                format!(":reload start error: {e}"),
+                            )));
+                        }
+                        CommandResult::Handled(Some((
+                            Level::Info,
+                            format!(":reload done — '{path}'"),
+                        )))
+                    }
                 }
             }),
 
@@ -756,6 +871,10 @@ impl ModuleView for ModbusModuleView {
 
     fn log(&self) -> SharedLog {
         self.module.log()
+    }
+
+    fn lifecycle_pending(&self) -> bool {
+        self.pending_lifecycle.is_some()
     }
 
     fn session_spec(&self) -> Option<serde_json::Value> {
@@ -1695,6 +1814,192 @@ mod tests {
         assert!(
             text.contains("RECONNECTING"),
             "missing status line:\n{text}"
+        );
+
+        view.module.stop().await.expect("cleanup stop");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    /// UI-R-314 — `:stop` against a module whose task is genuinely alive (backing off from an
+    /// occupied port, so a blocking `stop()` would need the full grace period) returns
+    /// `Handled(None)` immediately instead of waiting for the task to end.
+    async fn ut_stop_command_returns_without_waiting() {
+        let occupier = reserve_tcp_port();
+        let port = occupier.port();
+
+        let mut device = empty_device();
+        device.timeout_ms = Some(200);
+        let spec = ModuleSpec {
+            name: "test module".into(),
+            device: String::new(),
+            role: Role::Server,
+            endpoint: Endpoint::Tcp {
+                ip: "127.0.0.1".into(),
+                port,
+            },
+        };
+        let module = super::super::ModbusModule::new(&spec, &device);
+        let mut view = ModbusModuleView::new(module, spec, device);
+        view.module
+            .start()
+            .await
+            .expect("start must not fail synchronously");
+
+        let before = std::time::Instant::now();
+        let result = view.handle_command("stop").await;
+        assert!(
+            before.elapsed() < std::time::Duration::from_millis(50),
+            "handle_command(\"stop\") took {:?}, expected to return immediately",
+            before.elapsed()
+        );
+        assert!(matches!(result, CommandResult::Handled(None)));
+        assert!(view.lifecycle_pending());
+
+        // Drive the deferred stop to completion so the test doesn't leak a background task.
+        for _ in 0..200 {
+            if !view.lifecycle_pending() {
+                break;
+            }
+            view.refresh().await;
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+        assert!(!view.lifecycle_pending());
+    }
+
+    #[tokio::test]
+    /// UI-R-315 — once `refresh()` observes the deferred stop's completion, the outcome (never
+    /// carried back as `:stop`'s own immediate result) lands in the view's log at `Info`.
+    async fn ut_refresh_logs_stop_outcome() {
+        let mut view = new_view();
+        view.module.start().await.expect("start");
+
+        let result = view.handle_command("stop").await;
+        assert!(matches!(result, CommandResult::Handled(None)));
+
+        for _ in 0..200 {
+            if !view.lifecycle_pending() {
+                break;
+            }
+            view.refresh().await;
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+        assert!(!view.lifecycle_pending());
+
+        let lines = view
+            .log()
+            .read()
+            .await
+            .peek_n(crate::app::LOG_SIZE)
+            .into_iter()
+            .map(|(_, level, l)| (level, l))
+            .collect::<Vec<_>>();
+        assert!(
+            lines
+                .iter()
+                .any(|(level, l)| *level == Level::Info && l == "Stopped Server"),
+            "missing 'Stopped Server' Info line: {lines:?}"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    /// UI-R-314/UI-R-315 — `:restart` against a module whose task is genuinely alive returns
+    /// `Handled(None)` immediately, and the module is running again only once `refresh()` has
+    /// settled the deferred stop and run the follow-up start.
+    async fn ut_restart_defers_start_until_stop_completes() {
+        let mut device = empty_device();
+        device.timeout_ms = Some(200);
+        let spec = ModuleSpec {
+            name: "test module".into(),
+            device: String::new(),
+            role: Role::Server,
+            endpoint: Endpoint::Tcp {
+                ip: "127.0.0.1".into(),
+                port: 0,
+            },
+        };
+        let module = super::super::ModbusModule::new(&spec, &device);
+        let mut view = ModbusModuleView::new(module, spec, device);
+        view.module.start().await.expect("start");
+
+        let before = std::time::Instant::now();
+        let result = view.handle_command("restart").await;
+        assert!(
+            before.elapsed() < std::time::Duration::from_millis(50),
+            "handle_command(\"restart\") took {:?}, expected to return immediately",
+            before.elapsed()
+        );
+        assert!(matches!(result, CommandResult::Handled(None)));
+        assert!(view.lifecycle_pending());
+
+        for _ in 0..200 {
+            if !view.lifecycle_pending() {
+                break;
+            }
+            view.refresh().await;
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+        assert!(!view.lifecycle_pending());
+        assert!(
+            view.module.is_instance_active(),
+            "the follow-up start must have run once the deferred stop settled"
+        );
+
+        view.module.stop().await.expect("cleanup stop");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    /// UI-R-315 — `:restart` issued while a `:stop` is already pending must not be rejected as
+    /// `NotRunning` (the instance is `Stopping`, not `Idle`) and silently drop the earlier
+    /// command's outcome forever: it overwrites the pending follow-up, and `refresh()` still
+    /// settles it and runs the restart's start.
+    async fn ut_restart_while_stop_pending_overwrites_the_follow_up() {
+        let occupier = reserve_tcp_port();
+        let port = occupier.port();
+
+        let mut device = empty_device();
+        device.timeout_ms = Some(200);
+        let spec = ModuleSpec {
+            name: "test module".into(),
+            device: String::new(),
+            role: Role::Server,
+            endpoint: Endpoint::Tcp {
+                ip: "127.0.0.1".into(),
+                port,
+            },
+        };
+        let module = super::super::ModbusModule::new(&spec, &device);
+        let mut view = ModbusModuleView::new(module, spec, device);
+        view.module.start().await.expect("start");
+
+        assert!(matches!(
+            view.handle_command("stop").await,
+            CommandResult::Handled(None)
+        ));
+        assert!(view.lifecycle_pending());
+
+        assert!(matches!(
+            view.handle_command("restart").await,
+            CommandResult::Handled(None)
+        ));
+        assert!(
+            view.lifecycle_pending(),
+            "the follow-up must still be pending, not dropped"
+        );
+
+        for _ in 0..200 {
+            if !view.lifecycle_pending() {
+                break;
+            }
+            view.refresh().await;
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+        assert!(
+            !view.lifecycle_pending(),
+            "a stop overwritten with a restart must still settle, not latch forever"
+        );
+        assert!(
+            view.module.is_instance_active(),
+            "the restart's follow-up start must have run, not the stale stop's no-op"
         );
 
         view.module.stop().await.expect("cleanup stop");

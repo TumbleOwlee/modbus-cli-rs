@@ -182,6 +182,10 @@ IDs stable, append-only (`MB-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **MB-R-153** — A Modbus server module's displayed status follows MB-R-137's three-state rule with "listener bound" (TCP-family) or "serial port open" (RTU/Ascii) for "transport connected": `CONNECTED` while bound/open; `RECONNECTING` while the task runs but is not bound/open (MB-R-071, MB-R-075, MB-R-120, MB-R-130–MB-R-134); `DISCONNECTED` while the task is not running.
 
+**MB-R-220** — A terminate, or the command channel closing, arriving while a client connection attempt is in flight (TCP connect, TLS handshake, UDP local bind, or serial-port open) aborts that attempt immediately and ends the client task with success, without waiting for the attempt to succeed or fail (MB-R-053 covers the same arrival during a backoff wait).
+
+**MB-R-221** — A terminate, or the command channel closing, arriving while a server's listener bind or serial-port open is in flight aborts it immediately and ends the server task with success, without waiting for the bind or the open to complete (MB-R-131 and MB-E-076 keep the separate rule that an already-running serve loop is not torn down early).
+
 ---
 
 ## Server

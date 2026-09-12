@@ -118,13 +118,28 @@ where
                 }
             };
             drop(guard);
-            match UdpSocket::bind(addr).await {
-                Err(e) => AttemptOutcome::Failed {
+            let mut receiver = receiver.lock().await;
+            let mut parked: std::collections::VecDeque<ServerCommand> =
+                std::collections::VecDeque::new();
+            let bind_result = crate::common::race_terminate(
+                UdpSocket::bind(addr),
+                &mut receiver,
+                |_: &ServerCommand| true,
+                &mut parked,
+            )
+            .await;
+            debug_assert!(
+                parked.is_empty(),
+                "ServerCommand has only one variant; nothing is ever parked"
+            );
+            match bind_result {
+                None => AttemptOutcome::Done,
+                Some(Err(e)) => AttemptOutcome::Failed {
                     error: Error::Server(e.into()),
                     reconnect,
                     reset: false,
                 },
-                Ok(socket) => {
+                Some(Ok(socket)) => {
                     let bound = match socket.local_addr() {
                         Ok(addr) => addr,
                         Err(e) => {
@@ -141,7 +156,6 @@ where
                             .with_reset_on(activity.clone(), ResetOn::Request),
                     );
                     let handle = server.handle();
-                    let mut receiver = receiver.lock().await;
                     let end = drive_serve(server.serve_udp(socket), handle, &mut receiver).await;
                     *bound_addr.lock() = None;
                     match end {

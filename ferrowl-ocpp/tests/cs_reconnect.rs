@@ -190,3 +190,73 @@ async fn cs_config_reread_on_every_dial() {
     let _ = client.terminate().await;
     server.terminate().await.expect("server terminate failed");
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+/// `OC-E-097` — a command sent while a CS dial is still in flight is parked, not dropped: it is
+/// delivered to the connection loop once the dial completes.
+async fn it_action_sent_during_dial_is_delivered_after_connect() {
+    let server = csms::ServerBuilder::<V1_6>::new(
+        csms::Config {
+            host: "127.0.0.1".to_owned(),
+            port: 0,
+            timeout_ms: 1000,
+            reconnect: true,
+            basic_auth: None,
+            tls: Default::default(),
+        },
+        ferrowl_ocpp::new_self_signed_cache(),
+    )
+    .spawn(TestCsms, sink())
+    .await
+    .expect("server failed to bind");
+    let addr = bound_addr(&server).await;
+
+    let client = cs::ClientBuilder::<V1_6>::new(
+        config(format!("ws://{addr}/ocpp/CS001"), true),
+        ferrowl_ocpp::new_self_signed_cache(),
+    )
+    .spawn(TestCs, sink(), sink())
+    .await
+    .expect("spawn always returns Ok; the dial happens inside the task");
+
+    // Sent immediately, before the spawned task has had a chance to run its first poll: must be
+    // parked during the dial, not dropped.
+    let hb = Action16::Heartbeat(serde_json::from_value(serde_json::json!({})).unwrap());
+    let resp = tokio::time::timeout(Duration::from_secs(2), client.call(hb))
+        .await
+        .expect("call must not hang")
+        .expect("the action sent during the dial must reach the CSMS once connected");
+    assert!(matches!(resp, Response16::Heartbeat(_)));
+
+    let _ = client.terminate().await;
+    server.terminate().await.expect("server terminate failed");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+/// OC-R-175, OC-E-096 — a terminate arriving while the dial is hanging against an unresponsive
+/// peer (TCP connect succeeds into the kernel backlog but the WebSocket handshake never
+/// completes) aborts the attempt at once and ends the task with success, without waiting for
+/// the handshake to time out.
+async fn it_cs_terminate_during_hanging_dial_ends_task_ok() {
+    let guard = reserve_tcp_port();
+    let port = guard.port();
+    let _listener = guard.into_listener();
+
+    let cfg = Arc::new(RwLock::new(cs::Config {
+        extra_headers: Vec::new(),
+        url: format!("ws://127.0.0.1:{port}/ocpp/CS001"),
+        reconnect: true,
+        timeout_ms: 30_000,
+        basic_auth: None,
+        tls: Default::default(),
+    }));
+    let client = cs::ClientBuilder::<V1_6>::new(cfg, ferrowl_ocpp::new_self_signed_cache())
+        .spawn(TestCs, sink(), sink())
+        .await
+        .expect("spawn always returns Ok; the dial happens inside the task");
+
+    let result = tokio::time::timeout(Duration::from_millis(500), client.terminate())
+        .await
+        .expect("terminate must not wait for the 30s handshake timeout");
+    assert!(result.is_ok());
+}

@@ -41,6 +41,15 @@ impl<S: DrawSurface> App<S> {
                 }
                 if let Some(tab) = self.tabs.get_mut(self.active) {
                     tab.view.handle_command("stop").await;
+                    // UI-R-316 — a deferred stop only signals the task; join it (bounded) before
+                    // the tab is dropped, so the tab close never abandons the task detached.
+                    let started = std::time::Instant::now();
+                    while tab.view.lifecycle_pending()
+                        && started.elapsed() < crate::module::view::SETTLE_BOUND
+                    {
+                        tab.view.refresh().await;
+                        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+                    }
                 }
                 self.tabs.remove(self.active);
                 self.active = self.active.min(self.tabs.len() - 1);
@@ -337,6 +346,55 @@ mod tests {
             app.tabs.len(),
             2,
             ":qall signals quit without removing tabs"
+        );
+    }
+
+    #[tokio::test]
+    /// UI-R-316 — closing a tab (not the last one) whose stop settles promptly waits for it, then
+    /// removes the tab with the stop already joined.
+    async fn ut_tab_close_settles_pending_stop_within_the_bound() {
+        let (a, ha) = MockView::pair("a");
+        let a = a.with_pending_stop_settling_after(2);
+        let (b, _hb) = MockView::pair("b");
+        let mut app = build_app(vec![a.boxed(), b.boxed()]);
+
+        assert!(!app.run_command("quit").await);
+        assert_eq!(
+            app.tabs.len(),
+            1,
+            "the tab is removed once the stop settles"
+        );
+        assert!(
+            ha.refreshes() >= 2,
+            "the settle loop must have driven refresh() until lifecycle_pending() cleared"
+        );
+    }
+
+    #[tokio::test]
+    /// UI-R-316 — closing a tab whose stop never settles still proceeds once the settle bound
+    /// expires, instead of hanging the command loop.
+    async fn ut_tab_close_proceeds_when_the_settle_bound_expires() {
+        let (a, _ha) = MockView::pair("a");
+        let a = a.with_pending_stop_never_settling();
+        let (b, _hb) = MockView::pair("b");
+        let mut app = build_app(vec![a.boxed(), b.boxed()]);
+
+        let before = std::time::Instant::now();
+        assert!(!app.run_command("quit").await);
+        let elapsed = before.elapsed();
+        assert_eq!(
+            app.tabs.len(),
+            1,
+            "the tab must still be removed once the settle bound expires"
+        );
+        assert!(
+            elapsed >= crate::module::view::SETTLE_BOUND,
+            "quit took {elapsed:?}, expected the settle loop to actually wait out the full bound \
+             rather than returning immediately"
+        );
+        assert!(
+            elapsed < crate::module::view::SETTLE_BOUND + std::time::Duration::from_millis(300),
+            "quit took {elapsed:?}, expected to give up around the settle bound"
         );
     }
 

@@ -23,6 +23,7 @@ Boundary behavior, error semantics, intentional or known constraints. The known-
 | **UI-E-139** | `Enter` on an empty command line (UI-R-191) | a submit outcome carrying the empty string, and the line closes; the widget does not special-case empty input, the consumer does |
 | **UI-E-140** | Command line with both an error and a notice set (UI-R-194, UI-R-195) | the error is shown and the notice is retained, appearing once the consumer clears the error |
 | **UI-E-093** | Command-line help box taller than the rows available above the line (UI-R-196) | the box is clipped to the available rows and stays anchored to the bottom, matching the app's no-minimum-size stance (UI-E-047) |
+| **UI-E-147** | `:stop` submitted while the module's connection attempt is still in flight | the command line closes and the application keeps processing keys and redrawing; the module's status stays `RECONNECTING` until the abort completes, then becomes `DISCONNECTED` (UI-R-314, UI-R-315) |
 
 ## Navigation and tab jumps
 

@@ -809,13 +809,30 @@ where
             match &policy {
                 ferrowl_util::tls::ServerTlsPolicy::None {} => {
                     drop(guard);
-                    match TcpListener::bind(addr).await {
-                        Err(e) => AttemptOutcome::Failed {
+                    let mut receiver = receiver.lock().await;
+                    // `ServerCommand` has only one variant, so any command received aborts the
+                    // race and there is no "park a non-terminate command" case here.
+                    let mut parked: std::collections::VecDeque<ServerCommand> =
+                        std::collections::VecDeque::new();
+                    let bind_result = crate::common::race_terminate(
+                        TcpListener::bind(addr),
+                        &mut receiver,
+                        |_: &ServerCommand| true,
+                        &mut parked,
+                    )
+                    .await;
+                    debug_assert!(
+                        parked.is_empty(),
+                        "ServerCommand has only one variant; nothing is ever parked"
+                    );
+                    match bind_result {
+                        None => AttemptOutcome::Done,
+                        Some(Err(e)) => AttemptOutcome::Failed {
                             error: Error::Server(e),
                             reconnect,
                             reset: false,
                         },
-                        Ok(listener) => {
+                        Some(Ok(listener)) => {
                             let bound = match listener.local_addr() {
                                 Ok(addr) => addr,
                                 Err(e) => {
@@ -828,7 +845,6 @@ where
                             };
                             *bound_addr.lock() = Some(bound);
                             let handle = server.handle();
-                            let mut receiver = receiver.lock().await;
                             let end = drive_serve(
                                 server.serve_framed::<F>(listener),
                                 handle,
@@ -873,13 +889,28 @@ where
                                 )
                                 .await;
                             }
-                            match TlsListener::bind(addr, tls_config).await {
-                                Err(e) => AttemptOutcome::Failed {
+                            let mut receiver = receiver.lock().await;
+                            let mut parked: std::collections::VecDeque<ServerCommand> =
+                                std::collections::VecDeque::new();
+                            let bind_result = crate::common::race_terminate(
+                                TlsListener::bind(addr, tls_config),
+                                &mut receiver,
+                                |_: &ServerCommand| true,
+                                &mut parked,
+                            )
+                            .await;
+                            debug_assert!(
+                                parked.is_empty(),
+                                "ServerCommand has only one variant; nothing is ever parked"
+                            );
+                            match bind_result {
+                                None => AttemptOutcome::Done,
+                                Some(Err(e)) => AttemptOutcome::Failed {
                                     error: Error::Server(e),
                                     reconnect,
                                     reset: false,
                                 },
-                                Ok(listener) => {
+                                Some(Ok(listener)) => {
                                     let bound = match listener.local_addr() {
                                         Ok(addr) => addr,
                                         Err(e) => {
@@ -892,7 +923,6 @@ where
                                     };
                                     *bound_addr.lock() = Some(bound);
                                     let handle = server.handle();
-                                    let mut receiver = receiver.lock().await;
                                     let end = drive_serve(
                                         server.serve_tls::<F>(listener),
                                         handle,
@@ -1009,20 +1039,36 @@ where
                     reset: false,
                 };
             }
-            match open_serial::<F>(&path, serial) {
-                Err(e) => AttemptOutcome::Failed {
+            let mut receiver = receiver.lock().await;
+            let mut parked: std::collections::VecDeque<ServerCommand> =
+                std::collections::VecDeque::new();
+            // MB-E-091 — `open_serial` is synchronous with no await point, so this race cannot
+            // preempt it mid-call; a terminate is honored at the first surrounding await instead.
+            let open_result = crate::common::race_terminate(
+                async { open_serial::<F>(&path, serial) },
+                &mut receiver,
+                |_: &ServerCommand| true,
+                &mut parked,
+            )
+            .await;
+            debug_assert!(
+                parked.is_empty(),
+                "ServerCommand has only one variant; nothing is ever parked"
+            );
+            match open_result {
+                None => AttemptOutcome::Done,
+                Some(Err(e)) => AttemptOutcome::Failed {
                     error: SerialError::Error(e).into(),
                     reconnect,
                     reset: false,
                 },
-                Ok(transport) => {
+                Some(Ok(transport)) => {
                     open.set(true);
                     let server = ModbusServer::new(
                         Server::new(memory.clone(), log.clone(), verbose, physical_serial)
                             .with_reset_on(activity.clone(), ResetOn::Request),
                     );
                     let handle = server.handle();
-                    let mut receiver = receiver.lock().await;
                     let end =
                         drive_serve(server.serve_link(transport), handle, &mut receiver).await;
                     open.set(false);
@@ -2526,9 +2572,11 @@ mod tests {
     }
 
     #[tokio::test]
-    /// MB-R-133 — a `ServerCommand::Terminate` on the command channel ends `drive_serve` with
-    /// `ServeEnd::Terminated`, via the graceful `handle.shutdown()` path (proved by the peer end
-    /// staying open and connected throughout — nothing here ever drops or aborts the link).
+    /// MB-R-133, MB-E-092 — a `ServerCommand::Terminate` on the command channel ends
+    /// `drive_serve` with `ServeEnd::Terminated`, via the graceful `handle.shutdown()` path
+    /// (proved by the peer end staying open and connected throughout — nothing here ever drops
+    /// or aborts the link); the serve loop is already running and ends on its own rather than
+    /// being torn down early.
     async fn ut_drive_serve_terminate_ends_gracefully() {
         let (modbus, handle) = minimal_modbus_server();
         let (server_end, client_end) = tokio::io::duplex(256);
@@ -2696,5 +2744,30 @@ mod tests {
                 "unexpected exception code: {code:?}"
             );
         }
+    }
+
+    #[tokio::test]
+    /// MB-R-221, MB-E-090 — a terminate arriving while a server's listener bind is in flight
+    /// aborts the race immediately, well inside the bind's own timeout, matching the abort every
+    /// `run_tcp_family`/`run_serial_family`/`run_udp` bind race performs.
+    async fn ut_terminate_during_bind_is_abandoned() {
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<ServerCommand>(1);
+        tx.send(ServerCommand::Terminate).await.unwrap();
+        let mut parked = std::collections::VecDeque::new();
+
+        let out = tokio::time::timeout(
+            Duration::from_millis(250),
+            crate::common::race_terminate(
+                std::future::pending::<()>(),
+                &mut rx,
+                |_: &ServerCommand| true,
+                &mut parked,
+            ),
+        )
+        .await
+        .expect("race_terminate did not return promptly");
+
+        assert!(out.is_none(), "the pending bind is abandoned");
+        assert!(parked.is_empty(), "ServerCommand has only one variant");
     }
 }

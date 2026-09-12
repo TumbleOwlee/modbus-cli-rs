@@ -55,6 +55,8 @@ Boundary behavior, error semantics, intentional constraints. The known-limitatio
 | **OC-E-031** | `:start` on an already-connected CS | no-op |
 | **OC-E-032** | CSMS listener fails to bind | logged as an error; retry per OC-E-085 |
 | **OC-E-033** | `accept()` itself errors | logged; accept loop keeps running |
+| **OC-E-096** | `:stop` on a CS whose dial to an unresponsive peer is in flight, or on a CSMS waiting in bind or `accept()` | the pending operation is abandoned at once and the module reaches `DISCONNECTED` without waiting for the peer's TCP, TLS, or WebSocket handshake to time out (OC-R-175, OC-R-176, OC-R-177) |
+| **OC-E-097** | Non-terminate command sent while a CS dial, or a CSMS bind, is in flight | parked for the duration of the attempt and delivered once it succeeds; dropped with a log line only if it fails (OC-R-175, OC-R-176; the backoff wait is OC-E-084's separate case, where a command is dropped, not queued) |
 
 ---
 

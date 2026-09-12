@@ -376,6 +376,17 @@ pub struct ServerView<V: ServerVersion> {
     lua_states: SharedServerStates<V>,
     /// Simulation + liveness bookkeeping (sim handle, action queue, log tee/`:log` tracking).
     runtime: SimRuntime,
+    /// UI-R-314/UI-R-315 — a stop-bearing lifecycle command (`:stop`/`:restart`) that has
+    /// signalled `request_stop()` and is waiting for `refresh()` to observe `poll_stop()`
+    /// complete before logging its outcome (and, for `Restart`, running the follow-up start).
+    pending_lifecycle: Option<PendingLifecycle>,
+}
+
+/// UI-R-314/UI-R-315 — the follow-up state a deferred stop-bearing lifecycle command needs once
+/// its `poll_stop()` completes.
+enum PendingLifecycle {
+    Stop,
+    Restart,
 }
 
 impl<V: ServerVersion> ServerView<V>
@@ -413,6 +424,7 @@ where
             cs_configs: HashMap::new(),
             lua_states: Arc::new(RwLock::new(ServerStates::default())),
             runtime: SimRuntime::default(),
+            pending_lifecycle: None,
         };
         view.start_sim();
         view
@@ -459,6 +471,10 @@ where
 
     fn handle_command<'a>(&'a mut self, cmd: &'a str) -> crate::module::view::CommandFuture<'a> {
         self.handle_command_impl(cmd)
+    }
+
+    fn lifecycle_pending(&self) -> bool {
+        self.pending_lifecycle.is_some()
     }
 
     fn commands(&self) -> &[CommandDescriptor] {
@@ -1041,12 +1057,31 @@ mod tests {
         // Edit the endpoint's security to wss (no certs → self-signed fallback), then restart.
         // The rebound listener must reflect the *current* spec, not the stale plain copy.
         v.spec.protocol = OcppProtocol::Wss;
-        let CommandResult::Handled(Some((_, msg))) = v.handle_command_impl("restart").await else {
-            panic!("restart must report a message");
-        };
+        let restart_result = v.handle_command_impl("restart").await;
         assert!(
-            msg.contains("self-signed"),
-            "the restart must rebuild the listener from the edited spec, got: {msg}"
+            matches!(restart_result, CommandResult::Handled(None)),
+            "restart signals and returns immediately (UI-R-314)"
+        );
+
+        // UI-R-314/UI-R-315: restart's outcome is deferred until `refresh` settles the stop.
+        let mut msg = None;
+        for _ in 0..200 {
+            if !v.lifecycle_pending() {
+                break;
+            }
+            v.refresh_impl().await;
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+        assert!(!v.lifecycle_pending());
+        for (_, _, line) in v.log.read().await.peek_n(crate::app::LOG_SIZE) {
+            if line.contains("self-signed") {
+                msg = Some(line);
+                break;
+            }
+        }
+        assert!(
+            msg.is_some(),
+            "the restart must rebuild the listener from the edited spec and log a self-signed message"
         );
     }
 
@@ -1062,6 +1097,14 @@ mod tests {
         assert!(!v.entries.is_empty(), "the observed entry must be recorded");
 
         v.handle_command_impl("restart").await;
+        for _ in 0..200 {
+            if !v.lifecycle_pending() {
+                break;
+            }
+            v.refresh_impl().await;
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+        assert!(!v.lifecycle_pending());
         assert!(
             v.entries.is_empty(),
             "restart must discard every observed charging-station entry"

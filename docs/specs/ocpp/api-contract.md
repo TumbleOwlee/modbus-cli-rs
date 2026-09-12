@@ -344,7 +344,7 @@ Protocol-specific commands owned here (mechanism owned by `tui/`).
 | Command | Effect | Req |
 |---|---|---|
 | `:start` | connect to the CSMS | OC-R-083 |
-| `:stop` | disconnect | OC-R-047 |
+| `:stop` | disconnect, abandoning an in-flight dial | OC-R-047, OC-R-175 |
 | `:restart` | disconnect, then reconnect | OC-R-084 |
 | `:e` / `:edit` | open the module setup dialog | — |
 | `:wd` / `:write-device [path]` | save the device config | OC-R-103 |
@@ -356,7 +356,7 @@ Protocol-specific commands owned here (mechanism owned by `tui/`).
 | Command | Effect | Req |
 |---|---|---|
 | `:start` | bind the listener | OC-R-138 |
-| `:stop` | unbind the listener, discard every observed station entry | OC-R-084 |
+| `:stop` | unbind the listener, abandoning an in-flight bind or a pending accept, and discard every observed station entry | OC-R-084, OC-R-176, OC-R-177 |
 | `:restart` | rebind the listener; discards every observed station entry | OC-R-084 |
 | `:e` / `:edit` | open the module setup dialog | — |
 | `:wd` / `:write-device [path]` | save the device config | — |

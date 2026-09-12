@@ -260,6 +260,8 @@ IDs stable, append-only (`OC-R-nnn`). See [`../README.md`](../README.md). Compan
 
 **OC-R-123** — A CS module's displayed status follows MB-R-137's three-state rule: `CONNECTED` while the WebSocket is open; `RECONNECTING` while the task runs but is not connected (OC-R-048); `DISCONNECTED` while the task is not running.
 
+**OC-R-175** — A terminate, or the command channel closing, arriving while a CS dial attempt is in flight (TCP connect, TLS handshake, or WebSocket handshake) aborts that attempt immediately and ends the client task with success, without waiting for the attempt to succeed or fail (OC-R-106 covers the same arrival during a backoff wait; OC-R-047 the connected case).
+
 ---
 
 ## Role — CSMS (server)
@@ -283,6 +285,10 @@ IDs stable, append-only (`OC-R-nnn`). See [`../README.md`](../README.md). Compan
 **OC-R-055** — A command addressing an unknown connection id fails that command alone: awaited Call → `InternalError` rejection; fire-and-forget → logged and dropped. Server keeps running.
 
 **OC-R-056** — A CSMS answers CS-originated Calls through a handler told which connection the Call arrived on.
+
+**OC-R-176** — A terminate, or the command channel closing, arriving while a CSMS listener bind is in flight aborts the bind immediately and ends the server task with success, without waiting for it to complete.
+
+**OC-R-177** — A terminate, or the command channel closing, arriving while a CSMS `accept()` is pending aborts it immediately and ends the server task with success, without waiting for a connection to arrive.
 
 ---
 

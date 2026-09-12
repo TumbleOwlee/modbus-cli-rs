@@ -806,6 +806,22 @@ pub struct ModbusMonitorModuleView {
     cached_messages_unit: Option<UnitId>,
     cached_messages_log: Option<SharedRecordLog>,
     cached_messages_generation: u64,
+    /// UI-R-314/UI-R-315 — a stop-bearing lifecycle command (`:stop`/`:restart`/`:reload`) that
+    /// has signalled `request_stop()` and is waiting for `refresh()` to observe `poll_stop()`
+    /// complete before logging its outcome (and, for `Restart`/`Reload`, running the follow-up).
+    pending_lifecycle: Option<PendingLifecycle>,
+}
+
+/// UI-R-314/UI-R-315 — the follow-up state a deferred stop-bearing lifecycle command needs once
+/// its `poll_stop()` completes. `Reload` carries the config already loaded synchronously at
+/// dispatch time (`handle_command`), so `refresh()` never re-reads the file.
+enum PendingLifecycle {
+    Stop,
+    Restart,
+    Reload {
+        path: String,
+        device: Box<MonitorDeviceConfig>,
+    },
 }
 
 impl ModbusMonitorModuleView {
@@ -829,6 +845,7 @@ impl ModbusMonitorModuleView {
             cached_messages_unit: None,
             cached_messages_log: None,
             cached_messages_generation: 0,
+            pending_lifecycle: None,
         }
     }
 
@@ -1275,6 +1292,55 @@ impl ModuleView for ModbusMonitorModuleView {
 
     fn refresh<'a>(&'a mut self) -> RefreshFuture<'a> {
         Box::pin(async move {
+            // UI-R-314/UI-R-315 — a deferred stop-bearing lifecycle command only signalled
+            // `request_stop()`; drain its outcome (and run any follow-up) once the task actually
+            // ends. Independent of the message-table refresh below.
+            if self.pending_lifecycle.is_some()
+                && let Some(stop_result) = self.module.poll_stop().await
+            {
+                match self.pending_lifecycle.take() {
+                    Some(PendingLifecycle::Stop) => {
+                        let (level, msg) = match stop_result {
+                            Ok(()) => (Level::Info, "Stopped monitor".to_string()),
+                            Err(e) => (Level::Error, format!("Stop monitor failed: {e}")),
+                        };
+                        self.log().write().await.write(level, &msg);
+                    }
+                    Some(PendingLifecycle::Restart) => {
+                        let endpoint = self.spec.endpoint.to_string();
+                        let (level, msg) = match self
+                            .module
+                            .start(move |_s: String| async {}, move |_s: String| async {})
+                            .await
+                        {
+                            Ok(()) => (Level::Info, format!("Restarted monitor on {endpoint}")),
+                            Err(e) => (Level::Error, format!("Restart monitor failed: {e}")),
+                        };
+                        self.log().write().await.write(level, &msg);
+                    }
+                    Some(PendingLifecycle::Reload { path, device }) => {
+                        let new_module = ModbusMonitorModule::new(&self.spec, &device);
+                        self.module = new_module;
+                        self.device = *device;
+                        // MB-R-150 — reattach the session-wide registry (`ModbusMonitorModule::
+                        // new` defaults to a private one), so an in-progress conflict survives
+                        // `:reload` instead of silently clearing.
+                        self.module.set_serial_paths(self.serial_paths.clone());
+                        let (level, msg) = if let Err(e) = self
+                            .module
+                            .start(move |_s: String| async {}, move |_s: String| async {})
+                            .await
+                        {
+                            (Level::Error, format!(":reload start error: {e}"))
+                        } else {
+                            (Level::Info, format!(":reload done — '{path}'"))
+                        };
+                        self.log().write().await.write(level, &msg);
+                    }
+                    None => unreachable!("outer condition checked pending_lifecycle.is_some()"),
+                }
+            }
+
             {
                 let table = self.module.table();
                 let table = table.read();
@@ -1401,32 +1467,18 @@ impl ModuleView for ModbusMonitorModuleView {
             }),
 
             ModbusMonitorCmd::Stop => Box::pin(async move {
-                match self.module.stop().await {
-                    Ok(()) => CommandResult::Handled(Some((Level::Info, "Stopped monitor".into()))),
-                    Err(e) => CommandResult::Handled(Some((
-                        Level::Error,
-                        format!("Stop monitor failed: {e}"),
-                    ))),
-                }
+                // Monitor's `request_stop()` is infallible (unlike the full client/server
+                // module's, it has no "already idle" error to surface immediately) — always
+                // defer, exactly as UI-R-314 asks.
+                let _ = self.module.request_stop().await;
+                self.pending_lifecycle = Some(PendingLifecycle::Stop);
+                CommandResult::Handled(None)
             }),
 
             ModbusMonitorCmd::Restart => Box::pin(async move {
-                let endpoint = self.spec.endpoint.to_string();
-                let _ = self.module.stop().await;
-                match self
-                    .module
-                    .start(move |_s: String| async {}, move |_s: String| async {})
-                    .await
-                {
-                    Ok(()) => CommandResult::Handled(Some((
-                        Level::Info,
-                        format!("Restarted monitor on {endpoint}"),
-                    ))),
-                    Err(e) => CommandResult::Handled(Some((
-                        Level::Error,
-                        format!("Restart monitor failed: {e}"),
-                    ))),
-                }
+                let _ = self.module.request_stop().await;
+                self.pending_lifecycle = Some(PendingLifecycle::Restart);
+                CommandResult::Handled(None)
             }),
 
             ModbusMonitorCmd::Reload => Box::pin(async move {
@@ -1446,25 +1498,12 @@ impl ModuleView for ModbusMonitorModuleView {
                         )));
                     }
                 };
-                let _ = self.module.stop().await;
-                let new_module = ModbusMonitorModule::new(&self.spec, &device);
-                self.module = new_module;
-                self.device = device;
-                // MB-R-150 — the fresh module's `serial_paths` defaults to a private registry
-                // (`ModbusMonitorModule::new`); reattach the session-wide one so an in-progress
-                // conflict survives `:reload` instead of silently clearing.
-                self.module.set_serial_paths(self.serial_paths.clone());
-                if let Err(e) = self
-                    .module
-                    .start(move |_s: String| async {}, move |_s: String| async {})
-                    .await
-                {
-                    return CommandResult::Handled(Some((
-                        Level::Error,
-                        format!(":reload start error: {e}"),
-                    )));
-                }
-                CommandResult::Handled(Some((Level::Info, format!(":reload done — '{path}'"))))
+                let _ = self.module.request_stop().await;
+                self.pending_lifecycle = Some(PendingLifecycle::Reload {
+                    path,
+                    device: Box::new(device),
+                });
+                CommandResult::Handled(None)
             }),
 
             ModbusMonitorCmd::Edit => {
@@ -1551,6 +1590,10 @@ impl ModuleView for ModbusMonitorModuleView {
 
     fn log(&self) -> SharedLog {
         self.module.log()
+    }
+
+    fn lifecycle_pending(&self) -> bool {
+        self.pending_lifecycle.is_some()
     }
 
     fn session_spec(&self) -> Option<serde_json::Value> {
@@ -1934,6 +1977,82 @@ mod tests {
         );
 
         v.module.stop().await.expect("cleanup stop");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    /// UI-R-314 — `:stop` against a monitor whose task is genuinely alive (retrying a bad serial
+    /// path) returns `Handled(None)` immediately instead of waiting for the task to end.
+    async fn ut_stop_command_returns_without_waiting() {
+        let mut device = device();
+        device.reconnect = Some(true);
+        let module = ModbusMonitorModule::new(&spec(), &device);
+        let mut v = ModbusMonitorModuleView::new(module, spec(), device);
+        v.module
+            .start(|_: String| async {}, |_: String| async {})
+            .await
+            .expect("start always succeeds for a valid transport");
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+        let before = std::time::Instant::now();
+        let result = v.handle_command("stop").await;
+        assert!(
+            before.elapsed() < std::time::Duration::from_millis(50),
+            "handle_command(\"stop\") took {:?}, expected to return immediately",
+            before.elapsed()
+        );
+        assert!(matches!(result, CommandResult::Handled(None)));
+        assert!(v.lifecycle_pending());
+
+        for _ in 0..200 {
+            if !v.lifecycle_pending() {
+                break;
+            }
+            v.refresh().await;
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+        assert!(!v.lifecycle_pending());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    /// UI-R-315 — once `refresh()` observes the deferred stop's completion, the outcome (never
+    /// carried back as `:stop`'s own immediate result) lands in the view's log at `Info`.
+    async fn ut_refresh_logs_stop_outcome() {
+        let mut device = device();
+        device.reconnect = Some(true);
+        let module = ModbusMonitorModule::new(&spec(), &device);
+        let mut v = ModbusMonitorModuleView::new(module, spec(), device);
+        v.module
+            .start(|_: String| async {}, |_: String| async {})
+            .await
+            .expect("start always succeeds for a valid transport");
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+        let result = v.handle_command("stop").await;
+        assert!(matches!(result, CommandResult::Handled(None)));
+
+        for _ in 0..200 {
+            if !v.lifecycle_pending() {
+                break;
+            }
+            v.refresh().await;
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+        assert!(!v.lifecycle_pending());
+
+        let lines = v
+            .log()
+            .read()
+            .await
+            .peek_n(crate::app::LOG_SIZE)
+            .into_iter()
+            .map(|(_, level, l)| (level, l))
+            .collect::<Vec<_>>();
+        assert!(
+            lines
+                .iter()
+                .any(|(level, l)| *level == Level::Info && l == "Stopped monitor"),
+            "missing 'Stopped monitor' Info line: {lines:?}"
+        );
     }
 
     /// UI-R-061, UI-R-100 — the resolved-registers section is omitted entirely from the rendered buffer
@@ -2831,6 +2950,16 @@ mod tests {
         v.set_serial_paths(registry.clone());
 
         let _ = v.handle_command("reload").await;
+        // UI-R-314/UI-R-315 — `:reload` now signals a stop and returns immediately; the rebuild
+        // (and its registry reattachment) only happens once `refresh()` observes the deferred
+        // stop complete.
+        for _ in 0..200 {
+            if !v.lifecycle_pending() {
+                break;
+            }
+            v.refresh().await;
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
         assert_eq!(
             registry.conflict("B", serial_path),
             Some("A".to_string()),

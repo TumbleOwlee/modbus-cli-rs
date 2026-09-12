@@ -72,6 +72,8 @@ Per [`../README.md`](../README.md)'s ownership rules, this area does **not** own
 
 **CL-R-026** — On any loop exit, the runner stops the session sim (if any) then every module before returning. A stop failure is logged, exit code unchanged.
 
+**CL-R-055** — The runner's teardown (CL-R-026) waits at most 1 s per module for its stop to complete; on expiry it moves to the next module, exit code unchanged.
+
 **CL-R-027** — Session-level scripts across multiple `--session` files are concatenated in file order; the session sim interval is the last file's, matching the TUI's multi-file resolution.
 
 ---

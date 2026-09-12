@@ -61,6 +61,63 @@ pub(crate) fn serial_config_from(
     Ok(config)
 }
 
+/// A command channel with a queue in front of it: whatever a connect/bind race parked while the
+/// attempt was running is handed out before anything newer off the channel, so a command sent
+/// concurrently with a connect is delivered once connected instead of being lost (MB-E-093).
+pub(crate) struct Commands<'a, C> {
+    receiver: &'a mut tokio::sync::mpsc::Receiver<C>,
+    queued: std::collections::VecDeque<C>,
+}
+
+impl<'a, C> Commands<'a, C> {
+    /// `queued` is what a preceding `race_terminate` parked; empty when nothing was parked.
+    pub(crate) fn new(
+        receiver: &'a mut tokio::sync::mpsc::Receiver<C>,
+        queued: std::collections::VecDeque<C>,
+    ) -> Self {
+        Self { receiver, queued }
+    }
+
+    /// Cancel-safe, so it can sit in a `tokio::select!` arm exactly where `receiver.recv()` did:
+    /// the queue pop is synchronous and returns without awaiting, and `Receiver::recv` is itself
+    /// cancel-safe.
+    pub(crate) async fn recv(&mut self) -> Option<C> {
+        match self.queued.pop_front() {
+            Some(c) => Some(c),
+            None => self.receiver.recv().await,
+        }
+    }
+}
+
+/// Awaits `fut` while watching `receiver`, so an in-flight connect/bind/open is abandoned the
+/// moment a terminate-matching command arrives instead of running to its own success or timeout
+/// (MB-R-220, MB-R-221). Returns `Some(output)` when `fut` finished first, `None` when a
+/// terminate-matching command arrived or the channel closed — the caller drops `fut`, which
+/// cancels the attempt. Any other command is moved into `parked`, for the caller to hand to the
+/// connection loop it is about to start (or to dispose of if the attempt failed); nothing is
+/// dropped here.
+pub(crate) async fn race_terminate<T, C, F>(
+    fut: F,
+    receiver: &mut tokio::sync::mpsc::Receiver<C>,
+    is_terminate: impl Fn(&C) -> bool,
+    parked: &mut std::collections::VecDeque<C>,
+) -> Option<T>
+where
+    F: std::future::Future<Output = T>,
+{
+    tokio::pin!(fut);
+    loop {
+        tokio::select! {
+            out = &mut fut => return Some(out),
+            cmd = receiver.recv() => match cmd {
+                None => return None,
+                Some(c) if is_terminate(&c) => return None,
+                Some(c) => parked.push_back(c),
+            },
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -155,5 +212,110 @@ mod tests {
         };
         let fut = f.invoke("hi".to_string());
         assert_send_fut(&fut);
+    }
+
+    #[derive(Debug, PartialEq)]
+    enum TestCmd {
+        Terminate,
+        Other(u32),
+    }
+
+    #[tokio::test]
+    /// MB-R-220, MB-R-221 — `race_terminate` returns the attempt's output when it finishes
+    /// before any terminate-matching command arrives.
+    async fn ut_race_terminate_returns_output_when_future_wins() {
+        let (_tx, mut rx) = tokio::sync::mpsc::channel::<TestCmd>(1);
+        let mut parked = std::collections::VecDeque::new();
+        let out = race_terminate(
+            async { 42 },
+            &mut rx,
+            |cmd: &TestCmd| matches!(cmd, TestCmd::Terminate),
+            &mut parked,
+        )
+        .await;
+        assert_eq!(out, Some(42));
+        assert!(parked.is_empty());
+    }
+
+    #[tokio::test]
+    /// MB-R-220, MB-R-221 — a terminate-matching command arriving while the attempt is still
+    /// pending abandons it at once instead of waiting for it to resolve.
+    async fn ut_race_terminate_abandons_attempt_on_terminate() {
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<TestCmd>(1);
+        tx.send(TestCmd::Terminate).await.unwrap();
+        let mut parked = std::collections::VecDeque::new();
+        let out = tokio::time::timeout(
+            std::time::Duration::from_millis(250),
+            race_terminate(
+                std::future::pending::<()>(),
+                &mut rx,
+                |cmd: &TestCmd| matches!(cmd, TestCmd::Terminate),
+                &mut parked,
+            ),
+        )
+        .await
+        .expect("race_terminate did not return promptly");
+        assert_eq!(out, None);
+    }
+
+    #[tokio::test]
+    /// MB-R-220, MB-R-221 — the command channel closing while the attempt is still pending
+    /// abandons it, matching the terminate case.
+    async fn ut_race_terminate_abandons_attempt_on_channel_close() {
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<TestCmd>(1);
+        drop(tx);
+        let mut parked = std::collections::VecDeque::new();
+        let out = tokio::time::timeout(
+            std::time::Duration::from_millis(250),
+            race_terminate(
+                std::future::pending::<()>(),
+                &mut rx,
+                |cmd: &TestCmd| matches!(cmd, TestCmd::Terminate),
+                &mut parked,
+            ),
+        )
+        .await
+        .expect("race_terminate did not return promptly");
+        assert_eq!(out, None);
+    }
+
+    #[tokio::test]
+    /// MB-E-093 — a non-terminate command arriving while the attempt is still in flight is
+    /// parked, not dropped: the race continues, the future still wins, and the command survives
+    /// for the next `Commands::recv()` to hand out.
+    async fn ut_race_terminate_queues_non_terminate_command() {
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<TestCmd>(1);
+        tx.send(TestCmd::Other(7)).await.unwrap();
+        let mut parked = std::collections::VecDeque::new();
+        let out = race_terminate(
+            async {
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+                "connected"
+            },
+            &mut rx,
+            |cmd: &TestCmd| matches!(cmd, TestCmd::Terminate),
+            &mut parked,
+        )
+        .await;
+        assert_eq!(out, Some("connected"));
+        assert_eq!(
+            parked.into_iter().collect::<Vec<_>>(),
+            vec![TestCmd::Other(7)]
+        );
+    }
+
+    #[tokio::test]
+    /// MB-E-093 — `Commands::recv` hands out whatever was parked by a preceding `race_terminate`
+    /// before anything newer sent on the channel, so a command sent during the connect is
+    /// delivered to the connection loop ahead of one sent after it connected.
+    async fn ut_commands_hands_out_queued_before_channel() {
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<TestCmd>(4);
+        tx.send(TestCmd::Other(2)).await.unwrap();
+        let mut queued = std::collections::VecDeque::new();
+        queued.push_back(TestCmd::Other(1));
+        let mut commands = Commands::new(&mut rx, queued);
+
+        assert_eq!(commands.recv().await, Some(TestCmd::Other(1)));
+        assert_eq!(commands.recv().await, Some(TestCmd::Other(2)));
     }
 }

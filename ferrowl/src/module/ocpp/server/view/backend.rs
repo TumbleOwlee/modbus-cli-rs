@@ -23,8 +23,8 @@ use crate::module::ocpp::server::lua::{run_server_script_once, run_server_sim};
 use crate::module::view::{CommandFuture, CommandResult, RefreshFuture, parse_command};
 
 use super::{
-    Entry, EntryState, EntryStateT, OCPP_SERVER_COMMAND_SPECS, OcppServerCmd, ServerOverlay,
-    ServerVersion, ServerView, fill_device_rfids,
+    Entry, EntryState, EntryStateT, OCPP_SERVER_COMMAND_SPECS, OcppServerCmd, PendingLifecycle,
+    ServerOverlay, ServerVersion, ServerView, fill_device_rfids,
 };
 
 /// The start/restart log line, built from the TLS mode the backend reports it actually bound
@@ -531,6 +531,45 @@ where
 
     pub(super) fn refresh_impl<'a>(&'a mut self) -> RefreshFuture<'a> {
         Box::pin(async move {
+            // UI-R-314/UI-R-315 — a deferred stop-bearing lifecycle command only signalled
+            // `request_stop()`; drain its outcome (and run any follow-up) once the task actually
+            // ends. Row/state housekeeping stays here, not the command handler, so a CSMS that is
+            // still unbinding does not lose its rows before the stop lands.
+            if self.pending_lifecycle.is_some()
+                && let Some(stop_result) = self.backend.poll_stop().await
+            {
+                self.entries.clear();
+                self.conn_identity.clear();
+                self.cs_configs.clear();
+                self.clear_lua_states();
+                match self.pending_lifecycle.take() {
+                    Some(PendingLifecycle::Stop) => {
+                        let (level, msg) = match stop_result {
+                            Ok(()) => (Level::Info, "CSMS server stopped".to_string()),
+                            // OC-R-102 — a stop failure logs at Error.
+                            Err(e) => (Level::Error, format!("CSMS server stop failed: {e}")),
+                        };
+                        self.log.write().await.write(level, &msg);
+                    }
+                    Some(PendingLifecycle::Restart) => {
+                        if let Err(e) = stop_result {
+                            self.log
+                                .write()
+                                .await
+                                .write(Level::Error, &format!("Restart: stop failed: {e}"));
+                        }
+                        self.want_running = true;
+                        let handler = V::handler(self.events_tx.clone(), self.rfids.clone());
+                        let (level, msg) = match self.backend.start(&self.spec, handler).await {
+                            Ok(binding) => (Level::Info, started_message(binding, "restarted")),
+                            Err(e) => (Level::Error, format!("listen failed: {e}")),
+                        };
+                        self.log.write().await.write(level, &msg);
+                    }
+                    None => unreachable!("outer condition checked pending_lifecycle.is_some()"),
+                }
+            }
+
             // Apply a resolved `:edit`.
             if let Some((spec, path, extra_headers)) = self.deferred.setup.take() {
                 let mut device = OcppDeviceConfig::from_spec(&spec, self.device.scripts.clone());
@@ -667,44 +706,60 @@ where
                     }
                 }
                 OcppServerCmd::Stop => {
+                    // UI-R-314/UI-R-315 — signal and return; `refresh_impl` drains `poll_stop()`
+                    // and logs the outcome. A stop already pending overwrites the follow-up in
+                    // place instead of re-requesting one against a backend already `Stopping`.
                     self.want_running = false;
-                    let stop_result = self.backend.stop().await;
-                    self.entries.clear();
-                    self.conn_identity.clear();
-                    self.cs_configs.clear();
-                    self.clear_lua_states();
-                    match stop_result {
-                        Ok(()) => CommandResult::Handled(Some((
-                            Level::Info,
-                            "CSMS server stopped".into(),
-                        ))),
-                        Err(e) => CommandResult::Handled(Some((
-                            Level::Error,
-                            format!("CSMS server stop failed: {e}"),
-                        ))),
+                    if self.pending_lifecycle.is_some() {
+                        self.pending_lifecycle = Some(PendingLifecycle::Stop);
+                        return CommandResult::Handled(None);
+                    }
+                    match self.backend.request_stop().await {
+                        Ok(()) => {
+                            self.pending_lifecycle = Some(PendingLifecycle::Stop);
+                            CommandResult::Handled(None)
+                        }
+                        Err(e) => {
+                            self.log
+                                .write()
+                                .await
+                                .write(Level::Error, &format!("CSMS server stop failed: {e}"));
+                            CommandResult::Handled(None)
+                        }
                     }
                 }
                 OcppServerCmd::Restart => {
-                    if let Err(e) = self.backend.stop().await {
-                        self.log
-                            .write()
-                            .await
-                            .write(Level::Error, &format!("Restart: stop failed: {e}"));
+                    // See `OcppServerCmd::Stop` above.
+                    if self.pending_lifecycle.is_some() {
+                        self.pending_lifecycle = Some(PendingLifecycle::Restart);
+                        return CommandResult::Handled(None);
                     }
-                    self.entries.clear();
-                    self.conn_identity.clear();
-                    self.cs_configs.clear();
-                    self.clear_lua_states();
-                    self.want_running = true;
-                    let handler = V::handler(self.events_tx.clone(), self.rfids.clone());
-                    match self.backend.start(&self.spec, handler).await {
-                        Ok(binding) => CommandResult::Handled(Some((
-                            Level::Info,
-                            started_message(binding, "restarted"),
-                        ))),
+                    match self.backend.request_stop().await {
+                        Ok(()) => {
+                            self.pending_lifecycle = Some(PendingLifecycle::Restart);
+                            CommandResult::Handled(None)
+                        }
+                        Err(ferrowl_ocpp::Error::NotRunning) => {
+                            self.entries.clear();
+                            self.conn_identity.clear();
+                            self.cs_configs.clear();
+                            self.clear_lua_states();
+                            self.want_running = true;
+                            let handler = V::handler(self.events_tx.clone(), self.rfids.clone());
+                            match self.backend.start(&self.spec, handler).await {
+                                Ok(binding) => CommandResult::Handled(Some((
+                                    Level::Info,
+                                    started_message(binding, "restarted"),
+                                ))),
+                                Err(e) => CommandResult::Handled(Some((
+                                    Level::Error,
+                                    format!("listen failed: {e}"),
+                                ))),
+                            }
+                        }
                         Err(e) => CommandResult::Handled(Some((
                             Level::Error,
-                            format!("listen failed: {e}"),
+                            format!("Restart failed: {e}"),
                         ))),
                     }
                 }
@@ -803,7 +858,198 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::module::ocpp::config::session::{OcppProtocol, OcppRole, OcppSpec, OcppVersion};
+    use crate::module::view::ModuleView;
     use ferrowl_ocpp::V1_6;
+
+    fn server_view(port: u16) -> ServerView<V1_6> {
+        let spec = OcppSpec {
+            name: "csms".into(),
+            version: OcppVersion::V1_6,
+            role: OcppRole::Server,
+            protocol: OcppProtocol::Ws,
+            ip: "127.0.0.1".into(),
+            port,
+            path: String::new(),
+            timeout_ms: None,
+            reconnect: None,
+            security: Default::default(),
+        };
+        ServerView::<V1_6>::new(spec, String::new(), OcppDeviceConfig::default())
+    }
+
+    /// Poll until the CSMS listener has bound (`start` retries the bind in the background).
+    async fn wait_bound(v: &ServerView<V1_6>) {
+        for _ in 0..100 {
+            if v.backend.bound_addr().is_some() {
+                return;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+        panic!("CSMS listener never bound");
+    }
+
+    /// UI-R-314 — `:stop` against a CSMS whose listener task is genuinely alive signals
+    /// termination and returns without waiting for the accept loop (and every connection) to end.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn ut_stop_command_returns_without_waiting() {
+        let port = ferrowl_test_support::reserve_tcp_port().release();
+
+        let mut v = server_view(port);
+        v.handle_command("start").await;
+        wait_bound(&v).await;
+
+        let before = std::time::Instant::now();
+        let result = v.handle_command("stop").await;
+        assert!(
+            before.elapsed() < std::time::Duration::from_millis(50),
+            "handle_command(\"stop\") took {:?}, expected to return immediately",
+            before.elapsed()
+        );
+        assert!(matches!(result, CommandResult::Handled(None)));
+        assert!(v.lifecycle_pending());
+
+        for _ in 0..200 {
+            if !v.lifecycle_pending() {
+                break;
+            }
+            v.refresh().await;
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+        assert!(!v.lifecycle_pending());
+    }
+
+    /// UI-R-315 — once `refresh()` settles a deferred stop, the outcome lands in the log as an
+    /// `Info "CSMS server stopped"` line rather than riding the command's own immediate result;
+    /// observed-station rows survive until the stop lands.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn ut_refresh_logs_stop_outcome() {
+        let port = ferrowl_test_support::reserve_tcp_port().release();
+
+        let mut v = server_view(port);
+        v.handle_command("start").await;
+        wait_bound(&v).await;
+        v.entry_index("cp-1", Scope::CS, None);
+
+        let result = v.handle_command("stop").await;
+        assert!(matches!(result, CommandResult::Handled(None)));
+        assert_eq!(v.entries.len(), 1, "row must survive until the stop lands");
+
+        for _ in 0..200 {
+            if !v.lifecycle_pending() {
+                break;
+            }
+            v.refresh().await;
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+        assert!(!v.lifecycle_pending());
+        assert!(
+            v.entries.is_empty(),
+            "row must be cleared once the stop lands"
+        );
+
+        let lines = v
+            .log
+            .read()
+            .await
+            .peek_n(crate::app::LOG_SIZE)
+            .into_iter()
+            .map(|(_, level, l)| (level, l))
+            .collect::<Vec<_>>();
+        assert!(
+            lines
+                .iter()
+                .any(|(level, l)| *level == Level::Info && l == "CSMS server stopped"),
+            "missing 'CSMS server stopped' Info line: {lines:?}"
+        );
+    }
+
+    /// UI-R-314/UI-R-315 — a `:restart` issued while a `:stop` is still pending overwrites the
+    /// follow-up in place rather than re-requesting `request_stop()` against a backend already
+    /// `Stopping`.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn ut_restart_while_stop_pending_overwrites_the_follow_up() {
+        let port = ferrowl_test_support::reserve_tcp_port().release();
+
+        let mut v = server_view(port);
+        v.handle_command("start").await;
+        wait_bound(&v).await;
+
+        assert!(matches!(
+            v.handle_command("stop").await,
+            CommandResult::Handled(None)
+        ));
+        assert!(v.lifecycle_pending());
+
+        assert!(matches!(
+            v.handle_command("restart").await,
+            CommandResult::Handled(None)
+        ));
+        assert!(
+            v.lifecycle_pending(),
+            "the follow-up must still be pending, not dropped"
+        );
+
+        for _ in 0..200 {
+            if !v.lifecycle_pending() {
+                break;
+            }
+            v.refresh().await;
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+        assert!(
+            !v.lifecycle_pending(),
+            "a stop overwritten with a restart must still settle, not latch forever"
+        );
+        wait_bound(&v).await;
+    }
+
+    /// UI-R-314/UI-R-315 — the reverse order: a `:stop` issued while a `:restart` is still
+    /// pending overwrites the follow-up to `Stop` and clears `want_running`, so refresh's
+    /// auto-bind guard (`want_running && !is_online()`) cannot rebind the CSMS behind the stop.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn ut_stop_while_restart_pending_overwrites_the_follow_up() {
+        let port = ferrowl_test_support::reserve_tcp_port().release();
+
+        let mut v = server_view(port);
+        v.handle_command("start").await;
+        wait_bound(&v).await;
+
+        assert!(matches!(
+            v.handle_command("restart").await,
+            CommandResult::Handled(None)
+        ));
+        assert!(v.lifecycle_pending());
+
+        assert!(matches!(
+            v.handle_command("stop").await,
+            CommandResult::Handled(None)
+        ));
+        assert!(
+            !v.want_running,
+            "a stop overwriting a pending restart must clear want_running"
+        );
+        assert!(
+            v.lifecycle_pending(),
+            "the follow-up must still be pending, not dropped"
+        );
+
+        for _ in 0..200 {
+            if !v.lifecycle_pending() {
+                break;
+            }
+            v.refresh().await;
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+        assert!(
+            !v.lifecycle_pending(),
+            "a restart overwritten with a stop must still settle, not latch forever"
+        );
+        assert!(
+            v.backend.bound_addr().is_none(),
+            "the stop's follow-up must win: no rebind behind a later stop"
+        );
+    }
 
     #[test]
     fn ut_default_action_payload_unknown_name_falls_back_to_empty_object() {

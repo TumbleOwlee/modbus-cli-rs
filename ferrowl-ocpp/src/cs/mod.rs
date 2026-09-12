@@ -107,6 +107,62 @@ fn classify_attempt(result: AttemptResult, reconnect: bool) -> AttemptOutcome<Er
     }
 }
 
+/// A command channel with a queue in front of it: whatever a dial/bind race parked while the
+/// attempt was running is handed out before anything newer off the channel, so a command sent
+/// concurrently with a dial is delivered once connected instead of being lost.
+pub(crate) struct Commands<'a, C> {
+    receiver: &'a mut mpsc::Receiver<C>,
+    queued: std::collections::VecDeque<C>,
+}
+
+impl<'a, C> Commands<'a, C> {
+    /// `queued` is what a preceding `race_terminate` parked; empty when nothing was parked.
+    pub(crate) fn new(
+        receiver: &'a mut mpsc::Receiver<C>,
+        queued: std::collections::VecDeque<C>,
+    ) -> Self {
+        Self { receiver, queued }
+    }
+
+    /// Cancel-safe, so it can sit in a `tokio::select!` arm exactly where `receiver.recv()` did:
+    /// the queue pop is synchronous and returns without awaiting, and `Receiver::recv` is itself
+    /// cancel-safe.
+    pub(crate) async fn recv(&mut self) -> Option<C> {
+        match self.queued.pop_front() {
+            Some(c) => Some(c),
+            None => self.receiver.recv().await,
+        }
+    }
+}
+
+/// Awaits `fut` while watching `receiver`, so an in-flight dial or bind is abandoned the moment a
+/// terminate-matching command arrives instead of running to its own success or failure (OC-R-175,
+/// OC-R-176). Returns `Some(output)` when `fut` finished first, `None` when terminate arrived or
+/// the channel closed — the caller drops `fut`, cancelling the attempt. Any other command is
+/// moved into `parked` for the caller to hand to the connection loop it is about to start (or to
+/// dispose of if the attempt failed); nothing is dropped here.
+pub(crate) async fn race_terminate<T, C, F>(
+    fut: F,
+    receiver: &mut mpsc::Receiver<C>,
+    is_terminate: impl Fn(&C) -> bool,
+    parked: &mut std::collections::VecDeque<C>,
+) -> Option<T>
+where
+    F: std::future::Future<Output = T>,
+{
+    tokio::pin!(fut);
+    loop {
+        tokio::select! {
+            out = &mut fut => return Some(out),
+            cmd = receiver.recv() => match cmd {
+                None => return None,
+                Some(c) if is_terminate(&c) => return None,
+                Some(c) => parked.push_back(c),
+            },
+        }
+    }
+}
+
 /// Drive the retry loop: dial the configured CSMS and run the connection, retrying a failed
 /// dial or a dropped connection per [`BackoffPolicy`] when `config.reconnect` is set (OC-R-048,
 /// OC-R-105–107). `status` receives a "Client disconnected" line once the task ends, regardless
@@ -139,20 +195,47 @@ where
         async move {
             let guard = config.read().await;
             let reconnect = guard.reconnect;
-            let dial_result = dial::<V>(&guard, &cache).await;
             let timeout = guard.timeout();
+            let mut receiver = receiver.lock().await;
+            let mut parked: std::collections::VecDeque<Command<V>> =
+                std::collections::VecDeque::new();
+            let dial_result = race_terminate(
+                dial::<V>(&guard, &cache),
+                &mut receiver,
+                |cmd: &Command<V>| matches!(cmd, Command::Terminate),
+                &mut parked,
+            )
+            .await;
             drop(guard);
+            let dial_result = match dial_result {
+                Some(dial_result) => dial_result,
+                None => {
+                    // OC-R-175 — terminate (or channel close) arrived while the dial itself was
+                    // in flight: the attempt is abandoned, never having reached a connected
+                    // state. `status.invoke` already runs once `run_with_backoff` returns below.
+                    return AttemptOutcome::Done;
+                }
+            };
             match dial_result {
                 Err(e) => {
+                    // OC-E-097 — a command parked while this failed dial was in flight is
+                    // dropped here, with the same log line as a command arriving while backing
+                    // off: there is no connection loop left to hand it to.
+                    for _ in 0..parked.len() {
+                        log.invoke(
+                            "Command dropped: client is disconnected and reconnecting.".to_string(),
+                        )
+                        .await;
+                    }
                     log.invoke(format!("{e}")).await;
                     classify_attempt(AttemptResult::DialFailed(e), reconnect)
                 }
                 Ok(ws) => {
-                    let mut receiver = receiver.lock().await;
+                    let mut commands = Commands::new(&mut receiver, parked);
                     let run_end = core::run::<V, H, _, _>(
                         ws,
                         handler.clone(),
-                        &mut receiver,
+                        &mut commands,
                         log.clone(),
                         timeout,
                     )
@@ -488,5 +571,67 @@ mod tests {
             "expected a logged backoff-wait duration line, got: {:?}",
             lines.lock()
         );
+    }
+
+    #[derive(Debug, PartialEq)]
+    enum TestCmd {
+        Terminate,
+        Other(u32),
+    }
+
+    #[tokio::test]
+    /// OC-R-175, OC-R-176 — a terminate-matching command arriving while the attempt is still
+    /// pending abandons it at once instead of waiting for it to resolve.
+    async fn ut_race_terminate_abandons_dial_on_terminate() {
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<TestCmd>(1);
+        tx.send(TestCmd::Terminate).await.unwrap();
+        let mut parked = std::collections::VecDeque::new();
+
+        let out = tokio::time::timeout(
+            Duration::from_millis(250),
+            super::race_terminate(
+                std::future::pending::<()>(),
+                &mut rx,
+                |cmd: &TestCmd| matches!(cmd, TestCmd::Terminate),
+                &mut parked,
+            ),
+        )
+        .await
+        .expect("race_terminate did not return promptly");
+
+        assert_eq!(out, None);
+    }
+
+    #[tokio::test]
+    /// `OC-E-097` — a non-terminate command arriving while the attempt is still in flight is
+    /// parked, not dropped: the race continues, the future still wins, and the command survives
+    /// for the next `Commands::recv()` to hand out.
+    async fn ut_race_terminate_queues_non_terminate_command() {
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<TestCmd>(1);
+        tx.send(TestCmd::Other(7)).await.unwrap();
+        let mut parked = std::collections::VecDeque::new();
+
+        let out = super::race_terminate(
+            async {
+                tokio::time::sleep(Duration::from_millis(20)).await;
+                "connected"
+            },
+            &mut rx,
+            |cmd: &TestCmd| matches!(cmd, TestCmd::Terminate),
+            &mut parked,
+        )
+        .await;
+
+        assert_eq!(out, Some("connected"));
+        assert_eq!(
+            parked.into_iter().collect::<Vec<_>>(),
+            vec![TestCmd::Other(7)]
+        );
+
+        let (_tx2, mut rx2) = tokio::sync::mpsc::channel::<TestCmd>(1);
+        let mut queued = std::collections::VecDeque::new();
+        queued.push_back(TestCmd::Other(7));
+        let mut commands = super::Commands::new(&mut rx2, queued);
+        assert_eq!(commands.recv().await, Some(TestCmd::Other(7)));
     }
 }

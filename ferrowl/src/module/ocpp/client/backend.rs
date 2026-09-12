@@ -209,11 +209,23 @@ fn build_config(spec: &OcppSpec, device: &OcppDeviceConfig) -> Config {
     }
 }
 
+/// UI-R-314/UI-R-315 — the running client task's lifecycle, split so a stop request never has to
+/// await the task ending: `Idle` (never started or fully stopped), `Running` (task alive, no stop
+/// requested), `Stopping` (terminate sent, waiting for the task to end on its own — no abort
+/// fallback, mirroring `Client<V>` itself, which has none). One enum rather than a flag plus a
+/// dependent optional so a stopping-but-still-running client cannot be mistaken for `Idle` (UI-
+/// E-147).
+enum CsState<V: Version> {
+    Idle,
+    Running(Client<V>),
+    Stopping(Client<V>),
+}
+
 /// The version-generic charging-station backend owned by a client view.
 /// Deliberately holds no copy of the module spec: the connection config is built from the spec
 /// the view passes into each [`start`](Self::start) call (see the CSMS backend for the rationale).
 pub struct OcppClient<V: Version> {
-    client: Option<Client<V>>,
+    client: CsState<V>,
     online: Arc<AtomicBool>,
     messages: Messages,
     /// Cached self-signed mTLS client identity (OC-R-115), created once per backend instance and
@@ -232,7 +244,7 @@ pub struct OcppClient<V: Version> {
 impl<V: Version> OcppClient<V> {
     pub fn new() -> Self {
         Self {
-            client: None,
+            client: CsState::Idle,
             online: Arc::new(AtomicBool::new(false)),
             messages: Arc::new(RwLock::new(Vec::new())),
             self_signed_cache: ferrowl_ocpp::new_self_signed_cache(),
@@ -260,9 +272,11 @@ impl<V: Version> OcppClient<V> {
     pub fn connection_status(&self) -> crate::view::status_bar::ConnStatus {
         use crate::view::status_bar::ConnStatus;
         match &self.client {
-            None => ConnStatus::Disconnected,
-            Some(c) if !c.is_running() => ConnStatus::Disconnected,
-            Some(_) => {
+            CsState::Idle => ConnStatus::Disconnected,
+            CsState::Running(c) | CsState::Stopping(c) if !c.is_running() => {
+                ConnStatus::Disconnected
+            }
+            CsState::Running(_) | CsState::Stopping(_) => {
                 if self.is_online() {
                     ConnStatus::Connected
                 } else {
@@ -296,7 +310,7 @@ impl<V: Version> OcppClient<V> {
         log: &SharedLog,
         handler: H,
     ) -> Result<(), Error> {
-        if self.client.is_some() {
+        if !matches!(self.client, CsState::Idle) {
             // Already connected: nothing to do. But if the websocket dropped without an explicit
             // `stop` the handle is stale (task dead, `online` already false) — tear it down so we
             // can redial instead of silently no-op'ing.
@@ -320,20 +334,63 @@ impl<V: Version> OcppClient<V> {
         .spawn(handler, wire_log, status)
         .await?;
         *self.cmd_tx.write() = Some(client.sender());
-        self.client = Some(client);
+        self.client = CsState::Running(client);
         // `spawn` dials asynchronously (OC-R-048, OC-R-105): the handshake happens
         // inside the retried task, so `online` stays false here and is flipped by the handler's
         // on_connected/on_disconnected callbacks once a real handshake actually completes.
         Ok(())
     }
 
-    /// Terminate the client task, if running.
-    pub async fn stop(&mut self) -> Result<(), Error> {
+    /// UI-R-314 — sends the running client task a graceful terminate and returns immediately,
+    /// without waiting for it to actually end (that's [`poll_stop`](Self::poll_stop)'s job, driven
+    /// by the caller's own per-tick `refresh()`). `Err(NotRunning)` if the backend was already
+    /// `Idle` or already `Stopping`.
+    pub async fn request_stop(&mut self) -> Result<(), Error> {
+        if !matches!(self.client, CsState::Running(_)) {
+            return Err(Error::NotRunning);
+        }
         self.online.store(false, Ordering::Relaxed);
         *self.cmd_tx.write() = None;
-        match self.client.take() {
-            Some(c) => c.terminate().await,
-            None => Ok(()),
+        let CsState::Running(client) = std::mem::replace(&mut self.client, CsState::Idle) else {
+            unreachable!("matched Running just above");
+        };
+        let _ = client.send(Command::Terminate).await;
+        self.client = CsState::Stopping(client);
+        Ok(())
+    }
+
+    /// UI-R-315 — polls a stop requested via [`request_stop`](Self::request_stop): `None` while
+    /// the task is still running; `Some(_)` once it has ended (no abort fallback — `Client<V>` has
+    /// none, and with the connect/dial race landed the task ends promptly on its own).
+    pub async fn poll_stop(&mut self) -> Option<Result<(), Error>> {
+        let CsState::Stopping(client) = &self.client else {
+            return None;
+        };
+        if client.is_running() {
+            return None;
+        }
+        let CsState::Stopping(mut client) = std::mem::replace(&mut self.client, CsState::Idle)
+        else {
+            unreachable!("matched Stopping just above");
+        };
+        Some(client.join().await)
+    }
+
+    /// Blocking convenience over `request_stop`/`poll_stop`: still the right call wherever the
+    /// caller has nothing else to do until the task ends (setup/cleanup, `start()`'s own idle
+    /// fallback) rather than a deferred outcome to drive from `refresh()`.
+    pub async fn stop(&mut self) -> Result<(), Error> {
+        if matches!(self.client, CsState::Idle) {
+            return Ok(());
+        }
+        if matches!(self.client, CsState::Running(_)) {
+            self.request_stop().await?;
+        }
+        loop {
+            if let Some(res) = self.poll_stop().await {
+                return res;
+            }
+            tokio::time::sleep(tokio::time::Duration::from_millis(5)).await;
         }
     }
 }
@@ -758,6 +815,67 @@ mod tests {
             ConnStatus::Disconnected,
             "after stop() the task is gone"
         );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    /// UI-E-147, OC-E-096 (status half) — `request_stop()` on a client whose task never completes
+    /// a handshake against a closed port must not flip the status to `Disconnected` until
+    /// `poll_stop()` actually reaps the task.
+    async fn ut_request_stop_keeps_status_reconnecting_until_the_task_ends() {
+        use crate::view::status_bar::ConnStatus;
+
+        let spec = OcppSpec {
+            name: "cs".to_owned(),
+            version: Default::default(),
+            role: Default::default(),
+            protocol: OcppProtocol::Ws,
+            ip: "127.0.0.1".to_owned(),
+            port: reserve_tcp_port().release(),
+            path: "/ocpp/CS001".to_owned(),
+            timeout_ms: Some(200),
+            reconnect: None, // defaults to true (OC-R-048)
+            security: OcppSecurityConfig::default(),
+        };
+
+        let mut backend = OcppClient::<ferrowl_ocpp::V1_6>::new();
+        backend
+            .start(
+                &spec,
+                &OcppDeviceConfig::default(),
+                &test_log(),
+                NoopCsHandler,
+            )
+            .await
+            .expect("start must not fail synchronously against an unreachable CSMS");
+
+        for _ in 0..100 {
+            if backend.connection_status() == ConnStatus::Reconnecting {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+        assert_eq!(backend.connection_status(), ConnStatus::Reconnecting);
+
+        let before = std::time::Instant::now();
+        backend.request_stop().await.expect("request_stop");
+        assert_eq!(
+            backend.connection_status(),
+            ConnStatus::Reconnecting,
+            "must not report Disconnected until poll_stop reaps the task"
+        );
+
+        loop {
+            if backend.poll_stop().await.is_some() {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+        assert!(
+            before.elapsed() < std::time::Duration::from_millis(500),
+            "request_stop + poll_stop took {:?}",
+            before.elapsed()
+        );
+        assert_eq!(backend.connection_status(), ConnStatus::Disconnected);
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
