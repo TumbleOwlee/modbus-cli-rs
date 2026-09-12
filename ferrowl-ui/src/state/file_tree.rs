@@ -1,11 +1,21 @@
 use crossterm::event::{KeyCode, KeyModifiers};
 use derive_builder::Builder;
+use ratatui::style::Style;
 
 use crate::EventResult;
+use crate::style::SyntaxTheme;
 use crate::traits::{HandleEvents, IsFocus, SetFocus};
 
-/// A file node's change status (UI-R-244): drawn as a leading marker and styled with the
-/// syntax theme's added/removed/meta styles. Public because the caller sets it per path.
+/// UI-R-244 — the marker and style a file tree draws for a node carrying this status.
+/// `theme` is the widget's syntax theme (UI-R-319); an implementation is free to ignore it.
+pub trait FileTreeStatus: Clone {
+    fn marker(&self) -> String;
+    fn style(&self, theme: &SyntaxTheme) -> Style;
+}
+
+/// A file node's change status (UI-R-244, UI-R-319): drawn as a leading marker and styled
+/// with the syntax theme's added/removed/meta styles. Public because the caller sets it per
+/// path.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FileStatus {
     Added,
@@ -13,19 +23,37 @@ pub enum FileStatus {
     Modified,
 }
 
+impl FileTreeStatus for FileStatus {
+    fn marker(&self) -> String {
+        match self {
+            FileStatus::Added => "+".to_string(),
+            FileStatus::Removed => "-".to_string(),
+            FileStatus::Modified => "~".to_string(),
+        }
+    }
+
+    fn style(&self, theme: &SyntaxTheme) -> Style {
+        match self {
+            FileStatus::Added => theme.added,
+            FileStatus::Removed => theme.removed,
+            FileStatus::Modified => theme.meta,
+        }
+    }
+}
+
 /// A node of the tree built from the paths [`FileTreeState`] is constructed with. Crate-private
 /// like `DiffRow` in `diff_view.rs`: no `api-contract.md` row exposes the tree itself,
 /// only the path list going in and the selected path coming out.
 #[derive(Debug, Clone)]
-pub(crate) enum TreeNode {
+pub(crate) enum TreeNode<S> {
     Dir {
         name: String,
-        children: Vec<TreeNode>,
+        children: Vec<TreeNode<S>>,
         expanded: bool,
     },
     File {
         name: String,
-        status: Option<FileStatus>,
+        status: Option<S>,
     },
 }
 
@@ -33,7 +61,7 @@ pub(crate) enum TreeNode {
 /// widget that renders this state is its only other caller, and no `api-contract.md` row
 /// exposes the row list.
 #[derive(Debug, Clone)]
-pub(crate) struct VisibleRow {
+pub(crate) struct VisibleRow<S> {
     pub(crate) depth: usize,
     pub(crate) path: String,
     pub(crate) is_dir: bool,
@@ -42,7 +70,7 @@ pub(crate) struct VisibleRow {
     #[allow(dead_code)]
     pub(crate) name: String,
     #[allow(dead_code)]
-    pub(crate) status: Option<FileStatus>,
+    pub(crate) status: Option<S>,
 }
 
 /// Outcome of a key offered to [`FileTreeState`] via [`handle_key`](FileTreeState::handle_key).
@@ -59,8 +87,8 @@ pub enum FileTreeOutcome {
 /// Splits each path on `/`, creating the directory nodes its components imply and hanging
 /// the file under the last one (UI-R-234); a path with no `/` becomes a file node directly
 /// under the root (UI-E-104). Every directory created is `expanded: true` (UI-R-235).
-fn build_tree(paths: &[(String, Option<FileStatus>)]) -> Vec<TreeNode> {
-    let mut root: Vec<TreeNode> = Vec::new();
+fn build_tree<S: FileTreeStatus>(paths: &[(String, Option<S>)]) -> Vec<TreeNode<S>> {
+    let mut root: Vec<TreeNode<S>> = Vec::new();
     for (path, status) in paths {
         let mut components: Vec<&str> = path.split('/').collect();
         let file_name = components.pop().unwrap_or_default();
@@ -87,14 +115,19 @@ fn build_tree(paths: &[(String, Option<FileStatus>)]) -> Vec<TreeNode> {
         }
         siblings.push(TreeNode::File {
             name: file_name.to_string(),
-            status: *status,
+            status: status.clone(),
         });
     }
     root
 }
 
-fn push_visible(nodes: &[TreeNode], depth: usize, prefix: &str, out: &mut Vec<VisibleRow>) {
-    let mut dirs: Vec<&TreeNode> = nodes
+fn push_visible<S: FileTreeStatus>(
+    nodes: &[TreeNode<S>],
+    depth: usize,
+    prefix: &str,
+    out: &mut Vec<VisibleRow<S>>,
+) {
+    let mut dirs: Vec<&TreeNode<S>> = nodes
         .iter()
         .filter(|n| matches!(n, TreeNode::Dir { .. }))
         .collect();
@@ -102,7 +135,7 @@ fn push_visible(nodes: &[TreeNode], depth: usize, prefix: &str, out: &mut Vec<Vi
         TreeNode::Dir { name, .. } => name.clone(),
         TreeNode::File { .. } => unreachable!(),
     });
-    let mut files: Vec<&TreeNode> = nodes
+    let mut files: Vec<&TreeNode<S>> = nodes
         .iter()
         .filter(|n| matches!(n, TreeNode::File { .. }))
         .collect();
@@ -147,14 +180,14 @@ fn push_visible(nodes: &[TreeNode], depth: usize, prefix: &str, out: &mut Vec<Vi
                     is_dir: false,
                     expanded: false,
                     name: name.clone(),
-                    status: *status,
+                    status: status.clone(),
                 });
             }
         }
     }
 }
 
-fn walk_mut(nodes: &mut [TreeNode], f: &mut impl FnMut(&mut bool)) {
+fn walk_mut<S>(nodes: &mut [TreeNode<S>], f: &mut impl FnMut(&mut bool)) {
     for node in nodes {
         if let TreeNode::Dir {
             children, expanded, ..
@@ -169,9 +202,9 @@ fn walk_mut(nodes: &mut [TreeNode], f: &mut impl FnMut(&mut bool)) {
 /// State of a [`FileTree`](crate::widgets::FileTree): a tree built from a path list plus
 /// the current selection and viewport.
 #[derive(Builder, Debug, Clone)]
-pub struct FileTreeState {
+pub struct FileTreeState<S = FileStatus> {
     #[builder(setter(custom), default = "Vec::new()")]
-    root: Vec<TreeNode>,
+    root: Vec<TreeNode<S>>,
     #[builder(setter(skip), default = "0")]
     selected: usize,
     #[builder(setter(skip), default = "0")]
@@ -186,15 +219,15 @@ pub struct FileTreeState {
     focused: bool,
 }
 
-impl FileTreeStateBuilder {
+impl<S: FileTreeStatus> FileTreeStateBuilder<S> {
     /// UI-R-234 — path plus optional status, routed through `build_tree`.
-    pub fn paths(&mut self, paths: Vec<(String, Option<FileStatus>)>) -> &mut Self {
+    pub fn paths(&mut self, paths: Vec<(String, Option<S>)>) -> &mut Self {
         self.root = Some(build_tree(&paths));
         self
     }
 }
 
-impl Default for FileTreeState {
+impl Default for FileTreeState<FileStatus> {
     fn default() -> Self {
         FileTreeStateBuilder::default()
             .build()
@@ -202,10 +235,10 @@ impl Default for FileTreeState {
     }
 }
 
-impl FileTreeState {
+impl<S: FileTreeStatus> FileTreeState<S> {
     /// UI-R-234 — rebuilds the tree from a fresh path list, routed through `build_tree`
     /// like the builder's `paths` setter; the selection is clamped to the new row count.
-    pub fn set_paths(&mut self, paths: &[(String, Option<FileStatus>)]) {
+    pub fn set_paths(&mut self, paths: &[(String, Option<S>)]) {
         self.root = build_tree(paths);
         let rows = self.visible_rows();
         self.selected = self.selected.min(rows.len().saturating_sub(1));
@@ -225,7 +258,7 @@ impl FileTreeState {
 
     /// UI-R-236, UI-R-237 — a depth-first walk descending only into expanded
     /// directories, directories before files, each group ordered by name.
-    pub(crate) fn visible_rows(&self) -> Vec<VisibleRow> {
+    pub(crate) fn visible_rows(&self) -> Vec<VisibleRow<S>> {
         let mut out = Vec::new();
         push_visible(&self.root, 0, "", &mut out);
         out
@@ -330,7 +363,7 @@ impl FileTreeState {
     }
 
     fn set_expanded(&mut self, path: &str, expanded: bool) {
-        fn go(nodes: &mut [TreeNode], prefix: &str, path: &str, expanded: bool) -> bool {
+        fn go<S>(nodes: &mut [TreeNode<S>], prefix: &str, path: &str, expanded: bool) -> bool {
             for node in nodes {
                 if let TreeNode::Dir {
                     name,
@@ -437,7 +470,7 @@ impl FileTreeState {
     }
 }
 
-impl HandleEvents for FileTreeState {
+impl<S: FileTreeStatus> HandleEvents for FileTreeState<S> {
     fn handle_events(&mut self, modifiers: KeyModifiers, code: KeyCode) -> EventResult {
         match self.handle_key(modifiers, code) {
             Some(_) => EventResult::Consumed,
@@ -446,13 +479,13 @@ impl HandleEvents for FileTreeState {
     }
 }
 
-impl SetFocus for FileTreeState {
+impl<S: FileTreeStatus> SetFocus for FileTreeState<S> {
     fn set_focused(&mut self, focus: bool) {
         self.focused = focus;
     }
 }
 
-impl IsFocus for FileTreeState {
+impl<S: FileTreeStatus> IsFocus for FileTreeState<S> {
     fn is_focused(&self) -> bool {
         self.focused
     }
@@ -768,5 +801,37 @@ mod tests {
             s.handle_key(KeyModifiers::NONE, KeyCode::Enter),
             Some(FileTreeOutcome::Consumed)
         );
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum Severity {
+        Info,
+    }
+
+    impl FileTreeStatus for Severity {
+        fn marker(&self) -> String {
+            "!".to_string()
+        }
+
+        fn style(&self, _theme: &SyntaxTheme) -> Style {
+            Style::default()
+        }
+    }
+
+    #[test]
+    /// UI-R-244 — `visible_rows()` hands back the caller's status type unchanged for files
+    /// and `None` for directories.
+    fn ut_visible_rows_carry_the_caller_status_type() {
+        let s: FileTreeState<Severity> = FileTreeStateBuilder::default()
+            .paths(vec![
+                ("a/b.rs".to_string(), Some(Severity::Info)),
+                ("a/c.rs".to_string(), None),
+            ])
+            .build()
+            .unwrap();
+        let rows = s.visible_rows();
+        assert_eq!(rows[0].status, None);
+        assert_eq!(rows[1].status, Some(Severity::Info));
+        assert_eq!(rows[2].status, None);
     }
 }

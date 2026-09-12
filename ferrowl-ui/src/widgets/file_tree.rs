@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use derive_builder::Builder;
 use getset::{CopyGetters, Getters, Setters, WithSetters};
 
@@ -7,18 +9,18 @@ use ratatui::style::Style;
 use ratatui::widgets::{Block, StatefulWidget, Widget};
 
 use crate::Border;
-use crate::state::{FileStatus, FileTreeState};
+use crate::state::{FileStatus, FileTreeState, FileTreeStatus};
 use crate::style::{InputFieldStyle, MarkdownTheme, SyntaxTheme};
 use crate::traits::{IsFocus, Margins};
 use crate::widgets::Title;
 
 /// A file tree rendered from a [`FileTreeState`]: each visible row indented by its depth
-/// with an expansion marker on directories (UI-R-238), a change-status marker and style on
-/// a file that carries one (UI-R-244), and the selected row painted in the theme's
-/// highlighted-row style across the widget's full width (UI-R-252).
+/// with an expansion marker on directories (UI-R-238), a status marker and style on a file
+/// that carries one (UI-R-244), and the selected row painted in the theme's highlighted-row
+/// style across the widget's full width (UI-R-252).
 #[derive(Builder, Debug, Clone, Getters, Setters, CopyGetters, WithSetters)]
 #[getset(set = "pub")]
-pub struct FileTree {
+pub struct FileTree<S = FileStatus> {
     #[getset(get = "pub")]
     #[builder(default = "Border::None")]
     border: Border,
@@ -40,9 +42,12 @@ pub struct FileTree {
     #[getset(get = "pub")]
     #[builder(default = "*MarkdownTheme::default().highlighted_row()")]
     highlighted_row: Style,
+    #[getset(skip)]
+    #[builder(setter(skip), default = "PhantomData")]
+    status: PhantomData<S>,
 }
 
-impl Default for FileTree {
+impl Default for FileTree<FileStatus> {
     fn default() -> Self {
         FileTreeBuilder::default()
             .build()
@@ -50,7 +55,7 @@ impl Default for FileTree {
     }
 }
 
-impl Margins for FileTree {
+impl<S> Margins for FileTree<S> {
     fn margins(&self) -> Margin {
         let horizontal = if let Border::Full(m) = &self.border {
             4 + m.horizontal * 2
@@ -72,34 +77,16 @@ impl Margins for FileTree {
     }
 }
 
-fn status_marker(status: FileStatus) -> char {
-    match status {
-        FileStatus::Added => '+',
-        FileStatus::Removed => '-',
-        FileStatus::Modified => '~',
-    }
-}
-
-impl FileTree {
-    fn status_style(&self, status: FileStatus) -> Style {
-        match status {
-            FileStatus::Added => self.syntax_theme.added,
-            FileStatus::Removed => self.syntax_theme.removed,
-            FileStatus::Modified => self.syntax_theme.meta,
-        }
-    }
-}
-
-impl StatefulWidget for FileTree {
-    type State = FileTreeState;
+impl<S: FileTreeStatus> StatefulWidget for FileTree<S> {
+    type State = FileTreeState<S>;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         StatefulWidget::render(&self, area, buf, state);
     }
 }
 
-impl StatefulWidget for &FileTree {
-    type State = FileTreeState;
+impl<S: FileTreeStatus> StatefulWidget for &FileTree<S> {
+    type State = FileTreeState<S>;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         buf.set_style(area, self.style.general);
@@ -156,8 +143,8 @@ impl StatefulWidget for &FileTree {
                 ' '
             };
 
-            let (content_prefix, style) = match row.status {
-                Some(status) => (status_marker(status).to_string(), self.status_style(status)),
+            let (content_prefix, style) = match &row.status {
+                Some(status) => (status.marker(), status.style(&self.syntax_theme)),
                 None => (String::new(), self.style.general),
             };
 
@@ -227,8 +214,8 @@ mod tests {
     }
 
     #[test]
-    /// UI-R-244 — a change-status marker and style on a file that carries one; a file
-    /// with none takes the normal text style.
+    /// UI-R-244, UI-R-319 — the shipped status type's marker and style on a file that
+    /// carries one; a file with none takes the normal text style.
     fn ut_status_markers_and_styles_follow_the_change_status() {
         let mut s = tree(&[
             ("added.rs", Some(FileStatus::Added)),
@@ -359,5 +346,118 @@ mod tests {
         let w = FileTree::default();
         let markdown = MarkdownTheme::default();
         assert_eq!(w.highlighted_row, *markdown.highlighted_row());
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum Severity {
+        Info,
+        Silent,
+        Wide,
+    }
+
+    impl crate::state::FileTreeStatus for Severity {
+        fn marker(&self) -> String {
+            match self {
+                Severity::Info => "!".to_string(),
+                Severity::Silent => String::new(),
+                Severity::Wide => ">>".to_string(),
+            }
+        }
+
+        fn style(&self, _theme: &SyntaxTheme) -> Style {
+            Style::default().fg(ratatui::style::Color::Magenta)
+        }
+    }
+
+    fn severity_tree(list: &[(&str, Option<Severity>)]) -> crate::state::FileTreeState<Severity> {
+        FileTreeStateBuilder::<Severity>::default()
+            .paths(list.iter().map(|(p, s)| (p.to_string(), *s)).collect())
+            .build()
+            .unwrap()
+    }
+
+    #[test]
+    /// UI-R-244 — a caller status type supplies the row's marker and style.
+    fn ut_caller_status_type_supplies_the_marker_and_style() {
+        let mut s = severity_tree(&[("a.rs", Some(Severity::Info))]);
+        let w: FileTree<Severity> = FileTreeBuilder::default().build().unwrap();
+        let mut b = buffer(20, 1);
+        StatefulWidget::render(&w, Rect::new(0, 0, 20, 1), &mut b, &mut s);
+        assert!(row_text(&b, 0, 20).starts_with(" !a.rs"));
+        assert_eq!(b[(1, 0)].fg, ratatui::style::Color::Magenta);
+    }
+
+    #[test]
+    /// UI-R-320 — a tree built and rendered without naming a status type draws the
+    /// shipped literal markers and syntax-theme foregrounds.
+    fn ut_default_status_type_is_the_shipped_one() {
+        let mut s = tree(&[("added.rs", Some(FileStatus::Added))]);
+        let w = FileTree::default();
+        let mut b = buffer(20, 1);
+        StatefulWidget::render(&w, Rect::new(0, 0, 20, 1), &mut b, &mut s);
+        assert!(row_text(&b, 0, 20).starts_with(" +added.rs"));
+        assert_eq!(
+            b[(1, 0)].fg,
+            w.syntax_theme.added.fg.expect("style sets a color")
+        );
+    }
+
+    #[test]
+    /// UI-R-321 — a file with no status draws no leading marker and takes the normal
+    /// text style, under both the shipped status type and a caller-defined one.
+    fn ut_file_without_status_draws_no_marker_and_takes_the_normal_style() {
+        let mut s = tree(&[("plain.rs", None)]);
+        let w = FileTree::default();
+        let mut b = buffer(20, 1);
+        StatefulWidget::render(&w, Rect::new(0, 0, 20, 1), &mut b, &mut s);
+        assert!(row_text(&b, 0, 20).starts_with(" plain.rs"));
+        assert_eq!(
+            b[(1, 0)].fg,
+            w.style.general().fg.expect("style sets a color")
+        );
+
+        let mut s = severity_tree(&[("plain.rs", None)]);
+        let w: FileTree<Severity> = FileTreeBuilder::default().build().unwrap();
+        let mut b = buffer(20, 1);
+        StatefulWidget::render(&w, Rect::new(0, 0, 20, 1), &mut b, &mut s);
+        assert!(row_text(&b, 0, 20).starts_with(" plain.rs"));
+        assert_eq!(
+            b[(1, 0)].fg,
+            w.style.general().fg.expect("style sets a color")
+        );
+    }
+
+    #[test]
+    /// UI-E-151 — a caller status type reporting an empty marker draws no leading
+    /// marker and no separating space, while its style still applies.
+    fn ut_empty_status_marker_draws_no_marker_but_keeps_the_style() {
+        let mut s = severity_tree(&[("silent.rs", Some(Severity::Silent))]);
+        let w: FileTree<Severity> = FileTreeBuilder::default().build().unwrap();
+        let mut b = buffer(20, 1);
+        StatefulWidget::render(&w, Rect::new(0, 0, 20, 1), &mut b, &mut s);
+        assert!(row_text(&b, 0, 20).starts_with(" silent.rs"));
+        assert_eq!(b[(1, 0)].fg, ratatui::style::Color::Magenta);
+    }
+
+    #[test]
+    /// UI-E-152 — a caller status type reporting a marker of more than one cell is
+    /// drawn as reported, shifting the name and clipping at the area width.
+    fn ut_multi_cell_status_marker_shifts_the_name_and_clips_at_the_area() {
+        let mut s = severity_tree(&[
+            ("silent.rs", Some(Severity::Silent)),
+            ("wide.rs", Some(Severity::Wide)),
+        ]);
+        s.set_visible_height(2);
+        let w: FileTree<Severity> = FileTreeBuilder::default().build().unwrap();
+        let mut b = buffer(20, 2);
+        StatefulWidget::render(&w, Rect::new(0, 0, 20, 2), &mut b, &mut s);
+        assert!(row_text(&b, 0, 20).starts_with(" silent.rs"));
+        assert!(row_text(&b, 1, 20).starts_with(" >>wide.rs"));
+
+        let mut s = severity_tree(&[("a-very-long-file-name-indeed.rs", Some(Severity::Wide))]);
+        let w: FileTree<Severity> = FileTreeBuilder::default().build().unwrap();
+        let mut b = buffer(10, 1);
+        StatefulWidget::render(&w, Rect::new(0, 0, 10, 1), &mut b, &mut s);
+        assert_eq!(row_text(&b, 0, 10), " >>a-very-");
     }
 }
