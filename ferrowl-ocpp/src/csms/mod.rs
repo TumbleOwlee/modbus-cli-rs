@@ -233,13 +233,41 @@ where
         let receiver = &receiver;
         let tls = tls.clone();
         async move {
-            match TcpListener::bind((config.host.as_str(), config.port)).await {
-                Err(e) => AttemptOutcome::Failed {
-                    error: Error::from(e),
-                    reconnect: config.reconnect,
-                    reset: false,
-                },
-                Ok(listener) => {
+            let mut receiver = receiver.lock().await;
+            let mut parked: std::collections::VecDeque<Command<V>> =
+                std::collections::VecDeque::new();
+            let bind_result = crate::cs::race_terminate(
+                TcpListener::bind((config.host.as_str(), config.port)),
+                &mut receiver,
+                |cmd: &Command<V>| matches!(cmd, Command::Terminate),
+                &mut parked,
+            )
+            .await;
+            match bind_result {
+                None => {
+                    // OC-R-176 — terminate (or channel close) arrived while the listener bind
+                    // itself was in flight: the attempt is abandoned, never having bound.
+                    AttemptOutcome::Done
+                }
+                Some(Err(e)) => {
+                    // OC-E-097 — a command parked while this failed bind was in flight is
+                    // dropped here, with the same log line as a command arriving while the
+                    // listener is not bound and backing off: there is no accept loop left to
+                    // hand it to.
+                    for _ in 0..parked.len() {
+                        log.invoke(
+                            "Command dropped: CSMS listener is not bound yet and retrying."
+                                .to_string(),
+                        )
+                        .await;
+                    }
+                    AttemptOutcome::Failed {
+                        error: Error::from(e),
+                        reconnect: config.reconnect,
+                        reset: false,
+                    }
+                }
+                Some(Ok(listener)) => {
                     let addr = match listener.local_addr() {
                         Ok(addr) => addr,
                         Err(e) => {
@@ -252,12 +280,12 @@ where
                     };
                     *local_addr.lock() = Some(addr);
                     let activity = Arc::new(AtomicBool::new(false));
-                    let mut receiver = receiver.lock().await;
+                    let mut commands = crate::cs::Commands::new(&mut receiver, parked);
                     accept_loop::<V, H, L>(
                         listener,
                         handler.clone(),
                         registry.clone(),
-                        &mut receiver,
+                        &mut commands,
                         log.clone(),
                         config.timeout(),
                         config.basic_auth.clone(),
@@ -303,7 +331,7 @@ async fn accept_loop<V, H, L>(
     listener: TcpListener,
     handler: Arc<H>,
     registry: Arc<ConnectionRegistry<V>>,
-    commands: &mut mpsc::Receiver<Command<V>>,
+    commands: &mut crate::cs::Commands<'_, Command<V>>,
     log: L,
     timeout: std::time::Duration,
     basic_auth: Option<BasicAuth>,
@@ -491,13 +519,14 @@ mod tests {
         let handler = std::sync::Arc::new(NoopHandler);
         let registry = super::ConnectionRegistry::<V1_6>::new();
         let (cmd_tx, mut cmd_rx) = mpsc::channel::<super::Command<V1_6>>(4);
+        let mut commands = crate::cs::Commands::new(&mut cmd_rx, std::collections::VecDeque::new());
         let activity = std::sync::Arc::new(AtomicBool::new(false));
 
         let accept_fut = super::accept_loop::<V1_6, NoopHandler, _>(
             listener,
             handler,
             registry,
-            &mut cmd_rx,
+            &mut commands,
             |_s: String| async move {},
             std::time::Duration::from_secs(1),
             None,
@@ -532,6 +561,33 @@ mod tests {
             activity.load(Ordering::Relaxed),
             "accept_loop must mark activity once it accepts a connection"
         );
+    }
+
+    #[cfg(feature = "v1_6")]
+    #[tokio::test]
+    /// OC-R-176 — a terminate arriving while the listener bind is still in flight aborts the
+    /// race immediately, well inside the bind's own timeout, matching the abort every
+    /// `run_reconnect_loop` bind race performs.
+    async fn ut_race_terminate_abandons_bind_on_terminate() {
+        use crate::action::v1_6::V1_6;
+
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<super::Command<V1_6>>(1);
+        tx.send(super::Command::Terminate).await.unwrap();
+        let mut parked = std::collections::VecDeque::new();
+
+        let out = tokio::time::timeout(
+            std::time::Duration::from_millis(250),
+            crate::cs::race_terminate(
+                std::future::pending::<std::io::Result<super::TcpListener>>(),
+                &mut rx,
+                |cmd: &super::Command<V1_6>| matches!(cmd, super::Command::Terminate),
+                &mut parked,
+            ),
+        )
+        .await
+        .expect("race_terminate did not return promptly");
+
+        assert!(out.is_none(), "the pending bind is abandoned");
     }
 
     #[cfg(feature = "v1_6")]

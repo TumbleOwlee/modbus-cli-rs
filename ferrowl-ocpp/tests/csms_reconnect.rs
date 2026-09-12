@@ -180,3 +180,67 @@ async fn csms_bind_failure_reconnect_false_ends_task() {
 
     drop(occupier);
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+/// OC-R-176, OC-E-096 — a terminate arriving around a CSMS listener bind ends the task with
+/// success rather than waiting for the bind to complete.
+async fn it_csms_terminate_while_bind_pending_ends_task_ok() {
+    let port = ferrowl_test_support::reserve_tcp_port().release();
+
+    let server = csms::ServerBuilder::<V1_6>::new(
+        csms::Config {
+            host: "127.0.0.1".to_owned(),
+            port,
+            timeout_ms: 1000,
+            reconnect: true,
+            basic_auth: None,
+            tls: Default::default(),
+        },
+        ferrowl_ocpp::new_self_signed_cache(),
+    )
+    .spawn(TestCsms, sink())
+    .await
+    .expect("spawn always returns Ok");
+
+    let result = tokio::time::timeout(Duration::from_millis(500), server.terminate())
+        .await
+        .expect("terminate around the bind must not hang");
+    assert!(result.is_ok(), "the server task must end with success");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+/// OC-R-177, OC-E-096 — a terminate arriving while the CSMS is idle in `accept()` (bound, no
+/// pending connection) ends the task promptly, pinning the existing `accept_loop` select against
+/// a real bound listener rather than only its helper-level shape.
+async fn it_csms_terminate_during_accept_ends_task_ok() {
+    let server = csms::ServerBuilder::<V1_6>::new(
+        csms::Config {
+            host: "127.0.0.1".to_owned(),
+            port: 0,
+            timeout_ms: 1000,
+            reconnect: true,
+            basic_auth: None,
+            tls: Default::default(),
+        },
+        ferrowl_ocpp::new_self_signed_cache(),
+    )
+    .spawn(TestCsms, sink())
+    .await
+    .expect("spawn always returns Ok");
+
+    for _ in 0..50 {
+        if server.local_addr().is_some() {
+            break;
+        }
+        sleep(Duration::from_millis(20)).await;
+    }
+    assert!(
+        server.local_addr().is_some(),
+        "the listener must bind before this test can exercise accept()"
+    );
+
+    let result = tokio::time::timeout(Duration::from_millis(500), server.terminate())
+        .await
+        .expect("terminate while idle in accept() must not hang");
+    assert!(result.is_ok(), "the server task must end with success");
+}
