@@ -74,6 +74,12 @@ Per [`../README.md`](../README.md)'s ownership rules, this area does **not** own
 
 **CL-R-027** — Session-level scripts across multiple `--session` files are concatenated in file order; the session sim interval is the last file's, matching the TUI's multi-file resolution.
 
+**CL-R-055** — Each module the headless runner stops during teardown (CL-R-026, CL-R-050) is reported on stderr as `Stopped '<name>'`, `<name>` = the module's deduped name, one line per module, after that module's stop completes.
+
+**CL-R-056** — A module whose stop reports an error is reported on stderr as `Error: failed to stop '<name>': <detail>` instead of CL-R-055's line.
+
+**CL-R-057** — The session sim, when stopped during teardown (CL-R-026), is reported under source name `session` by the same lines as a module (CL-R-055, CL-R-056).
+
 ---
 
 ## Exit codes
@@ -104,7 +110,7 @@ Per [`../README.md`](../README.md)'s ownership rules, this area does **not** own
 
 **CL-R-041** — With `--log-file <path>`, every stdout line is also appended to that file, opened create-and-append.
 
-**CL-R-042** — Setup and fatal diagnostics (`Error:`/`error:` of CL-R-030 and CL-R-033, the TUI's module-skip warnings) go to stderr, keeping stdout the machine-readable drained-log stream.
+**CL-R-042** — Setup and fatal diagnostics (`Error:`/`error:` of CL-R-030 and CL-R-033, the TUI's module-skip warnings) and the teardown lines of CL-R-055, CL-R-056 and CL-R-057 go to stderr, keeping stdout the machine-readable drained-log stream.
 
 **CL-R-043** — Per-module draining is exact-by-count (tracking total lines written), so a message repeated verbatim within one drain window is emitted every time.
 

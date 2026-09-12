@@ -151,5 +151,5 @@ Example:
 ## Headless output format
 
 - **stdout** carries the drained log stream, one line per entry: `[<timestamp>] <source> | <message>`. `<source>` = module's deduped name, or `session` for session-sim lines (CL-R-040).
-- **stderr** carries setup/fatal diagnostics only (`Error:`/`error:`, the TUI's module-skip warnings), so stdout stays parseable (CL-R-042).
+- **stderr** carries setup/fatal diagnostics (`Error:`/`error:`, the TUI's module-skip warnings) and the per-module teardown lines `Stopped '<name>'` / `Error: failed to stop '<name>': <detail>` (CL-R-055, CL-R-056, CL-R-057), so stdout stays parseable (CL-R-042).
 - With `--log-file FILE`, every stdout line is also appended to `FILE` (create-and-append) (CL-R-041).
