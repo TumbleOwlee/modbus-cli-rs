@@ -2,7 +2,7 @@
 //! binary as a subprocess since `ferrowl` is bin-only (no lib target to call `headless::run`
 //! from directly), asserting the exit-code contract documented in the README.
 
-use ferrowl_test_support::reserve_temp_dir;
+use ferrowl_test_support::{reserve_tcp_port, reserve_temp_dir};
 use std::process::Command;
 
 fn bin() -> Command {
@@ -51,6 +51,105 @@ fn it_fails_hard_on_a_missing_device_config() {
             .lines()
             .any(|line| line.starts_with("Error:") && line.contains("failed to load")),
         "expected an `Error:`-prefixed load-failure line, got: {stderr}"
+    );
+}
+
+#[test]
+/// CL-R-055, CL-R-042, CL-E-029 — each stopped module is reported on stderr, one line per
+/// module in start order, after that module's stop completes; the lines never reach stdout
+/// nor the mirrored `--log-file`.
+fn it_headless_reports_module_teardown_on_stderr() {
+    let device = concat!(env!("CARGO_MANIFEST_DIR"), "/../configs/evse.toml");
+    let port1 = reserve_tcp_port().release();
+    let port2 = reserve_tcp_port().release();
+    let module1 = format!(
+        "name=it-teardown-1,device={device},transport=tcp,ip=127.0.0.1,port={port1},role=server"
+    );
+    let module2 = format!(
+        "name=it-teardown-2,device={device},transport=tcp,ip=127.0.0.1,port={port2},role=server"
+    );
+    let dir = reserve_temp_dir("ferrowl_cl_it");
+    let log_file = dir.join("teardown.log");
+
+    let output = bin()
+        .args([
+            "run",
+            "--module",
+            &module1,
+            "--module",
+            &module2,
+            "--duration",
+            "1",
+            "--log-file",
+            log_file.to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run ferrowl binary");
+
+    assert!(
+        output.status.success(),
+        "expected exit 0, got {:?}\nstdout: {}\nstderr: {}",
+        output.status.code(),
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let pos1 = stderr
+        .find("Stopped 'it-teardown-1'")
+        .expect("expected first module's teardown line on stderr");
+    let pos2 = stderr
+        .find("Stopped 'it-teardown-2'")
+        .expect("expected second module's teardown line on stderr");
+    assert!(
+        pos1 < pos2,
+        "expected teardown lines in module start order, got stderr: {stderr}"
+    );
+    assert!(
+        !stdout.contains("Stopped '"),
+        "teardown lines must not reach stdout, got: {stdout}"
+    );
+    let log_contents = std::fs::read_to_string(&log_file).unwrap();
+    assert!(
+        !log_contents.contains("Stopped '"),
+        "teardown lines must not be mirrored into --log-file, got: {log_contents}"
+    );
+}
+
+#[test]
+/// CL-R-057 — the session sim, when stopped during teardown, is reported under source name
+/// `session` by the same lines as a module.
+fn it_headless_reports_session_sim_teardown_on_stderr() {
+    let dir = reserve_temp_dir("ferrowl_cl_it");
+    let session_path = dir.join("session.toml");
+    std::fs::write(
+        &session_path,
+        r#"
+interval = 0.1
+
+[[scripts]]
+name = "noop"
+code = "local _ = 1"
+enabled = true
+"#,
+    )
+    .expect("write session file");
+
+    let output = bin()
+        .args([
+            "run",
+            "--session",
+            session_path.to_str().unwrap(),
+            "--duration",
+            "1",
+        ])
+        .output()
+        .expect("failed to run ferrowl binary");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("Stopped 'session'"),
+        "expected the session sim's teardown line on stderr, got: {stderr}"
     );
 }
 

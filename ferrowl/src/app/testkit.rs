@@ -109,7 +109,7 @@ const MOCK_CMDS: &[CommandDescriptor] = &[CommandDescriptor {
 /// Handles a test keeps after moving a [`MockView`] into a `Tab`, to observe the calls `App` made
 /// to it. All fields are `Arc`-shared with the live view.
 #[derive(Clone)]
-pub(super) struct MockHandle {
+pub(crate) struct MockHandle {
     refreshes: Arc<AtomicUsize>,
     renders: Arc<AtomicUsize>,
     commands: Arc<Mutex<Vec<String>>>,
@@ -131,7 +131,7 @@ impl MockHandle {
     }
 
     /// Every command string `App` forwarded to this view, in order.
-    pub(super) fn commands(&self) -> Vec<String> {
+    pub(crate) fn commands(&self) -> Vec<String> {
         self.commands.lock().unwrap().clone()
     }
 
@@ -148,7 +148,7 @@ impl MockHandle {
 
 /// A `ModuleView` test double: renders nothing, records `refresh`/`handle_command`, and can be
 /// pre-loaded with a session spec, a one-shot replacement, and a module host.
-pub(super) struct MockView {
+pub(crate) struct MockView {
     name: String,
     log: SharedLog,
     focused: bool,
@@ -168,7 +168,7 @@ impl MockView {
     /// A view plus the handle to observe it. `name` is the module/tab identity. Not `new` because
     /// it returns the observation handle alongside the view, not `Self`; chain builder methods on
     /// the returned view and `.boxed()` it for [`build_app`].
-    pub(super) fn pair(name: &str) -> (MockView, MockHandle) {
+    pub(crate) fn pair(name: &str) -> (MockView, MockHandle) {
         let refreshes = Arc::new(AtomicUsize::new(0));
         let renders = Arc::new(AtomicUsize::new(0));
         let commands = Arc::new(Mutex::new(Vec::new()));
@@ -201,7 +201,7 @@ impl MockView {
 
     /// Make the next `handle_command` call return `Handled(Some((level, message)))` instead of
     /// the default `Handled(None)`.
-    pub(super) fn with_command_message(mut self, level: Level, message: &str) -> Self {
+    pub(crate) fn with_command_message(mut self, level: Level, message: &str) -> Self {
         self.command_result = Some(CommandResult::Handled(Some((level, message.to_string()))));
         self
     }
@@ -231,7 +231,7 @@ impl MockView {
     }
 
     /// Re-box after a builder chain that started from an already-boxed `new`.
-    pub(super) fn boxed(self) -> Box<dyn ModuleView> {
+    pub(crate) fn boxed(self) -> Box<dyn ModuleView> {
         Box::new(self)
     }
 }

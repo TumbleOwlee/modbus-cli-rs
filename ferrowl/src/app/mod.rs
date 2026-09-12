@@ -10,7 +10,7 @@ mod keys;
 mod overlay;
 mod render;
 #[cfg(test)]
-mod testkit;
+pub(crate) mod testkit;
 
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use ferrowl_lua::module::ModuleDirectory;

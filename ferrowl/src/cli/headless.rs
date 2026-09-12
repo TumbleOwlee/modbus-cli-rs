@@ -248,15 +248,34 @@ fn emit_drained(
     }
 }
 
-/// Stop every module (best-effort: a stop failure is logged but does not change the exit code —
-/// we're already tearing down).
-async fn stop_all(modules: &mut [RunModule]) {
-    for module in modules.iter_mut() {
-        if let CommandResult::Handled(Some((level, msg))) = module.view.handle_command("stop").await
-        {
-            module.log.write().await.write(level, &msg);
-        }
+/// Format one teardown outcome for stderr (CL-R-055, CL-R-056, CL-R-057). Anything other than an
+/// `Error`-level stop message — no message, an informational one, or a view that does not handle
+/// `stop` — counts as a clean stop.
+fn teardown_line(name: &str, outcome: Option<(Level, String)>) -> String {
+    match outcome {
+        Some((Level::Error, detail)) => format!("Error: failed to stop '{name}': {detail}"),
+        _ => format!("Stopped '{name}'"),
     }
+}
+
+/// Stop every module (best-effort: a stop failure is logged but does not change the exit code —
+/// we're already tearing down). Returns the teardown line reported for each module, in order
+/// (CL-R-055, CL-R-056).
+async fn stop_all(modules: &mut [RunModule]) -> Vec<String> {
+    let mut lines = Vec::new();
+    for module in modules.iter_mut() {
+        let result = module.view.handle_command("stop").await;
+        let outcome = if let CommandResult::Handled(Some((level, msg))) = &result {
+            module.log.write().await.write(*level, msg);
+            Some((*level, msg.clone()))
+        } else {
+            None
+        };
+        let line = teardown_line(&module.name, outcome);
+        eprintln!("{line}");
+        lines.push(line);
+    }
+    lines
 }
 
 /// Run the headless session described by `args`. Returns the process exit code; never panics on
@@ -356,6 +375,7 @@ pub async fn run(args: &RunArgs) -> i32 {
 
     if let Some((sim, ..)) = session_sim.as_mut() {
         sim.stop();
+        eprintln!("{}", teardown_line(SESSION_SOURCE, None));
     }
     stop_all(&mut modules).await;
     exit_code
@@ -838,14 +858,73 @@ mod tests {
     }
 
     #[tokio::test]
-    /// CL-R-026 — on loop exit the runner stops every module: a second run rebinds the same port,
-    /// which only succeeds if the first run released it.
+    /// CL-R-026 — on loop exit the runner stops every module: the listener refuses a connect
+    /// afterward, rather than merely accepting a rebind (which OS address reuse can mask).
     async fn ut_run_stops_modules_on_exit() {
         let dir = reserve_temp_dir("ferrowl_cl");
         let port = reserve_tcp_port().release();
         assert_eq!(run(&modbus_run_args(&dir, port, 1)).await, 0);
-        // If the first run had not stopped its listener, this bind (inside start) would fail.
-        assert_eq!(run(&modbus_run_args(&dir, port, 1)).await, 0);
+        assert!(
+            std::net::TcpStream::connect(("127.0.0.1", port)).is_err(),
+            "expected the module's listener to be gone after teardown"
+        );
+    }
+
+    #[tokio::test]
+    /// CL-R-055 — each module the headless runner stops is reported, in list order, as
+    /// `Stopped '<name>'`.
+    async fn ut_stop_all_reports_each_module_in_order() {
+        let (view_a, _handle_a) = crate::app::testkit::MockView::pair("a");
+        let (view_b, _handle_b) = crate::app::testkit::MockView::pair("b");
+        let mut modules = vec![
+            RunModule {
+                name: "a".to_string(),
+                view: view_a.boxed(),
+                log: new_log(),
+                last_written: 0,
+            },
+            RunModule {
+                name: "b".to_string(),
+                view: view_b.boxed(),
+                log: new_log(),
+                last_written: 0,
+            },
+        ];
+        let lines = stop_all(&mut modules).await;
+        assert_eq!(
+            lines,
+            vec!["Stopped 'a'".to_string(), "Stopped 'b'".to_string()]
+        );
+    }
+
+    #[tokio::test]
+    /// CL-R-056 — a module whose stop reports an `Error`-level message is reported as
+    /// `Error: failed to stop '<name>': <detail>`.
+    async fn ut_stop_all_reports_a_failing_stop() {
+        let (view_b, _handle_b) = crate::app::testkit::MockView::pair("b");
+        let view_b = view_b.with_command_message(Level::Error, "Stop server failed: boom");
+        let log = new_log();
+        let mut modules = vec![RunModule {
+            name: "b".to_string(),
+            view: view_b.boxed(),
+            log: log.clone(),
+            last_written: 0,
+        }];
+        let lines = stop_all(&mut modules).await;
+        assert_eq!(
+            lines,
+            vec!["Error: failed to stop 'b': Stop server failed: boom".to_string()]
+        );
+        let (_, window) = {
+            let g = log.read().await;
+            (g.written(), g.peek_n(LOG_PEEK))
+        };
+        assert!(
+            window
+                .iter()
+                .any(|(_, _, msg)| msg == "Stop server failed: boom"),
+            "the stop message must still reach the module's log ring"
+        );
     }
 
     #[tokio::test]
