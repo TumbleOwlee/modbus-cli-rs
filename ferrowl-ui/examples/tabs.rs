@@ -69,22 +69,17 @@ fn main() {
     };
 
     loop {
-        app.body = format!("Tab {}", app.tabs.active);
+        app.body = format!("Tab {}", app.tabs.selected_index());
         screen.draw(|f| ui(f, &mut app)).unwrap();
 
         if event::poll(Duration::from_millis(50)).unwrap()
             && let Event::Key(key) = event::read().unwrap()
             && key.kind == KeyEventKind::Press
         {
-            let len = app.tabs.titles.len();
             match key.code {
                 KeyCode::Esc => break,
-                KeyCode::Down => {
-                    app.tabs.active = (app.tabs.active + 1) % len;
-                }
-                KeyCode::Up => {
-                    app.tabs.active = app.tabs.active.checked_sub(1).unwrap_or(len - 1);
-                }
+                KeyCode::Down => app.tabs.next(),
+                KeyCode::Up => app.tabs.previous(),
                 KeyCode::Char('d') => {
                     app.direction = match app.direction {
                         Direction::Vertical => Direction::Horizontal,
