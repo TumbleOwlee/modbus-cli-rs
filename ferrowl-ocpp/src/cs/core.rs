@@ -5,7 +5,6 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 use std::time::Duration;
 
-use tokio::sync::mpsc;
 use tokio_tungstenite::tungstenite::Message;
 
 use super::Command;
@@ -45,7 +44,7 @@ impl<V: Version, H: CsActionHandler<V>> InboundDispatch<V> for CsDispatch<V, H> 
 pub(crate) async fn run<V, H, S, L>(
     ws: S,
     handler: Arc<H>,
-    commands: &mut mpsc::Receiver<Command<V>>,
+    commands: &mut super::Commands<'_, Command<V>>,
     log: L,
     timeout: Duration,
 ) -> RunEnd
