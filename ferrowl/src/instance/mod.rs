@@ -19,16 +19,39 @@ use ferrowl_modbus::{KeyParams, LogFn};
 /// The same instance can be restarted after it stops.
 pub struct Instance<T: KeyParams> {
     builder: Builder<T>,
-    handle: Option<Handle>,
+    task: TaskState,
+}
+
+/// UI-R-314/UI-R-315 — the running task's lifecycle, split so a stop request never has to await
+/// the task ending: `Idle` (never started or fully stopped), `Running` (task alive, no stop
+/// requested), `Stopping` (terminate sent, waiting out the grace period before an abort
+/// fallback). Modeled as one enum rather than a flag plus dependent optionals so an instance mid
+/// `poll_stop` cannot be mistaken for `Idle` — `handle()` reads the handle out of both `Running`
+/// and `Stopping`, keeping `active()`/`connection_status()` truthful (UI-E-147) throughout.
+enum TaskState {
+    Idle,
+    Running(Handle),
+    Stopping {
+        handle: Handle,
+        deadline: tokio::time::Instant,
+    },
 }
 
 impl<T: KeyParams> Instance<T> {
+    /// The handle of the currently running (or stopping) task, if any.
+    fn handle(&self) -> Option<&Handle> {
+        match &self.task {
+            TaskState::Idle => None,
+            TaskState::Running(h) | TaskState::Stopping { handle: h, .. } => Some(h),
+        }
+    }
+
     /// MB-R-137/153 — superseded as the view-facing signal by `connection_status()` (which
     /// distinguishes running-but-not-connected from not-running), but kept as the plain
     /// task-alive check its own extensive test suite below still exercises directly.
     #[allow(dead_code)]
     pub fn active(&self) -> bool {
-        if let Some(h) = &self.handle {
+        if let Some(h) = self.handle() {
             !h.is_finished()
         } else {
             false
@@ -58,7 +81,7 @@ impl<T: KeyParams> Instance<T> {
                 config.memory,
                 cache,
             )),
-            handle: None,
+            task: TaskState::Idle,
         }
     }
 
@@ -69,7 +92,7 @@ impl<T: KeyParams> Instance<T> {
                 config.operations,
                 config.memory,
             )),
-            handle: None,
+            task: TaskState::Idle,
         }
     }
 
@@ -83,7 +106,7 @@ impl<T: KeyParams> Instance<T> {
                 config.memory,
                 cache,
             )),
-            handle: None,
+            task: TaskState::Idle,
         }
     }
 
@@ -93,7 +116,7 @@ impl<T: KeyParams> Instance<T> {
                 config.config,
                 config.memory,
             )),
-            handle: None,
+            task: TaskState::Idle,
         }
     }
 
@@ -108,7 +131,7 @@ impl<T: KeyParams> Instance<T> {
                 config.memory,
                 cache,
             )),
-            handle: None,
+            task: TaskState::Idle,
         }
     }
 
@@ -122,7 +145,7 @@ impl<T: KeyParams> Instance<T> {
                 config.memory,
                 cache,
             )),
-            handle: None,
+            task: TaskState::Idle,
         }
     }
 
@@ -133,7 +156,7 @@ impl<T: KeyParams> Instance<T> {
                 config.operations,
                 config.memory,
             )),
-            handle: None,
+            task: TaskState::Idle,
         }
     }
 
@@ -143,7 +166,7 @@ impl<T: KeyParams> Instance<T> {
                 config.config,
                 config.memory,
             )),
-            handle: None,
+            task: TaskState::Idle,
         }
     }
 
@@ -154,7 +177,7 @@ impl<T: KeyParams> Instance<T> {
                 config.operations,
                 config.memory,
             )),
-            handle: None,
+            task: TaskState::Idle,
         }
     }
 
@@ -164,7 +187,7 @@ impl<T: KeyParams> Instance<T> {
                 config.config,
                 config.memory,
             )),
-            handle: None,
+            task: TaskState::Idle,
         }
     }
 
@@ -181,7 +204,7 @@ impl<T: KeyParams> Instance<T> {
                     cache,
                 ),
             ),
-            handle: None,
+            task: TaskState::Idle,
         }
     }
 
@@ -197,7 +220,7 @@ impl<T: KeyParams> Instance<T> {
                     cache,
                 ),
             ),
-            handle: None,
+            task: TaskState::Idle,
         }
     }
 
@@ -208,7 +231,7 @@ impl<T: KeyParams> Instance<T> {
         L: LogFn + Clone,
         S: LogFn + Clone,
     {
-        if let Some(h) = &self.handle
+        if let Some(h) = self.handle()
             && !h.is_finished()
         {
             return Err(InstanceError::AlreadyActive.into());
@@ -223,7 +246,7 @@ impl<T: KeyParams> Instance<T> {
                         return Err(e.into());
                     }
                     Ok((handle, connected)) => {
-                        self.handle = Some(Handle::Client(handle::ClientHandle {
+                        self.task = TaskState::Running(Handle::Client(handle::ClientHandle {
                             handle,
                             sender,
                             connected,
@@ -239,7 +262,7 @@ impl<T: KeyParams> Instance<T> {
                         return Err(e.into());
                     }
                     Ok((handle, bound_addr)) => {
-                        self.handle = Some(Handle::Server(handle::ServerHandle {
+                        self.task = TaskState::Running(Handle::Server(handle::ServerHandle {
                             handle,
                             sender,
                             bound_addr,
@@ -256,7 +279,7 @@ impl<T: KeyParams> Instance<T> {
                         return Err(e.into());
                     }
                     Ok((handle, connected)) => {
-                        self.handle = Some(Handle::Client(handle::ClientHandle {
+                        self.task = TaskState::Running(Handle::Client(handle::ClientHandle {
                             handle,
                             sender,
                             connected,
@@ -276,7 +299,7 @@ impl<T: KeyParams> Instance<T> {
                         // writes to reads back `None` from `Instance::bound_addr()`, correctly
                         // indistinguishable from "never bound." `open` (MB-R-153) is the real
                         // "port currently open" signal `connection_status()` reads instead.
-                        self.handle = Some(Handle::Server(handle::ServerHandle {
+                        self.task = TaskState::Running(Handle::Server(handle::ServerHandle {
                             handle,
                             sender,
                             bound_addr: std::sync::Arc::new(parking_lot::Mutex::new(None)),
@@ -293,7 +316,7 @@ impl<T: KeyParams> Instance<T> {
                         return Err(e.into());
                     }
                     Ok((handle, connected)) => {
-                        self.handle = Some(Handle::Client(handle::ClientHandle {
+                        self.task = TaskState::Running(Handle::Client(handle::ClientHandle {
                             handle,
                             sender,
                             connected,
@@ -309,7 +332,7 @@ impl<T: KeyParams> Instance<T> {
                         return Err(e.into());
                     }
                     Ok((handle, bound_addr)) => {
-                        self.handle = Some(Handle::Server(handle::ServerHandle {
+                        self.task = TaskState::Running(Handle::Server(handle::ServerHandle {
                             handle,
                             sender,
                             bound_addr,
@@ -326,7 +349,7 @@ impl<T: KeyParams> Instance<T> {
                         return Err(e.into());
                     }
                     Ok((handle, connected)) => {
-                        self.handle = Some(Handle::Client(handle::ClientHandle {
+                        self.task = TaskState::Running(Handle::Client(handle::ClientHandle {
                             handle,
                             sender,
                             connected,
@@ -342,7 +365,7 @@ impl<T: KeyParams> Instance<T> {
                         return Err(e.into());
                     }
                     Ok((handle, bound_addr)) => {
-                        self.handle = Some(Handle::Server(handle::ServerHandle {
+                        self.task = TaskState::Running(Handle::Server(handle::ServerHandle {
                             handle,
                             sender,
                             bound_addr,
@@ -359,7 +382,7 @@ impl<T: KeyParams> Instance<T> {
                         return Err(e.into());
                     }
                     Ok((handle, connected)) => {
-                        self.handle = Some(Handle::Client(handle::ClientHandle {
+                        self.task = TaskState::Running(Handle::Client(handle::ClientHandle {
                             handle,
                             sender,
                             connected,
@@ -376,7 +399,7 @@ impl<T: KeyParams> Instance<T> {
                     }
                     Ok((handle, open)) => {
                         // Pure serial — see the identical `RtuServer` arm above.
-                        self.handle = Some(Handle::Server(handle::ServerHandle {
+                        self.task = TaskState::Running(Handle::Server(handle::ServerHandle {
                             handle,
                             sender,
                             bound_addr: std::sync::Arc::new(parking_lot::Mutex::new(None)),
@@ -393,7 +416,7 @@ impl<T: KeyParams> Instance<T> {
                         return Err(e.into());
                     }
                     Ok((handle, connected)) => {
-                        self.handle = Some(Handle::Client(handle::ClientHandle {
+                        self.task = TaskState::Running(Handle::Client(handle::ClientHandle {
                             handle,
                             sender,
                             connected,
@@ -409,7 +432,7 @@ impl<T: KeyParams> Instance<T> {
                         return Err(e.into());
                     }
                     Ok((handle, bound_addr)) => {
-                        self.handle = Some(Handle::Server(handle::ServerHandle {
+                        self.task = TaskState::Running(Handle::Server(handle::ServerHandle {
                             handle,
                             sender,
                             bound_addr,
@@ -429,18 +452,19 @@ impl<T: KeyParams> Instance<T> {
     /// merely that `start()` returned — the bind itself races behind the retried task) polls
     /// this instead of sleeping a fixed duration.
     pub fn bound_addr(&self) -> Option<std::net::SocketAddr> {
-        match &self.handle {
+        match self.handle() {
             Some(Handle::Server(h)) => *h.bound_addr.lock(),
             _ => None,
         }
     }
 
-    /// MB-R-137/153 — the tri-state connection status, uniformly derived: not running →
-    /// `Disconnected`; running and currently connected/bound/open → `Connected`; running and not
-    /// → `Reconnecting`.
+    /// MB-R-137/153, UI-E-147 — the tri-state connection status, uniformly derived: not running →
+    /// `Disconnected`; running (including while stopping — the task is still alive until
+    /// `poll_stop` reaps it) and currently connected/bound/open → `Connected`; running and not →
+    /// `Reconnecting`.
     pub fn connection_status(&self) -> crate::view::status_bar::ConnStatus {
         use crate::view::status_bar::ConnStatus;
-        match &self.handle {
+        match self.handle() {
             None => ConnStatus::Disconnected,
             Some(h) if h.is_finished() => ConnStatus::Disconnected,
             Some(Handle::Client(c)) => {
@@ -460,34 +484,55 @@ impl<T: KeyParams> Instance<T> {
         }
     }
 
-    /// Stops the running task: asks clients to terminate gracefully, then
-    /// aborts the task if it is still alive.
-    pub async fn stop(&mut self) -> Result<(), Error> {
-        if self.handle.is_none() {
+    /// UI-R-314 — sends the running task a graceful terminate and returns immediately, without
+    /// waiting for it to actually end (that's [`poll_stop`](Self::poll_stop)'s job, driven by the
+    /// caller's own per-tick `refresh()`). `Err(NotRunning)` if the instance was already `Idle`.
+    pub async fn request_stop(&mut self) -> Result<(), Error> {
+        if !matches!(&self.task, TaskState::Running(_)) {
             return Err(InstanceError::NotRunning.into());
         }
-
-        let sent_terminate = match &self.handle {
-            Some(Handle::Client(h)) => h
-                .sender
-                .send(ferrowl_modbus::Command::Terminate)
-                .await
-                .is_ok(),
-            Some(Handle::Server(h)) => h
-                .sender
-                .send(ferrowl_modbus::ServerCommand::Terminate)
-                .await
-                .is_ok(),
-            None => unreachable!("stop() early-returns above when handle is None"),
+        let TaskState::Running(handle) = std::mem::replace(&mut self.task, TaskState::Idle) else {
+            unreachable!("matched Running just above");
         };
-        if sent_terminate {
-            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+        match &handle {
+            Handle::Client(h) => {
+                let _ = h.sender.send(ferrowl_modbus::Command::Terminate).await;
+            }
+            Handle::Server(h) => {
+                let _ = h
+                    .sender
+                    .send(ferrowl_modbus::ServerCommand::Terminate)
+                    .await;
+            }
         }
 
-        let handle = self.handle.take();
+        self.task = TaskState::Stopping {
+            handle,
+            deadline: tokio::time::Instant::now() + tokio::time::Duration::from_millis(100),
+        };
+        Ok(())
+    }
+
+    /// UI-R-315 — polls a stop requested via [`request_stop`](Self::request_stop): `None` while
+    /// there is nothing to report (never running, still running with no stop requested, or still
+    /// within the grace period and not yet finished on its own); `Some(_)` once the task has
+    /// ended — after the grace period elapses, still-unfinished tasks are aborted first.
+    pub async fn poll_stop(&mut self) -> Option<Result<(), Error>> {
+        let TaskState::Stopping { handle, deadline } = &self.task else {
+            return None;
+        };
+        if !handle.is_finished() && tokio::time::Instant::now() < *deadline {
+            return None;
+        }
+
+        let TaskState::Stopping { handle, .. } = std::mem::replace(&mut self.task, TaskState::Idle)
+        else {
+            unreachable!("matched Stopping just above");
+        };
 
         let res = match handle {
-            Some(Handle::Client(h)) => {
+            Handle::Client(h) => {
                 if h.handle.is_finished() {
                     Ok(Ok(()))
                 } else {
@@ -495,20 +540,17 @@ impl<T: KeyParams> Instance<T> {
                     h.handle.await
                 }
             }
-            Some(Handle::Server(h)) => {
+            Handle::Server(h) => {
                 if h.handle.is_finished() {
                     Ok(Ok(()))
                 } else {
                     h.handle.abort();
                     h.handle.await
                 }
-            }
-            None => {
-                unreachable!("stop() early-returns when handle is None");
             }
         };
 
-        match res {
+        Some(match res {
             Ok(Ok(_)) => Ok(()),
             Ok(Err(e)) => Err(e.into()),
             Err(e) => {
@@ -518,16 +560,28 @@ impl<T: KeyParams> Instance<T> {
                     Err(InstanceError::CancelFailed.into())
                 }
             }
+        })
+    }
+
+    /// Stops the running task: asks clients to terminate gracefully, then
+    /// aborts the task if it is still alive.
+    pub async fn stop(&mut self) -> Result<(), Error> {
+        self.request_stop().await?;
+        loop {
+            if let Some(res) = self.poll_stop().await {
+                return res;
+            }
+            tokio::time::sleep(tokio::time::Duration::from_millis(5)).await;
         }
     }
 
     /// Forwards a write/terminate command to a running client. Errors if no
     /// task is running or the instance is a server.
     pub async fn send_command(&self, command: ferrowl_modbus::Command) -> Result<(), Error> {
-        if self.handle.is_none() {
+        if self.handle().is_none() {
             return Err(InstanceError::NotRunning.into());
         }
-        match &self.handle {
+        match self.handle() {
             Some(Handle::Client(handle)) => handle
                 .sender
                 .send(command)
@@ -626,7 +680,7 @@ mod tests {
         let mut instance = tcp_client_instance();
         let task = tokio::spawn(async { Ok(()) });
         let (sender, _receiver) = tokio::sync::mpsc::channel(1);
-        instance.handle = Some(handle::Handle::Server(handle::ServerHandle {
+        instance.task = TaskState::Running(handle::Handle::Server(handle::ServerHandle {
             handle: task,
             sender,
             bound_addr: Arc::new(parking_lot::Mutex::new(None)),
@@ -1030,5 +1084,132 @@ mod tests {
 
         let tcp_instance = tcp_client_instance();
         assert!(tcp_instance.path_conflict_cell().is_none());
+    }
+
+    /// UI-R-314 — `request_stop()` sends the terminate and returns immediately, well under the
+    /// 100ms grace period `poll_stop()` waits out, instead of blocking until the task ends.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn ut_request_stop_returns_before_the_task_ends() {
+        let occupier = reserve_tcp_port();
+        let port = occupier.port();
+        let mut instance = Instance::with_tcp_server(
+            config::ServerConfig {
+                config: Arc::new(RwLock::new(tcp::Config {
+                    ip: "127.0.0.1".to_string(),
+                    port,
+                    timeout_ms: 200,
+                    delay_ms: 0,
+                    interval_ms: 0,
+                    reconnect: true,
+                    tls: Default::default(),
+                })),
+                memory: Arc::new(MemLock::new(
+                    ferrowl_store::Memory::<Key<SlaveKey>>::default(),
+                )),
+            },
+            ferrowl_modbus::tcp::new_self_signed_cache(),
+        );
+        instance.start(sink(), sink()).await.expect("start");
+        assert!(instance.active());
+
+        // The task is backing off from the occupied port, so a real `stop()` would need its
+        // full 100ms grace period; `request_stop()` must not wait for any of that.
+        let before = tokio::time::Instant::now();
+        instance.request_stop().await.expect("request_stop");
+        assert!(
+            before.elapsed() < tokio::time::Duration::from_millis(50),
+            "request_stop() took {:?}, expected to return immediately",
+            before.elapsed()
+        );
+
+        // Cleanup: drive the stop to completion.
+        loop {
+            if instance.poll_stop().await.is_some() {
+                break;
+            }
+            tokio::time::sleep(tokio::time::Duration::from_millis(5)).await;
+        }
+    }
+
+    /// UI-R-314 — a second `request_stop()` while already `Stopping` errors with `NotRunning`
+    /// rather than dropping the live handle (which would orphan the task and flip status to
+    /// `Disconnected` while it is still running, contradicting UI-E-147).
+    #[tokio::test]
+    async fn ut_request_stop_while_already_stopping_does_not_orphan_the_handle() {
+        use crate::view::status_bar::ConnStatus;
+
+        let mut instance = tcp_client_instance();
+        instance.start(sink(), sink()).await.expect("start");
+
+        instance.request_stop().await.expect("first request_stop");
+        let err = instance.request_stop().await.unwrap_err();
+        assert!(matches!(err, Error::Instance(InstanceError::NotRunning)));
+        assert_eq!(
+            instance.connection_status(),
+            ConnStatus::Reconnecting,
+            "the handle must still be tracked, not dropped, after the repeat request"
+        );
+
+        loop {
+            if instance.poll_stop().await.is_some() {
+                break;
+            }
+            tokio::time::sleep(tokio::time::Duration::from_millis(5)).await;
+        }
+        assert_eq!(instance.connection_status(), ConnStatus::Disconnected);
+    }
+
+    /// UI-R-315 — `poll_stop()` reports `None` until the task actually ends, then `Some(Ok(()))`
+    /// once it does.
+    #[tokio::test]
+    async fn ut_poll_stop_reports_outcome_once_the_task_ends() {
+        let mut instance = tcp_client_instance();
+        instance.start(sink(), sink()).await.expect("start");
+
+        instance.request_stop().await.expect("request_stop");
+        assert!(
+            instance.poll_stop().await.is_none(),
+            "poll_stop() must report nothing before the grace period or task completion"
+        );
+
+        let result = loop {
+            if let Some(res) = instance.poll_stop().await {
+                break res;
+            }
+            tokio::time::sleep(tokio::time::Duration::from_millis(5)).await;
+        };
+        assert!(result.is_ok());
+        assert!(!instance.active());
+        assert!(
+            instance.poll_stop().await.is_none(),
+            "poll_stop() must report nothing once already Idle"
+        );
+    }
+
+    /// UI-E-147 — the connection status stays `Reconnecting` while a stop is in flight (the task
+    /// is still alive until `poll_stop` reaps it), then becomes `Disconnected` once `poll_stop`
+    /// returns `Some(_)`.
+    #[tokio::test]
+    async fn ut_connection_status_reconnecting_while_stopping() {
+        use crate::view::status_bar::ConnStatus;
+
+        let mut instance = tcp_client_instance();
+        instance.start(sink(), sink()).await.expect("start");
+        assert_eq!(instance.connection_status(), ConnStatus::Reconnecting);
+
+        instance.request_stop().await.expect("request_stop");
+        assert_eq!(
+            instance.connection_status(),
+            ConnStatus::Reconnecting,
+            "must not report Disconnected until poll_stop reaps the task"
+        );
+
+        loop {
+            if instance.poll_stop().await.is_some() {
+                break;
+            }
+            tokio::time::sleep(tokio::time::Duration::from_millis(5)).await;
+        }
+        assert_eq!(instance.connection_status(), ConnStatus::Disconnected);
     }
 }
