@@ -5,8 +5,8 @@ use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use ferrowl_ui::{
     AlternateScreen, Border, EventResult,
     state::{
-        DiffViewState, DiffViewStateBuilder, FileStatus, FileTreeOutcome, FileTreeState,
-        FileTreeStateBuilder, SuggestInputState, SuggestInputStateBuilder,
+        DiffViewState, DiffViewStateBuilder, FileStatus, FileTreeEntry, FileTreeOutcome,
+        FileTreeState, FileTreeStateBuilder, SuggestInputState, SuggestInputStateBuilder,
     },
     traits::{HandleEvents, SetFocus, Suggestion, SuggestionProvider},
     widgets::{
@@ -118,7 +118,7 @@ fn parse_branches(out: &str) -> Vec<String> {
 /// Parses `git diff --name-status --no-renames` output into paths with their change
 /// status. An unrecognized status letter is treated as unchanged (`None`) rather than
 /// guessed at.
-fn parse_name_status(out: &str) -> Vec<(String, Option<FileStatus>)> {
+fn parse_name_status(out: &str) -> Vec<FileTreeEntry> {
     out.lines()
         .filter_map(|line| {
             let mut parts = line.splitn(2, '\t');
@@ -133,7 +133,11 @@ fn parse_name_status(out: &str) -> Vec<(String, Option<FileStatus>)> {
                 'M' => Some(FileStatus::Modified),
                 _ => None,
             };
-            Some((path.to_string(), status))
+            let mut entry = FileTreeEntry::new(path);
+            if let Some(status) = status {
+                entry = entry.with_status(status);
+            }
+            Some(entry)
         })
         .collect()
 }
@@ -164,7 +168,7 @@ struct Model {
     /// The paths last passed to the file tree's `set_paths`, kept here because the
     /// tree's own row list is crate-private: this is the only way anything outside
     /// `ferrowl-ui` (including this example's tests) can observe what it was given.
-    paths: Vec<(String, Option<FileStatus>)>,
+    paths: Vec<FileTreeEntry>,
     /// The branch names last fetched from the git seam, kept here for the same reason as
     /// `paths`: nothing outside this module can otherwise observe what the suggestion
     /// providers were built with. Read only by this file's own tests.
@@ -618,7 +622,7 @@ mod tests {
         model.reload();
         assert_eq!(
             model.paths,
-            vec![("src/a.rs".to_string(), Some(FileStatus::Modified))]
+            vec![FileTreeEntry::new("src/a.rs").with_status(FileStatus::Modified)]
         );
         let whole_row_count = row_count(&model.diff);
         assert_eq!(whole_row_count, 3);
@@ -636,7 +640,7 @@ mod tests {
         model.reload();
         assert_eq!(
             model.paths,
-            vec![("src/b.rs".to_string(), Some(FileStatus::Added))]
+            vec![FileTreeEntry::new("src/b.rs").with_status(FileStatus::Added)]
         );
         assert_eq!(row_count(&model.diff), 1);
     }
@@ -669,10 +673,10 @@ mod tests {
         assert_eq!(
             parsed,
             vec![
-                ("src/new.rs".to_string(), Some(FileStatus::Added)),
-                ("src/old.rs".to_string(), Some(FileStatus::Removed)),
-                ("src/changed.rs".to_string(), Some(FileStatus::Modified)),
-                ("src/moved.rs".to_string(), None),
+                FileTreeEntry::new("src/new.rs").with_status(FileStatus::Added),
+                FileTreeEntry::new("src/old.rs").with_status(FileStatus::Removed),
+                FileTreeEntry::new("src/changed.rs").with_status(FileStatus::Modified),
+                FileTreeEntry::new("src/moved.rs"),
             ]
         );
     }
