@@ -22,6 +22,24 @@ use ratatui::{
 };
 use std::{collections::HashMap, io::Stdout, process::Command, time::Duration};
 
+/// Added/removed line counts from `git diff --numstat`, drawn as `"+<added> -<removed>"`
+/// in the row's own styling.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct LineCountBadge {
+    added: u64,
+    removed: u64,
+}
+
+impl FileTreeBadge for LineCountBadge {
+    fn text(&self) -> String {
+        format!("+{} -{}", self.added, self.removed)
+    }
+
+    fn style(&self) -> Option<Style> {
+        None
+    }
+}
+
 /// Suggests local git branches by prefix, from a fixed snapshot taken once at startup:
 /// local branches don't change mid-session, so re-querying on every keystroke would
 /// only add a git subprocess spawn per key with no observable benefit.
@@ -122,7 +140,10 @@ fn parse_branches(out: &str) -> Vec<String> {
 /// guessed at. `counts` is a per-path `(added, removed)` line-count table from `git diff
 /// --numstat`; a matching path gets a `"+<added> -<removed>"` badge, a path with no match
 /// (e.g. a binary file) gets none.
-fn parse_name_status(out: &str, counts: &HashMap<String, (u64, u64)>) -> Vec<FileTreeEntry> {
+fn parse_name_status(
+    out: &str,
+    counts: &HashMap<String, (u64, u64)>,
+) -> Vec<FileTreeEntry<FileStatus, LineCountBadge>> {
     out.lines()
         .filter_map(|line| {
             let mut parts = line.splitn(2, '\t');
@@ -141,11 +162,8 @@ fn parse_name_status(out: &str, counts: &HashMap<String, (u64, u64)>) -> Vec<Fil
             if let Some(status) = status {
                 entry = entry.with_status(status);
             }
-            if let Some((added, removed)) = counts.get(path) {
-                entry = entry.with_badge(FileTreeBadge::new(
-                    format!("+{added} -{removed}"),
-                    Style::default(),
-                ));
+            if let Some(&(added, removed)) = counts.get(path) {
+                entry = entry.with_badge(LineCountBadge { added, removed });
             }
             Some(entry)
         })
@@ -192,13 +210,13 @@ struct Model {
     git: GitFn,
     base: SuggestInputState<BranchProvider>,
     branch: SuggestInputState<BranchProvider>,
-    tree: FileTreeState,
+    tree: FileTreeState<FileStatus, LineCountBadge>,
     diff: DiffViewState,
     focus: Focus,
     /// The paths last passed to the file tree's `set_paths`, kept here because the
     /// tree's own row list is crate-private: this is the only way anything outside
     /// `ferrowl-ui` (including this example's tests) can observe what it was given.
-    paths: Vec<FileTreeEntry>,
+    paths: Vec<FileTreeEntry<FileStatus, LineCountBadge>>,
     /// The branch names last fetched from the git seam, kept here for the same reason as
     /// `paths`: nothing outside this module can otherwise observe what the suggestion
     /// providers were built with. Read only by this file's own tests.
@@ -339,14 +357,15 @@ fn ui(f: &mut Frame, model: &mut Model) {
         .unwrap();
     f.render_stateful_widget(&branch_widget, panes.branch, &mut model.branch);
 
-    let tree_widget = FileTreeBuilder::default()
-        .title(Some("File Tree".into()))
-        .border(Border::Full(Margin {
-            horizontal: 1,
-            vertical: 0,
-        }))
-        .build()
-        .unwrap();
+    let tree_widget: ferrowl_ui::widgets::FileTree<FileStatus, LineCountBadge> =
+        FileTreeBuilder::default()
+            .title(Some("File Tree".into()))
+            .border(Border::Full(Margin {
+                horizontal: 1,
+                vertical: 0,
+            }))
+            .build()
+            .unwrap();
     f.render_stateful_widget(&tree_widget, panes.browser, &mut model.tree);
 
     if let Some(err) = &model.error {
@@ -767,7 +786,10 @@ mod tests {
             vec![
                 FileTreeEntry::new("src/changed.rs")
                     .with_status(FileStatus::Modified)
-                    .with_badge(FileTreeBadge::new("+12 -3", Style::default())),
+                    .with_badge(LineCountBadge {
+                        added: 12,
+                        removed: 3
+                    }),
                 FileTreeEntry::new("src/image.png").with_status(FileStatus::Added),
             ]
         );
