@@ -86,10 +86,6 @@ impl<S> FileTreeEntry<S> {
         self.badge = Some(badge);
         self
     }
-
-    pub fn path(&self) -> &str {
-        &self.path
-    }
 }
 
 /// A node of the tree built from the paths [`FileTreeState`] is constructed with. Crate-private
