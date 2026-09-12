@@ -508,7 +508,7 @@ IDs stable, append-only (`UI-R-nnn`). See [`../README.md`](../README.md). Compan
 
 ## File tree widget
 
-**UI-R-234** — The file tree widget's state is built from a list of file paths and derives the directory nodes from the paths' components, so a caller supplies paths alone and never assembles a tree.
+**UI-R-234** — The file tree widget's state is built from a list of entries, each naming a path and optionally a status and a badge, and derives the directory nodes from the paths' components, so a caller supplies a flat list and never assembles a tree.
 
 **UI-R-235** — Every directory node is expanded when the tree is built, and the state can expand all directories or collapse all of them in one call.
 
