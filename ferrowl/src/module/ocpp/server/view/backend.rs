@@ -1004,6 +1004,53 @@ mod tests {
         wait_bound(&v).await;
     }
 
+    /// UI-R-314/UI-R-315 — the reverse order: a `:stop` issued while a `:restart` is still
+    /// pending overwrites the follow-up to `Stop` and clears `want_running`, so refresh's
+    /// auto-bind guard (`want_running && !is_online()`) cannot rebind the CSMS behind the stop.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn ut_stop_while_restart_pending_overwrites_the_follow_up() {
+        let port = ferrowl_test_support::reserve_tcp_port().release();
+
+        let mut v = server_view(port);
+        v.handle_command("start").await;
+        wait_bound(&v).await;
+
+        assert!(matches!(
+            v.handle_command("restart").await,
+            CommandResult::Handled(None)
+        ));
+        assert!(v.lifecycle_pending());
+
+        assert!(matches!(
+            v.handle_command("stop").await,
+            CommandResult::Handled(None)
+        ));
+        assert!(
+            !v.want_running,
+            "a stop overwriting a pending restart must clear want_running"
+        );
+        assert!(
+            v.lifecycle_pending(),
+            "the follow-up must still be pending, not dropped"
+        );
+
+        for _ in 0..200 {
+            if !v.lifecycle_pending() {
+                break;
+            }
+            v.refresh().await;
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+        assert!(
+            !v.lifecycle_pending(),
+            "a restart overwritten with a stop must still settle, not latch forever"
+        );
+        assert!(
+            v.backend.bound_addr().is_none(),
+            "the stop's follow-up must win: no rebind behind a later stop"
+        );
+    }
+
     #[test]
     fn ut_default_action_payload_unknown_name_falls_back_to_empty_object() {
         assert_eq!(
