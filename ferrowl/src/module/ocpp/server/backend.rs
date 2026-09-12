@@ -161,13 +161,22 @@ pub enum TlsBinding {
     Certificates,
 }
 
+/// UI-R-314/UI-R-315 — the running server task's lifecycle, split so a stop request never has to
+/// await the task ending; mirrors `CsState` (`client/backend.rs`) for the CSMS side. No abort
+/// fallback: `Server<V>` has none, and the task ends promptly on its own once terminated.
+enum CsmsState<V: Version> {
+    Idle,
+    Running(Server<V>),
+    Stopping(Server<V>),
+}
+
 /// The version-generic CSMS backend owned by a server view.
 ///
 /// Deliberately holds no copy of the module spec: the listener config is built from the spec the
 /// view passes into each [`start`](Self::start) call, so an edited endpoint/security section can
 /// never drift from what the listener actually binds with.
 pub struct OcppServer<V: Version> {
-    server: Option<Server<V>>,
+    server: CsmsState<V>,
     /// Cached self-signed server certificate (OC-R-037), created once per backend instance and
     /// reused across every `start()` call so repeated `:restart`/rebind attempts don't
     /// regenerate it — never reinitialized inside `start()`.
@@ -180,8 +189,16 @@ where
 {
     pub fn new() -> Self {
         Self {
-            server: None,
+            server: CsmsState::Idle,
             self_signed_cache: ferrowl_ocpp::new_self_signed_cache(),
+        }
+    }
+
+    /// The running (or stopping) server, if any.
+    fn server(&self) -> Option<&Server<V>> {
+        match &self.server {
+            CsmsState::Idle => None,
+            CsmsState::Running(s) | CsmsState::Stopping(s) => Some(s),
         }
     }
 
@@ -192,7 +209,7 @@ where
     /// backing off.
     pub fn connection_status(&self) -> crate::view::status_bar::ConnStatus {
         use crate::view::status_bar::ConnStatus;
-        match &self.server {
+        match self.server() {
             None => ConnStatus::Disconnected,
             Some(s) if !s.is_running() => ConnStatus::Disconnected,
             Some(_) => {
@@ -231,7 +248,7 @@ where
                 ferrowl_util::tls::CertSource::Files { .. } => TlsBinding::Certificates,
             },
         };
-        if self.server.is_some() {
+        if !matches!(self.server, CsmsState::Idle) {
             return Ok(binding);
         }
         let config = Config {
@@ -245,39 +262,76 @@ where
         let server = ServerBuilder::<V>::new(config, self.self_signed_cache.clone())
             .spawn(handler, |_s: String| async {})
             .await?;
-        self.server = Some(server);
+        self.server = CsmsState::Running(server);
         Ok(binding)
+    }
+
+    /// UI-R-314 — sends the running server task a graceful terminate and returns immediately,
+    /// without waiting for it (and every connection) to actually end (that's
+    /// [`poll_stop`](Self::poll_stop)'s job, driven by the caller's own per-tick `refresh()`).
+    /// `Err(NotRunning)` if the backend was already `Idle` or already `Stopping`.
+    pub async fn request_stop(&mut self) -> Result<(), Error> {
+        if !matches!(self.server, CsmsState::Running(_)) {
+            return Err(Error::NotRunning);
+        }
+        let CsmsState::Running(server) = std::mem::replace(&mut self.server, CsmsState::Idle)
+        else {
+            unreachable!("matched Running just above");
+        };
+        let _ = server.send(Command::Terminate).await;
+        self.server = CsmsState::Stopping(server);
+        Ok(())
+    }
+
+    /// UI-R-315 — polls a stop requested via [`request_stop`](Self::request_stop): `None` while
+    /// the task is still running; `Some(_)` once it (and every connection) has ended.
+    pub async fn poll_stop(&mut self) -> Option<Result<(), Error>> {
+        let CsmsState::Stopping(server) = &self.server else {
+            return None;
+        };
+        if server.is_running() {
+            return None;
+        }
+        let CsmsState::Stopping(mut server) = std::mem::replace(&mut self.server, CsmsState::Idle)
+        else {
+            unreachable!("matched Stopping just above");
+        };
+        Some(server.join().await)
     }
 
     /// Terminate the server task and every connection, if running.
     pub async fn stop(&mut self) -> Result<(), Error> {
-        match self.server.take() {
-            Some(s) => s.terminate().await,
-            None => Ok(()),
+        if matches!(self.server, CsmsState::Idle) {
+            return Ok(());
+        }
+        if matches!(self.server, CsmsState::Running(_)) {
+            self.request_stop().await?;
+        }
+        loop {
+            if let Some(res) = self.poll_stop().await {
+                return res;
+            }
+            tokio::time::sleep(tokio::time::Duration::from_millis(5)).await;
         }
     }
 
     /// The bound local address (`host:port`) when running, for the status line. `None` both
     /// while never bound and while backing off from a failed bind (OC-R-083).
     pub fn bound_addr(&self) -> Option<String> {
-        self.server
-            .as_ref()
+        self.server()
             .and_then(ferrowl_ocpp::csms::Server::local_addr)
             .map(|a| a.to_string())
     }
 
     /// The charge-point identity for a connection (URL-path segment), if known.
     pub fn identity(&self, conn: ConnectionId) -> Option<String> {
-        self.server
-            .as_ref()
-            .and_then(|s| s.registry().identity(conn))
+        self.server().and_then(|s| s.registry().identity(conn))
     }
 
     /// A detachable sender for off-thread Calls to a specific connection, decoupled from the
     /// `OcppServer` borrow so the round-trip can be `tokio::spawn`ed. `None` when not bound.
     pub fn sender(&self) -> Option<OcppServerSender<V>> {
-        self.server
-            .as_ref()
+        self.server()
             .map(|s| OcppServerSender { cmd_tx: s.sender() })
     }
 }
@@ -378,6 +432,53 @@ mod tests {
         );
 
         backend.stop().await.expect("stop() must succeed");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    /// UI-R-315 — `poll_stop()` reports the same outcome `stop()` would have, and `bound_addr()`
+    /// stays readable (still bound) while the stop is in flight (UI-E-147).
+    async fn ut_csms_request_stop_then_poll_stop_reports_outcome() {
+        let spec = OcppSpec {
+            name: "csms".to_owned(),
+            version: Default::default(),
+            role: Default::default(),
+            protocol: OcppProtocol::Ws,
+            ip: "127.0.0.1".to_owned(),
+            port: 0,
+            path: "/ocpp/CS001".to_owned(),
+            timeout_ms: Some(1000),
+            reconnect: None,
+            security: OcppSecurityConfig::default(),
+        };
+
+        let mut backend = OcppServer::<ferrowl_ocpp::V1_6>::new();
+        backend
+            .start(&spec, NoopCsmsHandler)
+            .await
+            .expect("start must succeed");
+
+        for _ in 0..50 {
+            if backend.bound_addr().is_some() {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+        assert!(backend.bound_addr().is_some(), "listener must have bound");
+
+        backend.request_stop().await.expect("request_stop");
+        assert!(
+            backend.bound_addr().is_some(),
+            "bound_addr must stay readable while the stop is in flight"
+        );
+
+        let result = loop {
+            if let Some(res) = backend.poll_stop().await {
+                break res;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        };
+        assert!(result.is_ok());
+        assert!(backend.bound_addr().is_none());
     }
 
     fn store(cs: &[&str]) -> RfidLists {
